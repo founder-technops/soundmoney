@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using soundmoney.Models;
+using SoundMoney.Models;
 
-namespace soundmoney.Controllers
+namespace SoundMoney.Controllers
 {
     public class HomeController : Controller
     {

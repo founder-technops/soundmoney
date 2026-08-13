@@ -1,4 +1,4 @@
-namespace soundmoney.Models
+namespace SoundMoney.Models
 {
     public class ErrorViewModel
     {
