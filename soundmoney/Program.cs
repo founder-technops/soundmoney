@@ -1,23 +1,46 @@
+using Microsoft.EntityFrameworkCore;
+using SoundMoney.Data;
+using SoundMoney.Services;
+using SoundMoney.Services.IntrinsicValue;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddControllersWithViews();
+
+// Register SQLite DbContext
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+builder.Services.AddDbContext<SoundMoneyDbContext>(options =>
+    options.UseSqlServer(connectionString));
+
+// Register repository
+builder.Services.AddScoped<IStockRepository, StockRepository>();
+
+// Use Gemini API for all stock screener data
+builder.Services.AddHttpClient<ISoundMoneyService, GeminiScreenerService>();
+
+// Intrinsic value strategies
+builder.Services.AddSingleton<IIntrinsicValueStrategyFactory, IntrinsicValueStrategyFactory>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Apply migrations automatically
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<SoundMoneyDbContext>();
+    db.Database.Migrate();
+}
+
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseExceptionHandler("/Screener/Error");
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
-
 app.UseAuthorization();
 
 app.MapControllerRoute(
