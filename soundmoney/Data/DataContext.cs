@@ -7,12 +7,11 @@ namespace SoundMoney.Data;
 /// SQLite database context for storing stock screening data.
 /// Uses Code-First approach with automatic migrations.
 /// </summary>
-public class SoundMoneyDbContext : DbContext
+public class DataContext : DbContext
 {
-    public SoundMoneyDbContext(DbContextOptions<SoundMoneyDbContext> options) : base(options)
+    public DataContext(DbContextOptions<DataContext> options) : base(options)
     {
     }
-
     public DbSet<StockValuation> StockValuations { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

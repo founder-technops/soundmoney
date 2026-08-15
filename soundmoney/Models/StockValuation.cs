@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace SoundMoney.Models;
 
 /// <summary>
@@ -7,25 +9,22 @@ namespace SoundMoney.Models;
 public class StockValuation
 {
     public string Symbol { get; set; } = "";
-    
     public string CompanyName { get; set; } = "";
-    
     public decimal CurrentPrice { get; set; }
-    
     public string Sector { get; set; } = "";
-
     public string IntrinsicMethod { get; set; } = "";
 
     /// <summary>
     /// Calculated intrinsic value based on sector-specific strategy.
     /// </summary>
+    /// 
     public decimal IntrinsicValue { get; set; }
-    
+
     /// <summary>
     /// Margin of safety percentage.
     /// </summary>
     public decimal MarginOfSafety{ get; set; }
-    
+
     /// <summary>
     /// Verdict: "Undervalued", "Fair value", or "Overvalued"
     /// </summary>

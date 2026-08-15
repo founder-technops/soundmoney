@@ -6,9 +6,9 @@ namespace SoundMoney.Controllers;
 
 public class ScreenerController : Controller
 {
-    private readonly ISoundMoneyService _screener;
+    private readonly IScreenerService _screener;
 
-    public ScreenerController(ISoundMoneyService screener)
+    public ScreenerController(IScreenerService screener)
     {
         _screener = screener;
     }

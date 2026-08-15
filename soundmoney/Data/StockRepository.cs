@@ -1,8 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using SoundMoney.Data;
 using SoundMoney.Models;
 
-namespace SoundMoney.Services;
+namespace SoundMoney.Data;
 
 /// <summary>
 /// Repository service for StockValuation database operations.
@@ -21,13 +20,30 @@ public interface IStockRepository
 
 public class StockRepository : IStockRepository
 {
-    private readonly SoundMoneyDbContext _context;
+    private readonly DataContext _context;
     private readonly ILogger<StockRepository> _logger;
 
-    public StockRepository(SoundMoneyDbContext context, ILogger<StockRepository> logger)
+    public StockRepository(DataContext context, ILogger<StockRepository> logger)
     {
         _context = context;
         _logger = logger;
+    }
+
+    public async Task<List<string>> GetAllSymbolsAsync()
+    {
+        try
+        {
+            return await _context.StockValuations
+                .AsNoTracking()
+                .OrderBy(s => s.Symbol)
+                .Select(s => s.Symbol)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving all symbols from database");
+            return new List<string>();
+        }
     }
 
     /// <summary>
@@ -80,7 +96,7 @@ public class StockRepository : IStockRepository
             if (sectorFilter is not null)
             {
                 var sectorName = sectorFilter.ToString();
-                query = query.Where(s => s.Sector.Contains(sectorName, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(s => s.Sector == sectorName);
             }
 
             return await query
