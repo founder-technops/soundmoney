@@ -239,7 +239,7 @@ public static class IntrinsicMapper
         return methodology.PrimaryMethod;
     }
 
-    public static ValuationMethodology ResolveBiotechMethod(double annualRevenue, double netProfit)
+    public static ValuationMethodology ResolveBiotechMethod(decimal annualRevenue, decimal netProfit)
     {
         // 1. Established Indian Biotech (Commercial production / CDMO / Enzymes)
         if (annualRevenue > 0 && netProfit > 0)

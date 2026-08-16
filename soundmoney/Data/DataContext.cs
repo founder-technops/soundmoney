@@ -22,6 +22,7 @@ public class DataContext : DbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfiguration(new StockValuationConfiguration());
         modelBuilder.ApplyConfiguration(new DeepFinancialConfiguration());
+        modelBuilder.ApplyConfiguration(new HistoricalFinancialConfiguration());
     }
     public class StockValuationConfiguration : IEntityTypeConfiguration<StockValuation>
     {

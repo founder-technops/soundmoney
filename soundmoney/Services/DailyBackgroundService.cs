@@ -10,14 +10,16 @@ namespace SoundMoney.Services
         private readonly ILogger<DailyBackgroundService> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly IGeminiService _geminiService;
+        private readonly IScraperService _ScraperService;
         // Set your target daily execution time (e.g., 02:00 AM)
         private readonly TimeSpan _scheduledTime = new TimeSpan(0, 0, 10);
 
-        public DailyBackgroundService(ILogger<DailyBackgroundService> logger, IServiceProvider serviceProvider, IGeminiService geminiService)
+        public DailyBackgroundService(ILogger<DailyBackgroundService> logger, IServiceProvider serviceProvider, IGeminiService geminiService, IScraperService scraperService)
         {
             _logger = logger;
             _serviceProvider = serviceProvider;
             _geminiService = geminiService;
+            _ScraperService = scraperService;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -63,17 +65,17 @@ namespace SoundMoney.Services
         {
             using (var scope = _serviceProvider.CreateScope())
             {
-                var valuationRepo = scope.ServiceProvider.GetRequiredService<IValuationRepository>();
-                var symbols = await valuationRepo.GetAllAsync();
+                var valuationRepo = scope.ServiceProvider.GetRequiredService<IFinancialRepository>();
+                var symbols = await valuationRepo.GetAllValuationsAsync();
                 foreach (var symbol in symbols)
                 {
                     // Example: Re-run the screener for each stock symbol
-                    var newSymbol = await _geminiService.Evaluate(symbol); // Adjust parameters as needed
-                    if(newSymbol is not null)
-                        await valuationRepo.AddOrUpdateAsync(newSymbol);
-                    await Task.Delay(100, cancellationToken); // Small delay to avoid overwhelming the service
+                    //var newSymbol = await _geminiService.Evaluate(symbol); // Adjust parameters as needed
+                    var (deepfinancials, historicalfinancials) = await _ScraperService.ScrapeStockAsync(symbol.Symbol);
+                    if(deepfinancials is not null && historicalfinancials is not null)
+                        await valuationRepo.SaveCompleteFinancialDataAsync(deepfinancials, historicalfinancials);
+                    await Task.Delay(60000, cancellationToken); // one minute delay to avoid overwhelming the service
                 }
-                await valuationRepo.SaveChangesAsync();
             }
             // Simulate work (e.g., database cleanup, sending daily emails)
             await Task.Delay(1000, cancellationToken);

@@ -17,11 +17,15 @@ builder.Services.AddDbContext<DataContext>(options =>
 
 // Register repository
 builder.Services.AddScoped<IValuationRepository, ValuationRepository>();
+// Register repository
+builder.Services.AddScoped<IFinancialRepository, FinancialRepository>();
 
 builder.Services.AddTransient<IScreenerService, ScreenerService>();
 
 // Use Gemini API for all stock screener data
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();
+
+builder.Services.AddHttpClient<IScraperService, ScraperService>();
 
 builder.Services.AddHostedService<DailyBackgroundService>();
 

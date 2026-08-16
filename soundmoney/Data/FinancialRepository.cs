@@ -9,7 +9,7 @@ namespace SoundMoney.Data
         Task SaveValuationAsync(StockValuation valuation, CancellationToken ct = default);
         Task SaveDeepFinancialAsync(DeepFinancial financial, CancellationToken ct = default);
         Task SaveHistoricalFinancialsAsync(IEnumerable<HistoricalFinancial> historicalList, CancellationToken ct = default);
-        Task SaveCompleteValuationDataAsync(StockValuation valuation, DeepFinancial deepFinancial, IEnumerable<HistoricalFinancial> historicalList, CancellationToken ct = default);
+        Task SaveCompleteFinancialDataAsync(DeepFinancial deepFinancial, IEnumerable<HistoricalFinancial> historicalList, CancellationToken ct = default);
 
         // Retrieval Methods - Single Entities
         Task<StockValuation?> GetValuationBySymbolAsync(string symbol, CancellationToken ct = default);
@@ -92,8 +92,7 @@ namespace SoundMoney.Data
         /// <summary>
         /// Saves valuation metrics, deep financials, and historical entries atomically inside a single transaction.
         /// </summary>
-        public async Task SaveCompleteValuationDataAsync(
-            StockValuation valuation,
+        public async Task SaveCompleteFinancialDataAsync(
             DeepFinancial deepFinancial,
             IEnumerable<HistoricalFinancial> historicalList,
             CancellationToken ct = default)
@@ -101,15 +100,7 @@ namespace SoundMoney.Data
             await using var transaction = await _context.Database.BeginTransactionAsync(ct);
             try
             {
-                // 1. Upsert StockValuation
-                var existingValuation = await _context.StockValuations
-                    .FirstOrDefaultAsync(v => v.Symbol == valuation.Symbol, ct);
-                if (existingValuation == null)
-                    await _context.StockValuations.AddAsync(valuation, ct);
-                else
-                    _context.Entry(existingValuation).CurrentValues.SetValues(valuation);
-
-                // 2. Upsert DeepFinancial
+                // 1. Upsert DeepFinancial
                 var existingDeep = await _context.DeepFinancials
                     .FirstOrDefaultAsync(df => df.Symbol == deepFinancial.Symbol, ct);
                 if (existingDeep == null)
@@ -117,7 +108,7 @@ namespace SoundMoney.Data
                 else
                     _context.Entry(existingDeep).CurrentValues.SetValues(deepFinancial);
 
-                // 3. Upsert HistoricalFinancials
+                // 2. Upsert HistoricalFinancials
                 foreach (var hItem in historicalList)
                 {
                     var existingHist = await _context.HistoricalFinancials
@@ -199,14 +190,12 @@ namespace SoundMoney.Data
         {
             string upperSymbol = symbol.ToUpperInvariant();
 
-            var valuation = await _context.StockValuations.FirstOrDefaultAsync(v => v.Symbol == upperSymbol, ct);
             var deep = await _context.DeepFinancials.FirstOrDefaultAsync(df => df.Symbol == upperSymbol, ct);
             var historicals = await _context.HistoricalFinancials.Where(h => h.Symbol == upperSymbol).ToListAsync(ct);
 
-            if (valuation == null && deep == null && !historicals.Any())
+            if (deep == null && !historicals.Any())
                 return false;
 
-            if (valuation != null) _context.StockValuations.Remove(valuation);
             if (deep != null) _context.DeepFinancials.Remove(deep);
             if (historicals.Any()) _context.HistoricalFinancials.RemoveRange(historicals);
 
