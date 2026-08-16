@@ -27,7 +27,7 @@ builder.Services.AddHttpClient<IGeminiService, GeminiService>();
 
 builder.Services.AddHttpClient<IScraperService, ScraperService>();
 
-builder.Services.AddHostedService<DailyBackgroundService>();
+builder.Services.AddHostedService<AutomationService>();
 
 var app = builder.Build();
 
