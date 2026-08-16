@@ -16,7 +16,7 @@ builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(connectionString));
 
 // Register repository
-builder.Services.AddScoped<IStockRepository, StockRepository>();
+builder.Services.AddScoped<IValuationRepository, ValuationRepository>();
 
 builder.Services.AddTransient<IScreenerService, ScreenerService>();
 

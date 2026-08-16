@@ -63,17 +63,17 @@ namespace SoundMoney.Services
         {
             using (var scope = _serviceProvider.CreateScope())
             {
-                var stockRepository = scope.ServiceProvider.GetRequiredService<IStockRepository>();
-                var symbols = await stockRepository.GetAllAsync();
+                var valuationRepo = scope.ServiceProvider.GetRequiredService<IValuationRepository>();
+                var symbols = await valuationRepo.GetAllAsync();
                 foreach (var symbol in symbols)
                 {
                     // Example: Re-run the screener for each stock symbol
                     var newSymbol = await _geminiService.Evaluate(symbol); // Adjust parameters as needed
                     if(newSymbol is not null)
-                        await stockRepository.AddOrUpdateAsync(newSymbol);
+                        await valuationRepo.AddOrUpdateAsync(newSymbol);
                     await Task.Delay(100, cancellationToken); // Small delay to avoid overwhelming the service
                 }
-                await stockRepository.SaveChangesAsync();
+                await valuationRepo.SaveChangesAsync();
             }
             // Simulate work (e.g., database cleanup, sending daily emails)
             await Task.Delay(1000, cancellationToken);

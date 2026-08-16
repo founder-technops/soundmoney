@@ -1,12 +1,15 @@
 using Google.GenAI;
 using Google.GenAI.Types;
+using HtmlAgilityPack;
 using Microsoft.Extensions.AI;
 using Microsoft.VisualBasic;
+using PuppeteerSharp;
 using SoundMoney.Models;
 using SoundMoney.Services.IntrinsicValue;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Web;
 
 namespace SoundMoney.Services;
 
@@ -36,9 +39,10 @@ public class GeminiService : IGeminiService
     /// </summary>
     public async Task<StockValuation> Evaluate(StockValuation symbol)
     {
-        var prompt = BuildPrompt(symbol);
+        var prompt = await BuildPrompt(symbol);
         //var response = await CallGeminiApiClientAsync(prompt);
         var response = await CallGeminiAsync(prompt);
+        //var response = await CallGeminiWebScrapperAsync(prompt);
 
         if (response is null)
             return null;
@@ -46,8 +50,20 @@ public class GeminiService : IGeminiService
         return ParseGeminiResponse(response, symbol.Symbol);
     }
 
-    private string BuildPrompt(StockValuation symbol)
+    private async Task<string> BuildPrompt(StockValuation symbol)
     {
+        var html =  await _httpClient.GetStringAsync(@$"https://www.screener.in/company/{symbol.Symbol}/consolidated/");
+        return $@"
+
+Act as a financial analyst.use the above data Return a JSON object with the following fields:
+Symbol: {symbol.Symbol},
+CompanyName: Full legal company name,
+CurrentPrice: Latest stock price (as a decimal),
+Sector: {symbol.Sector},
+IntrinsicMethod: ""Sum of the Parts (SOTP)"",
+IntrinsicValue: Estimated intrinsic value (as a numeric decimal)
+Base all figures on the most recent financial data available.";
+
         return $@"
 You are a financial analyst. For the NSE-listed Indian stock symbol '{symbol.Symbol}', provide the following data in JSON format:
 
@@ -161,6 +177,95 @@ Base your data on the most recent available information. Return ONLY valid JSON,
             _logger.LogError(ex, "Error calling Gemini API");
             return null;
         }
+    }
+
+    private async Task<string?> CallGeminiWebScrapperAsync(string prompt)
+    {
+        string response = null;
+        var url = @$"https://www.google.com/search?q={prompt}";
+
+
+        string chromePath = @"C:\Program Files\Google\Chrome\Application\chrome.exe";
+
+        var launchOptions = new LaunchOptions
+        {
+            Headless = true,
+            ExecutablePath = System.IO.File.Exists(chromePath) ? chromePath : null,
+            Args = new[]
+            {
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-blink-features=AutomationControlled", // Prevents bot detection
+                "--window-size=1920,1080"
+            }
+        };
+
+        // Download fallback only if local Chrome doesn't exist
+        if (launchOptions.ExecutablePath == null)
+        {
+            var fetcher = new BrowserFetcher();
+            await fetcher.DownloadAsync();
+        }
+
+        await using var browser = await Puppeteer.LaunchAsync(launchOptions);
+        await using var page = await browser.NewPageAsync();
+
+        // 1. Set realistic User-Agent & Viewport to avoid bot blocking
+        await page.SetUserAgentAsync("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+        await page.SetViewportAsync(new ViewPortOptions { Width = 1920, Height = 1080 });
+
+        Console.WriteLine("Navigating...");
+        await page.GoToAsync(url, new NavigationOptions
+        {
+            WaitUntil = new[] { WaitUntilNavigation.Networkidle2 }
+        });
+
+        try
+        {
+            // 2. Use a broader selector strategy instead of highly specific class names
+            // Searches for pre, code, or any container holding text
+            string targetSelector = "pre, code, div[data-attr]";
+
+            Console.WriteLine("Waiting for element...");
+            var element = await page.WaitForSelectorAsync(targetSelector, new WaitForSelectorOptions
+            {
+                Timeout = 15000 // 15 seconds timeout
+            });
+
+            response = await page.EvaluateFunctionAsync<string>("el => el.textContent", element);
+            Console.WriteLine("Found Content:\n" + response);
+        }
+        catch (WaitTaskTimeoutException)
+        {
+            Console.WriteLine("\n[ERROR] Element timed out! Inspecting returned page state...");
+
+            // Check if Google showed a CAPTCHA or altered layout
+            string pageTitle = await page.GetTitleAsync();
+            Console.WriteLine($"Page Title: {pageTitle}");
+
+            response = await page.GetContentAsync();
+            if (response.Contains("captcha") || response.Contains("Before you continue"))
+            {
+                Console.WriteLine("CAUSE: Google triggered a CAPTCHA / Consent page.");
+            }
+            else
+            {
+                Console.WriteLine("CAUSE: Element missing or class names changed. First 500 chars of HTML:");
+                Console.WriteLine(response.Substring(0, Math.Min(500, response.Length)));
+            }
+        }
+
+        // Pass fully rendered HTML to HtmlAgilityPack
+        var doc = new HtmlDocument();
+        doc.LoadHtml(response);
+
+        var codeNode = doc.DocumentNode.SelectSingleNode("//pre/code");
+        if (codeNode != null)
+        {
+            response = HttpUtility.HtmlDecode(codeNode.InnerText).Trim();
+        }
+
+        return response;
     }
 
     private StockValuation? ParseGeminiResponse(string response, string symbol)

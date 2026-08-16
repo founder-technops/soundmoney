@@ -7,7 +7,7 @@ namespace SoundMoney.Data;
 /// Repository service for StockValuation database operations.
 /// Handles CRUD operations and queries for the screener.
 /// </summary>
-public interface IStockRepository
+public interface IValuationRepository
 {
     Task<StockValuation?> GetBySymbolAsync(string symbol);
     Task<List<StockValuation>> GetAllAsync();
@@ -18,12 +18,12 @@ public interface IStockRepository
     Task<int> SaveChangesAsync();
 }
 
-public class StockRepository : IStockRepository
+public class ValuationRepository : IValuationRepository
 {
     private readonly DataContext _context;
-    private readonly ILogger<StockRepository> _logger;
+    private readonly ILogger<ValuationRepository> _logger;
 
-    public StockRepository(DataContext context, ILogger<StockRepository> logger)
+    public ValuationRepository(DataContext context, ILogger<ValuationRepository> logger)
     {
         _context = context;
         _logger = logger;
