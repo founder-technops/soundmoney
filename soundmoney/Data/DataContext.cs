@@ -48,7 +48,11 @@ public class DataContext : DbContext
                 .IsRequired()
                 .HasMaxLength(100);
 
-            builder.Property(e => e.IntrinsicMethod)
+            builder.Property(e => e.PrimaryMethod)
+                .IsRequired()
+                .HasMaxLength(100);
+
+            builder.Property(e => e.SecondaryMethod)
                 .IsRequired()
                 .HasMaxLength(100);
 

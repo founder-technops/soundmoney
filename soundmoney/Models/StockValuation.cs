@@ -12,7 +12,8 @@ public class StockValuation
     public string CompanyName { get; set; } = "";
     public decimal CurrentPrice { get; set; }
     public string Sector { get; set; } = "";
-    public string IntrinsicMethod { get; set; } = "";
+    public string PrimaryMethod { get; set; } = "";
+    public string SecondaryMethod { get; set; } = "";
 
     /// <summary>
     /// Calculated intrinsic value based on sector-specific strategy.

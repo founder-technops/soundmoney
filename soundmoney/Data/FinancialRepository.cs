@@ -20,7 +20,7 @@ namespace SoundMoney.Data
         Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default);
         Task<List<StockValuation>> GetValuationsByVerdictAsync(string verdict, CancellationToken ct = default);
         Task<List<StockValuation>> GetAllValuationsAsync(CancellationToken ct = default);
-
+        Task<List<StockValuation>> GetPendingValuationsAsync(CancellationToken ct = default);
         // Delete Methods
         Task<bool> DeleteFinancialDataBySymbolAsync(string symbol, CancellationToken ct = default);
     }
@@ -97,36 +97,41 @@ namespace SoundMoney.Data
             IEnumerable<HistoricalFinancial> historicalList,
             CancellationToken ct = default)
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(ct);
-            try
-            {
-                // 1. Upsert DeepFinancial
-                var existingDeep = await _context.DeepFinancials
-                    .FirstOrDefaultAsync(df => df.Symbol == deepFinancial.Symbol, ct);
-                if (existingDeep == null)
-                    await _context.DeepFinancials.AddAsync(deepFinancial, ct);
-                else
-                    _context.Entry(existingDeep).CurrentValues.SetValues(deepFinancial);
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-                // 2. Upsert HistoricalFinancials
-                foreach (var hItem in historicalList)
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+                try
                 {
-                    var existingHist = await _context.HistoricalFinancials
-                        .FirstOrDefaultAsync(h => h.Symbol == hItem.Symbol && h.Year == hItem.Year, ct);
-                    if (existingHist == null)
-                        await _context.HistoricalFinancials.AddAsync(hItem, ct);
+                    // 1. Upsert DeepFinancial
+                    var existingDeep = await _context.DeepFinancials
+                        .FirstOrDefaultAsync(df => df.Symbol == deepFinancial.Symbol, ct);
+                    if (existingDeep == null)
+                        await _context.DeepFinancials.AddAsync(deepFinancial, ct);
                     else
-                        _context.Entry(existingHist).CurrentValues.SetValues(hItem);
-                }
+                        _context.Entry(existingDeep).CurrentValues.SetValues(deepFinancial);
 
-                await _context.SaveChangesAsync(ct);
-                await transaction.CommitAsync(ct);
-            }
-            catch
-            {
-                await transaction.RollbackAsync(ct);
-                throw;
-            }
+                    // 2. Upsert HistoricalFinancials
+                    foreach (var hItem in historicalList)
+                    {
+                        var existingHist = await _context.HistoricalFinancials
+                            .FirstOrDefaultAsync(h => h.Symbol == hItem.Symbol && h.Year == hItem.Year, ct);
+                        if (existingHist == null)
+                            await _context.HistoricalFinancials.AddAsync(hItem, ct);
+                        else
+                            _context.Entry(existingHist).CurrentValues.SetValues(hItem);
+                    }
+
+                    await _context.SaveChangesAsync(ct);
+                    await transaction.CommitAsync(ct);
+                }
+                catch
+                {
+                    await transaction.RollbackAsync(ct);
+                    throw;
+                }
+            });
         }
 
         #endregion
@@ -178,6 +183,15 @@ namespace SoundMoney.Data
         {
             return await _context.StockValuations
                 .AsNoTracking()
+                .OrderBy(v => v.Symbol)
+                .ToListAsync(ct);
+        }
+
+        public async Task<List<StockValuation>> GetPendingValuationsAsync(CancellationToken ct = default)
+        {
+            return await _context.StockValuations
+                .AsNoTracking()
+                //.Where(v=>v.Sector == string.Empty)
                 .OrderBy(v => v.Symbol)
                 .ToListAsync(ct);
         }

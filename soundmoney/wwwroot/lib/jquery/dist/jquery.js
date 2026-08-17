@@ -3758,7 +3758,7 @@ jQuery.extend( {
 
 									// Support: Promises/A+ section 2.3.3.3.3
 									// https://promisesaplus.com/#point-59
-									// Ignore double-resolution attempts
+									// Ignore decimal-resolution attempts
 									if ( depth < maxDepth ) {
 										return;
 									}

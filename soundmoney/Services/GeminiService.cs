@@ -72,7 +72,7 @@ You are a financial analyst. For the NSE-listed Indian stock symbol '{symbol.Sym
   ""CompanyName"": ""{(!string.IsNullOrEmpty(symbol.CompanyName) ? symbol.CompanyName : "<official company name>")}"" ,
   ""CurrentPrice"": ""<current price in INR as decimal>"",
   ""Sector"": ""{(!string.IsNullOrEmpty(symbol.Sector) ? symbol.Sector : "<sector category: Banking, IT, Energy, FMCG, Pharma, Automobile, Metals, Infrastructure, or FinancialServices>")}"",
-  ""IntrinsicMethod"": ""{(!string.IsNullOrEmpty(symbol.IntrinsicMethod) ? symbol.IntrinsicMethod : "<choose the intrinsic method based on the sector>")}"",
+  ""IntrinsicMethod"": ""{(!string.IsNullOrEmpty(symbol.PrimaryMethod) ? symbol.PrimaryMethod : "<choose the intrinsic method based on the sector>")}"",
   ""IntrinsicValue"": <calculate the intrinsic value based on the IntrinsicMethod>
 }}
 

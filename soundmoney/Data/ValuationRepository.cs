@@ -127,7 +127,8 @@ public class ValuationRepository : IValuationRepository
                 existing.CompanyName = stock.CompanyName;
                 existing.CurrentPrice = stock.CurrentPrice;
                 existing.Sector = stock.Sector;
-                existing.IntrinsicMethod = stock.IntrinsicMethod;
+                existing.PrimaryMethod = stock.PrimaryMethod;
+                existing.SecondaryMethod = stock.SecondaryMethod;
                 existing.IntrinsicValue = stock.IntrinsicValue;
                 existing.MarginOfSafety = stock.MarginOfSafety;
                 existing.Verdict = stock.Verdict;

@@ -21,7 +21,7 @@ namespace SoundMoney.Services
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             // Set timer tick interval to 1 minute
-            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(0.2));
 
             _logger.LogInformation("Stock scraper background service started. Executing every 1 minute.");
 
@@ -57,7 +57,7 @@ namespace SoundMoney.Services
             var scraperService = scope.ServiceProvider.GetRequiredService<IScraperService>();
             var valuationService = scope.ServiceProvider.GetRequiredService<IValuationService>();
 
-            var symbols = await valuationRepo.GetAllValuationsAsync();
+            var symbols = await valuationRepo.GetPendingValuationsAsync();
 
             foreach (var symbol in symbols)
             {
@@ -68,11 +68,12 @@ namespace SoundMoney.Services
                 {
                     _logger.LogInformation("Scraping data for symbol: {Symbol}", symbol.Symbol);
 
-                    var (deepFinancials, historicalFinancials) = await scraperService.ScrapeStockAsync(symbol.Symbol);
+                    var (stockValuation, deepFinancials, historicalFinancials) = await scraperService.ScrapeStockAsync(symbol.Symbol);
 
-                    if (deepFinancials is not null && historicalFinancials is not null)
+                    if (stockValuation is not null && deepFinancials is not null && historicalFinancials is not null)
                     {
-                        await valuationRepo.SaveCompleteFinancialDataAsync(deepFinancials, historicalFinancials);
+                        symbol.Sector = stockValuation.Sector;
+                        //await valuationRepo.SaveCompleteFinancialDataAsync(deepFinancials, historicalFinancials);
                         _logger.LogInformation("Saved scraped financial data for {Symbol}", symbol.Symbol);
                         var valuation = await valuationService.EvaluateDataAsync(symbol, deepFinancials, historicalFinancials);
                         await valuationRepo.SaveValuationAsync(valuation);
@@ -84,7 +85,7 @@ namespace SoundMoney.Services
                 }
 
                 // 1 minute throttle delay between individual stock scrapes to prevent rate limiting
-                await Task.Delay(TimeSpan.FromMinutes(1), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
     }

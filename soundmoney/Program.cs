@@ -13,12 +13,21 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<DataContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null
+        );
+    }));
 
 // Register repository
 builder.Services.AddScoped<IValuationRepository, ValuationRepository>();
 // Register repository
 builder.Services.AddScoped<IFinancialRepository, FinancialRepository>();
+
+builder.Services.AddTransient<IValuationService, ValuationService>();
 
 builder.Services.AddTransient<IScreenerService, ScreenerService>();
 
@@ -26,6 +35,8 @@ builder.Services.AddTransient<IScreenerService, ScreenerService>();
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();
 
 builder.Services.AddHttpClient<IScraperService, ScraperService>();
+
+builder.Services.AddHttpClient<NseStockSeederService>();
 
 builder.Services.AddHostedService<AutomationService>();
 
@@ -37,6 +48,15 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<DataContext>();
     db.Database.Migrate();
 }
+
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<NseStockSeederService>();
+
+    // Pass local CSV path if available, or leave empty to fetch automatically via HTTP
+    await seeder.SeedFromNseCsvAsync();
+}
+
 
 if (!app.Environment.IsDevelopment())
 {

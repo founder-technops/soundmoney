@@ -12,7 +12,7 @@ namespace SoundMoney.Services
         /// </summary>
         /// <param name="symbol">Stock ticker symbol (e.g., RELIANCE, TCS, INFY)</param>
         /// <returns>True if scraping and persistence succeeded.</returns>
-        Task<(DeepFinancial, List<HistoricalFinancial>)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
+        Task<(StockValuation, DeepFinancial, List<HistoricalFinancial>)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
     }
     public class ScraperService : IScraperService
     {
@@ -34,7 +34,7 @@ namespace SoundMoney.Services
             }
         }
 
-        public async Task<(DeepFinancial, List<HistoricalFinancial>)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
+        public async Task<(StockValuation, DeepFinancial, List<HistoricalFinancial>)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
         {
             string cleanSymbol = symbol.Trim().ToUpperInvariant();
             _logger.LogInformation("Starting scraping for symbol: {Symbol}", cleanSymbol);
@@ -46,7 +46,7 @@ namespace SoundMoney.Services
                 if (string.IsNullOrWhiteSpace(html))
                 {
                     _logger.LogWarning("Failed to retrieve HTML for symbol: {Symbol}", cleanSymbol);
-                    return (null, null);
+                    return (null, null, null);
                 }
 
                 var doc = new HtmlDocument();
@@ -56,6 +56,13 @@ namespace SoundMoney.Services
                 var companyName = ExtractCompanyName(doc, cleanSymbol);
                 var sector = ExtractSector(doc);
 
+                var stockValuation = new StockValuation()
+                {
+                    Symbol = symbol,
+                    CompanyName = companyName,
+                    Sector = sector,
+                };
+
                 var deepFinancial = ExtractDeepFinancial(doc, cleanSymbol);
                 var historicalFinancials = ExtractHistoricalFinancials(doc, cleanSymbol);
 
@@ -63,12 +70,12 @@ namespace SoundMoney.Services
                 //await _repository.SaveCompleteValuationDataAsync(valuation, deepFinancial, historicalFinancials, ct);
 
                 _logger.LogInformation("Successfully scraped and saved financial data for {Symbol}", cleanSymbol);
-                return (deepFinancial, historicalFinancials);
+                return (stockValuation, deepFinancial, historicalFinancials);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while scraping and saving data for symbol: {Symbol}", cleanSymbol);
-                return (null,null);
+                return (null, null,null);
             }
         }
 
@@ -101,9 +108,28 @@ namespace SoundMoney.Services
 
         private string ExtractSector(HtmlDocument doc)
         {
-            // Screener puts sector links inside the breadcrumb / peer section
-            var sectorNode = doc.DocumentNode.SelectSingleNode("//a[contains(@href, '/company/compare/')]");
-            return sectorNode?.InnerText?.Trim() ?? "General";
+            // 2. Sub-Sector / Industry: Links explicitly tagged with title="Industry" or title="Sub Sector",
+            // or nested market paths (/market/INxx/INxxxx/...)
+            var subSectorNode = doc.DocumentNode
+                .SelectSingleNode("//a[contains(@href, '/market/') and (@title='Industry' or @title='Sub Sector')]")
+                ?? doc.DocumentNode.SelectSingleNode("//a[contains(@href, '/company/compare/')]");
+
+            if (subSectorNode != null)
+            {
+               return System.Net.WebUtility.HtmlDecode(subSectorNode.InnerText.Trim());
+            }
+
+            // 1. Broad Sector: Links with title="Broad Sector" or single-level market links (/market/INxx/)
+            var broadNode = doc.DocumentNode
+                .SelectSingleNode("//a[contains(@href, '/market/') and @title='Broad Sector']")
+                ?? doc.DocumentNode.SelectSingleNode("//a[contains(@href, '/market/IN') and not(contains(@href, '/IN'))]");
+
+            if (broadNode != null)
+            {
+                return System.Net.WebUtility.HtmlDecode(broadNode.InnerText.Trim());
+            }
+
+            return "General";
         }
 
         #endregion
