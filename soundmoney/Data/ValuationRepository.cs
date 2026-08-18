@@ -91,7 +91,7 @@ public class ValuationRepository : IValuationRepository
         try
         {
             var query = _context.StockValuations
-                .Where(s => s.MarginOfSafety >= minMarginOfSafety);
+                .Where(s => s.UpdatedAt != null && s.MarginOfSafety >= minMarginOfSafety);
 
             if (sectorFilter is not null)
             {

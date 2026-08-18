@@ -102,6 +102,8 @@ namespace SoundMoney.Services
                         PrimaryMethod = string.Empty,
                         SecondaryMethod = string.Empty,
                         Verdict = string.Empty,
+                        SoundScore = 0m,
+                        SoundScoreRating = string.Empty,
                         UpdatedAt = DateTime.Now
                     });
                 }

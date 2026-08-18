@@ -21,7 +21,7 @@ namespace SoundMoney.Services
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             // Set timer tick interval to 1 minute
-            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(0.2));
+            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1440));
 
             _logger.LogInformation("Stock scraper background service started. Executing every 1 minute.");
 

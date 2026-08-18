@@ -191,7 +191,8 @@ namespace SoundMoney.Data
         {
             return await _context.StockValuations
                 .AsNoTracking()
-                //.Where(v=>v.Sector == string.Empty)
+                //.Where(v => v.UpdatedAt == null)
+                //.Where(v=>v.Symbol == "BEL")
                 .OrderBy(v => v.Symbol)
                 .ToListAsync(ct);
         }

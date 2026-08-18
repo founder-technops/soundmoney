@@ -169,10 +169,22 @@ namespace SoundMoney.Services
             if (pnlSection != null)
             {
                 df.RevenueCr = GetLastCellRowValue(pnlSection, "Sales");
-                df.OperatingProfitEbitdaCr = GetLastCellRowValue(pnlSection, "Operating Profit");
+
+                // 1. Extract Operating Profit (EBITDA)
+                decimal operatingProfit = GetLastCellRowValue(pnlSection, "Operating Profit");
+                if (operatingProfit == 0m)
+                {
+                    // Fallback check if Screener abbreviates it as OP
+                    operatingProfit = GetLastCellRowValue(pnlSection, "OP");
+                }
+
+                df.OperatingProfitEbitdaCr = operatingProfit;
                 df.DepreciationCr = GetLastCellRowValue(pnlSection, "Depreciation");
                 df.NetProfitCr = GetLastCellRowValue(pnlSection, "Net Profit");
                 df.DividendPayoutPercent = GetLastCellRowValue(pnlSection, "Dividend Payout") / 100m;
+
+                // 2. Derive EBIT (Operating Profit - Depreciation)
+                df.EbitCr = df.OperatingProfitEbitdaCr - df.DepreciationCr;
             }
 
             // C. Balance Sheet Section
@@ -193,6 +205,9 @@ namespace SoundMoney.Services
                 df.TotalAssetsCr = GetLastCellRowValue(bsSection, "Total Assets");
 
                 df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
+
+                // Calculate Net Cash for valuation algorithms (Cash - Debt)
+                df.NetCashCr = df.CashAndEquivalentsCr - df.TotalBorrowingsCr;
             }
 
             // D. Cash Flow Section
@@ -272,12 +287,18 @@ namespace SoundMoney.Services
 
         private decimal GetLastCellRowValue(HtmlNode sectionNode, string rowName)
         {
-            var rowNode = sectionNode.SelectSingleNode($".//tr[td[contains(normalize-space(), '{rowName}')]]");
+            if (sectionNode == null) return 0m;
+
+            // Matches row containing the target label (case-insensitive substring match)
+            var rowNode = sectionNode.SelectSingleNode($".//tr[td[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{rowName.ToLowerInvariant()}')]]");
             var lastCell = rowNode?.SelectNodes("td")?.LastOrDefault();
+
             if (lastCell != null)
             {
-                return ParseDecimal(lastCell.InnerText.Trim().Replace(",", ""));
+                string text = lastCell.InnerText.Trim().Replace(",", "").Replace("%", "");
+                return ParseDecimal(text);
             }
+
             return 0m;
         }
 

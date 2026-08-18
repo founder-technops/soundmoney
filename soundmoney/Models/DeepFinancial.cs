@@ -1,10 +1,11 @@
-﻿namespace SoundMoney.Models
+﻿
+namespace SoundMoney.Models
 {
     public class DeepFinancial
     {
         public string Symbol { get; set; }
 
-        // Header Metrics
+        // --- Header Metrics ---
         public decimal CurrentPrice { get; set; }
         public decimal MarketCapCr { get; set; }
         public decimal BookValuePerShare { get; set; }
@@ -12,14 +13,29 @@
         public decimal ReportedRoePercent { get; set; }
         public decimal DividendYieldPercent { get; set; }
 
-        // P&L Metrics (Latest Year / TTM in Crores)
+        // --- P&L Metrics (Latest Year / TTM in Crores) ---
         public decimal RevenueCr { get; set; }
+
+        /// <summary>
+        /// Direct Operating Profit extracted from Screener.in
+        /// </summary>
+        public decimal OperatingProfitCr { get; set; }
+
+        /// <summary>
+        /// Operating Profit before Depreciation and Amortization (EBITDA)
+        /// </summary>
         public decimal OperatingProfitEbitdaCr { get; set; }
+
+        /// <summary>
+        /// Derived Earnings Before Interest and Taxes (Operating Profit - Depreciation)
+        /// </summary>
+        public decimal EbitCr { get; set; }
+
         public decimal DepreciationCr { get; set; }
         public decimal NetProfitCr { get; set; }
         public decimal DividendPayoutPercent { get; set; }
 
-        // Balance Sheet Metrics (Latest Year in Crores)
+        // --- Balance Sheet Metrics (Latest Year in Crores) ---
         public decimal ShareCapitalCr { get; set; }
         public decimal ReservesCr { get; set; }
         public decimal TotalEquityCr { get; set; }
@@ -31,7 +47,12 @@
         public decimal TotalLiabilitiesCr { get; set; }
         public decimal TotalAssetsCr { get; set; }
 
-        // Cash Flow Metrics (Latest Year in Crores)
+        /// <summary>
+        /// Calculated Net Cash position (Cash & Equivalents - Total Borrowings) used for DCF valuations
+        /// </summary>
+        public decimal NetCashCr { get; set; }
+
+        // --- Cash Flow Metrics (Latest Year in Crores) ---
         public decimal CashFromOperationsCr { get; set; }
         public decimal GrossCapexCr { get; set; }
         public decimal FreeCashFlowCr { get; set; }

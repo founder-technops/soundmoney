@@ -39,5 +39,8 @@ public class StockValuation
     /// <summary>
     /// Timestamp when the record was last updated in the database.
     /// </summary>
-    public DateTime UpdatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
+
+    public decimal SoundScore { get; set; }
+    public string SoundScoreRating { get; set; }
 }
