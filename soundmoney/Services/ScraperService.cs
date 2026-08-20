@@ -14,6 +14,7 @@ namespace SoundMoney.Services
         /// <returns>True if scraping and persistence succeeded.</returns>
         Task<(StockValuation, DeepFinancial, List<HistoricalFinancial>)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
     }
+
     public class ScraperService : IScraperService
     {
         private readonly HttpClient _httpClient;
@@ -66,16 +67,16 @@ namespace SoundMoney.Services
                 var deepFinancial = ExtractDeepFinancial(doc, cleanSymbol);
                 var historicalFinancials = ExtractHistoricalFinancials(doc, cleanSymbol);
 
-                // 3. Persist to Database atomically via Repository
-                //await _repository.SaveCompleteValuationDataAsync(valuation, deepFinancial, historicalFinancials, ct);
+                SectorCategory sectormap = SectorMapper.Map(sector);
+                deepFinancial.IsFinancialSector = sectormap == SectorCategory.Banking || sectormap == SectorCategory.FinancialServices;
 
-                _logger.LogInformation("Successfully scraped and saved financial data for {Symbol}", cleanSymbol);
+                _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, historicalFinancials.Count);
                 return (stockValuation, deepFinancial, historicalFinancials);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while scraping and saving data for symbol: {Symbol}", cleanSymbol);
-                return (null, null,null);
+                _logger.LogError(ex, "Error occurred while scraping data for symbol: {Symbol}", cleanSymbol);
+                return (null, null, null);
             }
         }
 
@@ -108,18 +109,15 @@ namespace SoundMoney.Services
 
         private string ExtractSector(HtmlDocument doc)
         {
-            // 2. Sub-Sector / Industry: Links explicitly tagged with title="Industry" or title="Sub Sector",
-            // or nested market paths (/market/INxx/INxxxx/...)
             var subSectorNode = doc.DocumentNode
                 .SelectSingleNode("//a[contains(@href, '/market/') and (@title='Industry' or @title='Sub Sector')]")
                 ?? doc.DocumentNode.SelectSingleNode("//a[contains(@href, '/company/compare/')]");
 
             if (subSectorNode != null)
             {
-               return System.Net.WebUtility.HtmlDecode(subSectorNode.InnerText.Trim());
+                return System.Net.WebUtility.HtmlDecode(subSectorNode.InnerText.Trim());
             }
 
-            // 1. Broad Sector: Links with title="Broad Sector" or single-level market links (/market/INxx/)
             var broadNode = doc.DocumentNode
                 .SelectSingleNode("//a[contains(@href, '/market/') and @title='Broad Sector']")
                 ?? doc.DocumentNode.SelectSingleNode("//a[contains(@href, '/market/IN') and not(contains(@href, '/IN'))]");
@@ -170,11 +168,9 @@ namespace SoundMoney.Services
             {
                 df.RevenueCr = GetLastCellRowValue(pnlSection, "Sales");
 
-                // 1. Extract Operating Profit (EBITDA)
                 decimal operatingProfit = GetLastCellRowValue(pnlSection, "Operating Profit");
                 if (operatingProfit == 0m)
                 {
-                    // Fallback check if Screener abbreviates it as OP
                     operatingProfit = GetLastCellRowValue(pnlSection, "OP");
                 }
 
@@ -183,15 +179,14 @@ namespace SoundMoney.Services
                 df.NetProfitCr = GetLastCellRowValue(pnlSection, "Net Profit");
                 df.DividendPayoutPercent = GetLastCellRowValue(pnlSection, "Dividend Payout") / 100m;
 
-                // 2. Derive EBIT (Operating Profit - Depreciation)
-                df.EbitCr = df.OperatingProfitEbitdaCr - df.DepreciationCr;
+                df.EbitCr = df.OperatingProfitEbitdaCr - (df.DepreciationCr < 0 ? (-1 * df.DepreciationCr) : df.DepreciationCr);
             }
 
             // C. Balance Sheet Section
             var bsSection = doc.DocumentNode.SelectSingleNode("//section[@id='balance-sheet']");
             if (bsSection != null)
             {
-                df.ShareCapitalCr = GetLastCellRowValue(bsSection, "Share Capital");
+                df.ShareCapitalCr = GetLastCellRowValue(bsSection, "Equity Capital");
                 df.ReservesCr = GetLastCellRowValue(bsSection, "Reserves");
                 df.TotalBorrowingsCr = GetLastCellRowValue(bsSection, "Borrowings");
 
@@ -200,14 +195,12 @@ namespace SoundMoney.Services
 
                 df.NetFixedAssetsCr = GetLastCellRowValue(bsSection, "Fixed Assets");
                 df.CwipCr = GetLastCellRowValue(bsSection, "CWIP");
-                df.CashAndEquivalentsCr = GetLastCellRowValue(bsSection, "Other Assets"); // Screener groups cash & investments under other assets
+                df.InvestmentsCr = GetLastCellRowValue(bsSection, "Investments");
+                df.CashAndEquivalentsCr = GetLastCellRowValue(bsSection, "Other Assets");
                 df.IntangibleAssetsCr = GetLastCellRowValue(bsSection, "Intangible Assets");
                 df.TotalAssetsCr = GetLastCellRowValue(bsSection, "Total Assets");
-
                 df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
-
-                // Calculate Net Cash for valuation algorithms (Cash - Debt)
-                df.NetCashCr = df.CashAndEquivalentsCr - df.TotalBorrowingsCr;
+                df.NetCashCr = df.CashAndEquivalentsCr - (df.TotalBorrowingsCr < 0 ? (-1 * df.TotalBorrowingsCr) : df.TotalBorrowingsCr);
             }
 
             // D. Cash Flow Section
@@ -215,8 +208,8 @@ namespace SoundMoney.Services
             if (cfSection != null)
             {
                 df.CashFromOperationsCr = GetLastCellRowValue(cfSection, "Cash from Operating Activity");
-                df.GrossCapexCr = Math.Abs(GetLastCellRowValue(cfSection, "Fixed assets purchased"));
-                df.FreeCashFlowCr = df.CashFromOperationsCr - df.GrossCapexCr;
+                df.FreeCashFlowCr = GetLastCellRowValue(cfSection, "Free Cash Flow");
+                df.GrossCapexCr = df.CashFromOperationsCr - (df.FreeCashFlowCr < 0 ? (-1 * df.FreeCashFlowCr) : df.FreeCashFlowCr);
             }
 
             return df;
@@ -230,7 +223,7 @@ namespace SoundMoney.Services
             var cfSection = doc.DocumentNode.SelectSingleNode("//section[@id='cash-flow']");
             if (pnlSection == null && cfSection == null) return historyList;
 
-            // 1. Parse Years from table header (e.g. Mar 2020, Mar 2021, Mar 2022...)
+            // 1. Parse Years from table header (e.g., Mar 2020, Mar 2021, Mar 2022...)
             var headerCells = pnlSection?.SelectNodes(".//table[contains(@class, 'ranges-table') or contains(@class, 'table')]//thead//th");
             var yearHeaderList = new List<(int ColumnIndex, int Year)>();
 
@@ -247,7 +240,7 @@ namespace SoundMoney.Services
                 }
             }
 
-            // Fallback if the header parsing could not find dates: generate recent 5 consecutive years ending with current year
+            // Fallback if header parsing couldn't find dates
             if (!yearHeaderList.Any())
             {
                 int currentYear = DateTime.UtcNow.Year;
@@ -257,24 +250,27 @@ namespace SoundMoney.Services
                 }
             }
 
-            // 2. Extract historical rows indexed by year
+            // 2. Extract historical rows indexed by column
             var revenueDict = GetRowValuesByColumn(pnlSection, "Sales");
+            var netProfitDict = GetRowValuesByColumn(pnlSection, "Net Profit"); // Added Net Profit extraction
             var ocfDict = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
-            var capexDict = GetRowValuesByColumn(cfSection, "Fixed assets purchased");
+            var fcfDict = GetRowValuesByColumn(cfSection, "Free Cash Flow");
 
             foreach (var header in yearHeaderList)
             {
                 revenueDict.TryGetValue(header.ColumnIndex, out decimal rev);
+                netProfitDict.TryGetValue(header.ColumnIndex, out decimal netProfit);
                 ocfDict.TryGetValue(header.ColumnIndex, out decimal ocf);
-                capexDict.TryGetValue(header.ColumnIndex, out decimal capex);
-
+                fcfDict.TryGetValue(header.ColumnIndex, out decimal fcf);
                 historyList.Add(new HistoricalFinancial
                 {
                     Symbol = symbol,
                     Year = header.Year,
                     HistoricalRevenueCr = rev,
+                    HistoricalNetProfitCr = netProfit, // Populated
                     HistoricalOcfCr = ocf,
-                    HistoricalCapexCr = Math.Abs(capex)
+                    HistoricalFcfCr = fcf,
+                    HistoricalCapexCr = ocf - (fcf < 0 ? -1 * fcf : fcf)
                 });
             }
 
@@ -289,8 +285,7 @@ namespace SoundMoney.Services
         {
             if (sectionNode == null) return 0m;
 
-            // Matches row containing the target label (case-insensitive substring match)
-            var rowNode = sectionNode.SelectSingleNode($".//tr[td[contains(translate(normalize-space(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{rowName.ToLowerInvariant()}')]]");
+            var rowNode = sectionNode.SelectSingleNode($".//tr[td[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{rowName.ToLowerInvariant()}')]]");
             var lastCell = rowNode?.SelectNodes("td")?.LastOrDefault();
 
             if (lastCell != null)
@@ -324,7 +319,6 @@ namespace SoundMoney.Services
 
         private int ExtractYearFromHeader(string headerText)
         {
-            // Handles "Mar 2024", "TTM", "2024", etc.
             var match = System.Text.RegularExpressions.Regex.Match(headerText, @"\b(20\d{2})\b");
             if (match.Success && int.TryParse(match.Value, out int yr))
             {
