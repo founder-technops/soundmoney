@@ -49,7 +49,7 @@ namespace SoundMoney.Services
                 : Math.Max(primaryValue, secondaryValue);
 
             decimal cmp = deepData.CurrentPrice;
-            decimal marginOfSafety =  0m;
+            decimal marginOfSafety = 0m;
             string verdict;
 
             if (blendedIntrinsicValue <= 0 || cmp <= 0)
@@ -136,7 +136,43 @@ namespace SoundMoney.Services
 
         #endregion
 
-        #region Dynamic Growth & Parameter Utilities
+        #region WACC & Dynamic Utilities
+
+        /// <summary>
+        /// Calculates Weighted Average Cost of Capital (WACC) dynamically.
+        /// WACC = (E/V * Cost of Equity) + (D/V * Cost of Debt * (1 - Tax Rate))
+        /// </summary>
+        private static decimal CalculateWacc(DeepFinancial data, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m, decimal taxRate = 0.25m)
+        {
+            // 1. Calculate Market Value of Equity (E) and Total Borrowings (D)
+            decimal equityValueCr = data.CurrentPrice * data.TotalSharesCr;
+            decimal debtValueCr = Math.Max(0m, data.TotalBorrowingsCr);
+            decimal totalCapitalCr = equityValueCr + debtValueCr;
+
+            // Fallback for missing/invalid market capitalization
+            if (totalCapitalCr <= 0) return 0.11m;
+
+            // 2. Cost of Equity via CAPM: Rf + (Beta * ERP)
+            decimal beta = data.Beta > 0 ? Math.Clamp(data.Beta, 0.5m, 2.5m) : 1.0m;
+            decimal costOfEquity = riskFreeRate + (beta * equityRiskPremium);
+
+            // 3. Cost of Debt: Interest Expense / Total Borrowings
+            decimal costOfDebt = 0.08m; // Default baseline cost of debt (8%)
+            if (debtValueCr > 0 && data.InterestExpenseCr > 0)
+            {
+                costOfDebt = Math.Clamp(data.InterestExpenseCr / debtValueCr, 0.04m, 0.18m);
+            }
+
+            // 4. Weightings
+            decimal weightEquity = equityValueCr / totalCapitalCr;
+            decimal weightDebt = debtValueCr / totalCapitalCr;
+
+            // 5. Final WACC
+            decimal wacc = (weightEquity * costOfEquity) + (weightDebt * costOfDebt * (1m - taxRate));
+
+            // Guardrail safety bounds: 8.5% min to 18% max discount rate
+            return Math.Clamp(wacc, 0.085m, 0.18m);
+        }
 
         private static decimal CalculateCagr(decimal initialValue, decimal finalValue, int periods)
         {
@@ -203,7 +239,7 @@ namespace SoundMoney.Services
             if (fcfCr <= 0) return 0m;
 
             decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.08m);
-            decimal discountRate = Math.Max(0.10m, growthRate + 0.02m);
+            decimal discountRate = CalculateWacc(data);
 
             decimal terminalRate = 0.03m;
 
@@ -239,7 +275,7 @@ namespace SoundMoney.Services
 
             decimal stage1Growth = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.10m);
             decimal stage2Growth = stage1Growth * 0.5m; // Decay stage
-            decimal discountRate = Math.Max(0.11m, stage1Growth + 0.02m);
+            decimal discountRate = CalculateWacc(data);
             decimal terminalRate = Math.Min(0.03m, stage2Growth);
 
             decimal cumulativePv = 0m;
@@ -278,7 +314,7 @@ namespace SoundMoney.Services
             if (fcfCr <= 0 || data.EbitCr <= 0) return 0m;
 
             decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.10m);
-            decimal discountRate = Math.Max(0.11m, growthRate + 0.02m);
+            decimal discountRate = CalculateWacc(data);
             const decimal evEbitMultiple = 15.0m;
 
             decimal cumulativePv = 0m;
@@ -305,7 +341,8 @@ namespace SoundMoney.Services
         {
             if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
 
-            const decimal costOfEquity = 0.12m;
+            // Cost of Equity via WACC/CAPM principle
+            decimal costOfEquity = CalculateWacc(data);
             const decimal terminalGrowth = 0.04m;
             decimal roeDecimal = data.ReportedRoePercent / 100m;
 
@@ -322,7 +359,7 @@ namespace SoundMoney.Services
         {
             if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
 
-            const decimal costOfEquity = 0.11m;
+            decimal costOfEquity = CalculateWacc(data);
             const decimal dividendGrowth = 0.05m;
 
             decimal payoutRatio = data.DividendPayoutPercent > 0 ? data.DividendPayoutPercent / 100m : 0.40m;
@@ -340,7 +377,7 @@ namespace SoundMoney.Services
         {
             if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
 
-            const decimal costOfEquity = 0.10m;
+            decimal costOfEquity = CalculateWacc(data);
             decimal payoutRatio = data.DividendPayoutPercent > 0 ? data.DividendPayoutPercent / 100m : 0.40m;
             decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
             decimal d0 = eps * payoutRatio;
@@ -446,7 +483,7 @@ namespace SoundMoney.Services
         {
             if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
 
-            const decimal costOfEquity = 0.12m;
+            decimal costOfEquity = CalculateWacc(data);
             const decimal growth = 0.05m;
             decimal roe = data.ReportedRoePercent / 100m;
 
