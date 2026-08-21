@@ -42,6 +42,7 @@ public class ScreenerResultRow
     public decimal IntrinsicValue { get; set; }
     public decimal MarginOfSafetyPercent { get; set; }
     public string Verdict { get; set; } = "";
+    public string SoundScoreRating { get; set; } = "";
 }
 
 public class ScreenerViewModel
@@ -49,4 +50,5 @@ public class ScreenerViewModel
     public List<ScreenerResultRow> Results { get; set; } = new();
     public decimal MinMarginOfSafety { get; set; }
     public SectorCategory? SelectedSector { get; set; }
+    public string? SelectedScore { get; set; }
 }

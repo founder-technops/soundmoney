@@ -55,7 +55,7 @@ namespace SoundMoney.Services
                 };
 
                 var deepFinancial = ExtractDeepFinancial(doc, cleanSymbol);
-                var historicalFinancials = ExtractHistoricalFinancials(doc, cleanSymbol);
+                var historicalFinancials = ExtractHistoricalFinancials(doc, deepFinancial, cleanSymbol);
 
                 SectorCategory sectormap = SectorMapper.Map(sector);
                 deepFinancial.IsFinancialSector = sectormap == SectorCategory.Banking || sectormap == SectorCategory.FinancialServices;
@@ -135,6 +135,7 @@ namespace SoundMoney.Services
                     else if (name.Contains("Current Price", StringComparison.OrdinalIgnoreCase)) df.CurrentPrice = val;
                     else if (name.Contains("Book Value", StringComparison.OrdinalIgnoreCase)) df.BookValuePerShare = val;
                     else if (name.Contains("ROE", StringComparison.OrdinalIgnoreCase)) df.ReportedRoePercent = val / 100m;
+                    else if (name.Contains("Face Value", StringComparison.OrdinalIgnoreCase)) df.FaceValue = val;
                     else if (name.Contains("Dividend Yield", StringComparison.OrdinalIgnoreCase)) df.DividendYieldPercent = val / 100m;
                 }
             }
@@ -180,6 +181,8 @@ namespace SoundMoney.Services
                 
                 df.IntangibleAssetsCr = GetLastCellRowValue(bsSection, "Intangible Assets");
                 df.TotalAssetsCr = GetLastCellRowValue(bsSection, "Total Assets");
+                df.CurrentAssetsCr = df.TotalAssetsCr;
+                df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Total Liabilities");
                 df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
 
                 // Fallback heuristic: If sub-row is unavailable, estimate Cash & Equivalents
@@ -206,12 +209,13 @@ namespace SoundMoney.Services
             return df;
         }
 
-        private List<HistoricalFinancial> ExtractHistoricalFinancials(HtmlDocument doc, string symbol)
+        private List<HistoricalFinancial> ExtractHistoricalFinancials(HtmlDocument doc, DeepFinancial deepFinancial, string symbol)
         {
             var historyList = new List<HistoricalFinancial>();
 
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             var cfSection = doc.DocumentNode.SelectSingleNode("//section[@id='cash-flow']");
+            var balanceSheetSection = doc.DocumentNode.SelectSingleNode("//section[@id='balance-sheet']");
             if (pnlSection == null && cfSection == null) return historyList;
 
             var headerCells = pnlSection?.SelectNodes(".//table[contains(@class, 'ranges-table') or contains(@class, 'table')]//thead//th");
@@ -243,13 +247,14 @@ namespace SoundMoney.Services
             var netProfitDict = GetRowValuesByColumn(pnlSection, "Net Profit");
             var ocfDict = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
             var fcfDict = GetRowValuesByColumn(cfSection, "Free Cash Flow");
-
+            var equityCapitalDict = GetRowValuesByColumn(balanceSheetSection, "Equity Capital");
             foreach (var header in yearHeaderList)
             {
                 revenueDict.TryGetValue(header.ColumnIndex, out decimal rev);
                 netProfitDict.TryGetValue(header.ColumnIndex, out decimal netProfit);
                 ocfDict.TryGetValue(header.ColumnIndex, out decimal ocf);
                 fcfDict.TryGetValue(header.ColumnIndex, out decimal fcf);
+                equityCapitalDict.TryGetValue(header.ColumnIndex, out decimal equityCap);
                 historyList.Add(new HistoricalFinancial
                 {
                     Symbol = symbol,
@@ -258,7 +263,10 @@ namespace SoundMoney.Services
                     HistoricalNetProfitCr = netProfit, // Populated
                     HistoricalOcfCr = ocf,
                     HistoricalFcfCr = fcf,
-                    HistoricalCapexCr = ocf - (fcf < 0 ? -1 * fcf : fcf)
+                    HistoricalCapexCr = ocf - (fcf < 0 ? -1 * fcf : fcf),
+                    EquityCapitalCr = equityCap,
+                    HistoricalSharesCr = deepFinancial.FaceValue > 0 ? equityCap / deepFinancial.FaceValue : 0m,
+                    HistoricalPatCr = netProfit, // Populated
                 });
             }
 

@@ -9,6 +9,8 @@
         /// </summary>
         public int Year { get; set; }
 
+        public decimal EquityCapitalCr { get; set; }
+
         /// <summary>
         /// Historical Total Revenue / Sales in Crores (₹ Cr)
         /// </summary>
@@ -36,11 +38,14 @@
         /// </summary>
         public decimal HistoricalFcfCr { get; set; } = 0m;
 
+        public decimal HistoricalPatCr { get; set; } = 0m;
+
+        public decimal HistoricalSharesCr { get; set; } = 0m;
+
         /// <summary>
         /// Historical Cash Conversion Ratio (OCF / Net Profit)
         /// </summary>
         public decimal CashConversionRatio => HistoricalNetProfitCr > 0
-            ? Math.Round(HistoricalOcfCr / HistoricalNetProfitCr, 2)
-            : 0m;
+        ? Math.Round(HistoricalOcfCr / HistoricalNetProfitCr, 2) : 0m;
     }
 }

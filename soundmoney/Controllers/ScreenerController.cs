@@ -14,13 +14,13 @@ public class ScreenerController : Controller
     }
 
     [HttpGet]
-    public async Task<IActionResult> Index(decimal minMarginOfSafety = 0m, SectorCategory? sector = null)
+    public async Task<IActionResult> Index(decimal minMarginOfSafety = 0m, SectorCategory? sector = null, string? score =  null)
     {
         if(minMarginOfSafety == 0)
         {
             return View(new ScreenerViewModel());
         }
-        var results = await _screener.RunScreenAsync(minMarginOfSafety, sector);
+        var results = await _screener.RunScreenAsync(minMarginOfSafety, sector, score);
 
         var vm = new ScreenerViewModel
         {

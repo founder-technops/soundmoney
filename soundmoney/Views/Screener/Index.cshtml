@@ -19,6 +19,16 @@
         </select>
     </div>
     <div class="col-auto">
+        <label class="form-label">Score</label>
+        <select name="score" class="form-select">
+            <option value="">All</option>
+            @foreach (var s in new List<string>() { "STRONG SOUND", "SOUND", "NEUTRAL", "UNSOUND" })
+            {
+                <option value="@s" selected="@(Model.SelectedScore == s)">@s</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
         <button type="submit" class="btn btn-primary">Run screen</button>
     </div>
 </form>
@@ -27,9 +37,7 @@
 {
     <div class="alert alert-info">
         No stocks matched. This can mean either nothing clears your margin-of-safety
-        threshold right now, or a symbol is missing fundamentals in
-        <code>App_Data/fundamentals.csv</code> / its market quote failed to load
-        (check the application log).
+        threshold right now.
     </div>
 }
 else
@@ -60,6 +68,9 @@ else
                         <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary")">
                             @row.Verdict
                         </span>
+                        <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary")">
+                            @row.SoundScoreRating
+                        </span>
                     </td>
                 </tr>
             }
@@ -68,8 +79,5 @@ else
 }
 
 <p class="text-muted small">
-    Intrinsic value is calculated with a sector-specific model (banking uses a justified
-    Price/Book approach, IT services and other sectors use growth-adjusted Graham
-    formulas). Margin of Safety = (Intrinsic Value − Current Price) / Intrinsic Value.
-    This is a screening tool, not investment advice — verify inputs before acting on them.
+    Intrinsic value is calculated dynamically using sector-specific valuation models, applying a justified Price-to-Book or Excess Returns approach for financial institutions and cash-flow or growth-adjusted models like Owner Earnings, DCF, and relative multiples for non-financial sectors like IT. The Margin of Safety is calculated as $((\text{Intrinsic Value} - \text{Current Price}) / \text{Current Price}) \times 100\%$. Designed strictly for educational and screening purposes, this tool does not constitute investment advice—always verify scraped financial inputs and consult with SEBI-registered financial advisors before making any investment decisions.
 </p>

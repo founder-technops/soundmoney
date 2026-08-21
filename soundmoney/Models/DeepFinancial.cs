@@ -1,4 +1,6 @@
-﻿namespace SoundMoney.Models
+﻿using static System.Runtime.InteropServices.JavaScript.JSType;
+
+namespace SoundMoney.Models
 {
     public class DeepFinancial
     {
@@ -11,6 +13,7 @@
         public decimal TotalSharesCr { get; set; }
         public decimal ReportedRoePercent { get; set; }
         public decimal DividendYieldPercent { get; set; }
+        public decimal FaceValue { get; set; }
         public decimal Beta { get; set; } = 1.0m; // Scraped or benchmark fallback
 
         // --- Sector Classifier ---
@@ -48,6 +51,17 @@
         public decimal CashFromFinanceCr { get; set; }
         public decimal GrossCapexCr { get; set; }
         public decimal FreeCashFlowCr { get; set; }
+
+        // OR calculated directly from Balance Sheet components:
+        public decimal CurrentAssetsCr { get; set; }
+        public decimal CurrentLiabilitiesCr { get; set; }
+
+        public decimal CapitalAdequacyPercent => IsFinancialSector && TotalEquityCr > 0 && TotalAssetsCr > 0
+            ? Math.Round((TotalEquityCr / TotalAssetsCr) * 100m, 2)
+            : 0m;
+
+        public decimal ReportedRoaPercent => NetProfitCr > 0m && TotalAssetsCr > 0m 
+            ? ((NetProfitCr / TotalAssetsCr) * 100m) : IsFinancialSector ? 1.0m : 0m;
 
         // --- Derived WACC Calculators ---
         public decimal EffectiveTaxRate => TaxPercent > 0

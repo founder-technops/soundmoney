@@ -21,10 +21,14 @@ WHERE UpdatedAt < '2026-08-16 15:00:00';
 
 select count(sector) from stockvaluations where sector is not null;
 
-select * from stockvaluations where symbol ='ADVENTHTL';
+select * from stockvaluations where symbol ='FIBERWEB';
 
 
 Select distinct sector from stockvaluations;
+
+UPDATE StockValuations 
+SET UpdatedAt = GETDATE() - 2;
+ 
 
 
 
