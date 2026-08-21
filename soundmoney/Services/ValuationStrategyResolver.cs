@@ -64,10 +64,8 @@ namespace SoundMoney.Services
             decimal ocfToNp = data.NetProfitCr > 0 ? (data.CashFromOperationsCr / data.NetProfitCr) : 0m;
 
             bool cashPredictable = fcfCr > 0 && ocfToNp >= 0.8m;
-            if (historyList.Count >= 3 && historyList.Any(h => h.HistoricalOcfCr <= 0))
-            {
-                cashPredictable = false;
-            }
+            int negativeOcfYears = historyList.Count(h => h.HistoricalOcfCr <= 0);
+            if (negativeOcfYears > 1) cashPredictable = false;
 
             bool cyclical = false;
             if (historyList.Count >= 3)
