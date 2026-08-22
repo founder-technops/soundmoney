@@ -20,13 +20,9 @@ namespace SoundMoney.Services
             // 0. UNIT NORMALIZATION
             // Standardizes percentages so 15% is represented as 15.0m
             // -------------------------------------------------------------
-            decimal roePercent = data.ReportedRoePercent <= 1.0m && data.ReportedRoePercent > -1.0m
-                ? data.ReportedRoePercent * 100m
-                : data.ReportedRoePercent;
+            decimal roePercent = data.ReportedRoePercent;
 
-            decimal roaPercent = data.ReportedRoaPercent <= 1.0m && data.ReportedRoaPercent > -1.0m
-                ? data.ReportedRoaPercent * 100m
-                : data.ReportedRoaPercent;
+            decimal roaPercent = data.ReportedRoaPercent;
 
             // -------------------------------------------------------------
             // 1. MARGIN OF SAFETY (Max 30 Pts)
@@ -121,6 +117,11 @@ namespace SoundMoney.Services
                 {
                     salesGrowth = -0.10m; // Override artificially positive CAGR
                 }
+
+                if (salesGrowth >= 0.15m)
+                    score += 15m;
+                else if (salesGrowth > 0m)
+                    score += (salesGrowth / 0.15m) * 15m;
             }
 
             // -------------------------------------------------------------
@@ -131,9 +132,7 @@ namespace SoundMoney.Services
                 score -= 8m;
             }
 
-            decimal dividendPayoutPercent = data.DividendPayoutPercent <= 1.0m
-                ? data.DividendPayoutPercent * 100m
-                : data.DividendPayoutPercent;
+            decimal dividendPayoutPercent = data.DividendPayoutPercent;
 
             if (data.NetCashCr >= 0m && data.NetProfitCr > 0m && dividendPayoutPercent == 0m)
             {
@@ -164,7 +163,8 @@ namespace SoundMoney.Services
             bool isValueTrap = roePercent < 5.0m
                 || (salesGrowth < 0m && hasValidHistory)
                 || data.NetProfitCr <= 0m
-                || isDeepDiscountTrap;
+                || isDeepDiscountTrap
+                || isLowAbsoluteProfit;
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
 

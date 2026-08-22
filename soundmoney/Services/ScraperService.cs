@@ -134,9 +134,9 @@ namespace SoundMoney.Services
                     if (name.Contains("Market Cap", StringComparison.OrdinalIgnoreCase)) df.MarketCapCr = val;
                     else if (name.Contains("Current Price", StringComparison.OrdinalIgnoreCase)) df.CurrentPrice = val;
                     else if (name.Contains("Book Value", StringComparison.OrdinalIgnoreCase)) df.BookValuePerShare = val;
-                    else if (name.Contains("ROE", StringComparison.OrdinalIgnoreCase)) df.ReportedRoePercent = val / 100m;
+                    else if (name.Contains("ROE", StringComparison.OrdinalIgnoreCase)) df.ReportedRoePercent = val;
                     else if (name.Contains("Face Value", StringComparison.OrdinalIgnoreCase)) df.FaceValue = val;
-                    else if (name.Contains("Dividend Yield", StringComparison.OrdinalIgnoreCase)) df.DividendYieldPercent = val / 100m;
+                    else if (name.Contains("Dividend Yield", StringComparison.OrdinalIgnoreCase)) df.DividendYieldPercent = val;
                 }
             }
 
@@ -185,14 +185,8 @@ namespace SoundMoney.Services
                 df.CurrentAssetsCr = Math.Max(0m, df.TotalAssetsCr - nonCurrentAssets);
                 df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
                 df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
-
-                // Fallback heuristic: If sub-row is unavailable, estimate Cash & Equivalents
-                decimal nonCashFixedAssets = df.NetFixedAssetsCr + df.CwipCr + df.InvestmentsCr + df.IntangibleAssetsCr;
-                df.WorkingCapitalCr = df.TotalAssetsCr - nonCashFixedAssets;
-
-                // Assuming Cash typically forms ~15-20% of current assets if unstated
-                df.CashAndEquivalentsCr = Math.Max(0m, df.WorkingCapitalCr * 0.20m);
-
+                df.WorkingCapitalCr = df.CurrentAssetsCr - df.CurrentLiabilitiesCr;
+                df.CashAndEquivalentsCr = Math.Max(0m, df.CurrentAssetsCr * 0.20m);
                 df.NetCashCr = df.CashAndEquivalentsCr - df.TotalBorrowingsCr;
             }
 
@@ -204,7 +198,7 @@ namespace SoundMoney.Services
                 df.CashFromInvestmentCr = GetLastCellRowValue(cfSection, "Cash from Investing Activity");
                 df.CashFromFinanceCr = GetLastCellRowValue(cfSection, "Cash from Financing Activity");
                 df.FreeCashFlowCr = GetLastCellRowValue(cfSection, "Free Cash Flow");
-                df.GrossCapexCr = df.CashFromOperationsCr - (df.FreeCashFlowCr < 0 ? (-1 * df.FreeCashFlowCr) : df.FreeCashFlowCr);
+                df.GrossCapexCr = df.CashFromOperationsCr - df.FreeCashFlowCr;
             }
 
             return df;
@@ -264,7 +258,7 @@ namespace SoundMoney.Services
                     HistoricalNetProfitCr = netProfit, // Populated
                     HistoricalOcfCr = ocf,
                     HistoricalFcfCr = fcf,
-                    HistoricalCapexCr = ocf - (fcf < 0 ? -1 * fcf : fcf),
+                    HistoricalCapexCr = ocf - fcf,
                     EquityCapitalCr = equityCap,
                     HistoricalSharesCr = deepFinancial.FaceValue > 0 ? equityCap / deepFinancial.FaceValue : 0m,
                     HistoricalPatCr = netProfit, // Populated
