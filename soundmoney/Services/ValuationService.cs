@@ -6,7 +6,7 @@ namespace SoundMoney.Services
 {
     public interface IValuationService
     {
-        Task<StockValuation> EvaluateDataAsync(StockValuation valuationData, DeepFinancial deepData, List<HistoricalFinancial> historicalData);
+        StockValuation EvaluateData(StockValuation valuationData, DeepFinancial deepData, List<HistoricalFinancial> historicalData);
     }
 
     public class ValuationService : IValuationService
@@ -20,7 +20,7 @@ namespace SoundMoney.Services
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<StockValuation> EvaluateDataAsync(
+        public StockValuation EvaluateData(
             StockValuation valuationData,
             DeepFinancial deepData,
             List<HistoricalFinancial> historicalData)
@@ -97,7 +97,7 @@ namespace SoundMoney.Services
                 UpdatedAt = DateTime.Now
             };
 
-            return await Task.FromResult(result);
+            return result;
         }
 
         #region Method Execution Router
@@ -144,33 +144,26 @@ namespace SoundMoney.Services
         /// </summary>
         private static decimal CalculateWacc(DeepFinancial data, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m, decimal taxRate = 0.25m)
         {
-            // 1. Calculate Market Value of Equity (E) and Total Borrowings (D)
             decimal equityValueCr = data.CurrentPrice * data.TotalSharesCr;
             decimal debtValueCr = Math.Max(0m, data.TotalBorrowingsCr);
             decimal totalCapitalCr = equityValueCr + debtValueCr;
 
-            // Fallback for missing/invalid market capitalization
-            if (totalCapitalCr <= 0) return 0.11m;
+            // Guardrail check against 0 capital base
+            if (totalCapitalCr <= 0m) return 0.11m;
 
-            // 2. Cost of Equity via CAPM: Rf + (Beta * ERP)
             decimal beta = data.Beta > 0 ? Math.Clamp(data.Beta, 0.5m, 2.5m) : 1.0m;
             decimal costOfEquity = riskFreeRate + (beta * equityRiskPremium);
 
-            // 3. Cost of Debt: Interest Expense / Total Borrowings
-            decimal costOfDebt = 0.08m; // Default baseline cost of debt (8%)
+            decimal costOfDebt = 0.08m;
             if (debtValueCr > 0 && data.InterestExpenseCr > 0)
             {
                 costOfDebt = Math.Clamp(data.InterestExpenseCr / debtValueCr, 0.04m, 0.18m);
             }
 
-            // 4. Weightings
             decimal weightEquity = equityValueCr / totalCapitalCr;
             decimal weightDebt = debtValueCr / totalCapitalCr;
 
-            // 5. Final WACC
             decimal wacc = (weightEquity * costOfEquity) + (weightDebt * costOfDebt * (1m - taxRate));
-
-            // Guardrail safety bounds: 8.5% min to 18% max discount rate
             return Math.Clamp(wacc, 0.085m, 0.18m);
         }
 
@@ -299,7 +292,7 @@ namespace SoundMoney.Services
             decimal terminalValue = (projectedFcf * (1m + terminalRate)) / denominator;
             decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 10);
 
-            decimal equityValueCr = cumulativePv + pvTerminal + data.CashAndEquivalentsCr - data.TotalBorrowingsCr;
+            decimal equityValueCr = cumulativePv + pvTerminal;
             return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
         }
 

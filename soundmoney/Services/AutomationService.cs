@@ -75,7 +75,7 @@ namespace SoundMoney.Services
                         symbol.Sector = stockValuation.Sector;
                         //await valuationRepo.SaveCompleteFinancialDataAsync(deepFinancials, historicalFinancials);
                         _logger.LogInformation("Saved scraped financial data for {Symbol}", symbol.Symbol);
-                        var valuation = await valuationService.EvaluateDataAsync(symbol, deepFinancials, historicalFinancials);
+                        var valuation = valuationService.EvaluateData(symbol, deepFinancials, historicalFinancials);
                         await valuationRepo.SaveValuationAsync(valuation);
                     }
                 }

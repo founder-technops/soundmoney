@@ -181,16 +181,17 @@ namespace SoundMoney.Services
                 
                 df.IntangibleAssetsCr = GetLastCellRowValue(bsSection, "Intangible Assets");
                 df.TotalAssetsCr = GetLastCellRowValue(bsSection, "Total Assets");
-                df.CurrentAssetsCr = df.TotalAssetsCr;
-                df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Total Liabilities");
+                decimal nonCurrentAssets = df.NetFixedAssetsCr + df.CwipCr + df.InvestmentsCr + df.IntangibleAssetsCr;
+                df.CurrentAssetsCr = Math.Max(0m, df.TotalAssetsCr - nonCurrentAssets);
+                df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
                 df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
 
                 // Fallback heuristic: If sub-row is unavailable, estimate Cash & Equivalents
                 decimal nonCashFixedAssets = df.NetFixedAssetsCr + df.CwipCr + df.InvestmentsCr + df.IntangibleAssetsCr;
-                decimal workingCapitalAndCash = df.TotalAssetsCr - nonCashFixedAssets;
+                df.WorkingCapitalCr = df.TotalAssetsCr - nonCashFixedAssets;
 
                 // Assuming Cash typically forms ~15-20% of current assets if unstated
-                df.CashAndEquivalentsCr = Math.Max(0m, workingCapitalAndCash * 0.20m);
+                df.CashAndEquivalentsCr = Math.Max(0m, df.WorkingCapitalCr * 0.20m);
 
                 df.NetCashCr = df.CashAndEquivalentsCr - df.TotalBorrowingsCr;
             }

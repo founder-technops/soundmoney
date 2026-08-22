@@ -15,12 +15,20 @@ namespace SoundMoney.Services
             if (data == null) return 0;
 
             decimal score = 0m;
-           
 
-            // Normalize ROE to decimal fraction
-            decimal roeDecimal = data.ReportedRoePercent < 1m ? data.ReportedRoePercent : data.ReportedRoePercent / 100m;
+            // Standardize ROE consistently as a percentage (e.g., 15.0 = 15%)
+            decimal roePercent = data.ReportedRoePercent <= 1.0m
+                ? data.ReportedRoePercent * 100m
+                : data.ReportedRoePercent;
 
-            // 1. Margin of Safety (Max 30 Pts)
+            // Standardize ROA as a percentage
+            decimal roaPercent = data.ReportedRoaPercent <= 1.0m && !data.IsFinancialSector
+                ? data.ReportedRoaPercent * 100m
+                : data.ReportedRoaPercent;
+
+            // -------------------------------------------------------------
+            // 1. MARGIN OF SAFETY (Max 30 Pts)
+            // -------------------------------------------------------------
             if (marginOfSafety >= 30m)
                 score += 30m;
             else if (marginOfSafety > 0m)
@@ -28,22 +36,25 @@ namespace SoundMoney.Services
             else if (marginOfSafety >= -20m)
                 score += Math.Max(0m, 14m + (marginOfSafety / 20m * 14m));
 
-            // 2. Capital Efficiency: ROE / ROA (Max 20 Pts)
+            // -------------------------------------------------------------
+            // 2. CAPITAL EFFICIENCY: ROE / ROA (Max 20 Pts)
+            // -------------------------------------------------------------
             if (data.IsFinancialSector)
             {
-                decimal roaDecimal = data.ReportedRoaPercent < 1m ? data.ReportedRoaPercent : data.ReportedRoaPercent / 100m;
-                if (roaDecimal >= 0.018m) score += 20m;
-                else if (roaDecimal >= 0.012m) score += 15m;
-                else if (roaDecimal >= 0.008m) score += 10m;
+                if (roaPercent >= 1.8m) score += 20m;
+                else if (roaPercent >= 1.2m) score += 15m;
+                else if (roaPercent >= 0.8m) score += 10m;
             }
             else
             {
-                if (roeDecimal >= 0.20m) score += 20m;
-                else if (roeDecimal >= 0.15m) score += 15m;
-                else if (roeDecimal >= 0.10m) score += 10m;
+                if (roePercent >= 20m) score += 20m;
+                else if (roePercent >= 15m) score += 15m;
+                else if (roePercent >= 10m) score += 10m;
             }
 
-            // 3. Solvency & Debt Health (Max 20 Pts)
+            // -------------------------------------------------------------
+            // 3. SOLVENCY & DEBT HEALTH (Max 20 Pts)
+            // -------------------------------------------------------------
             if (!data.IsFinancialSector)
             {
                 if (data.NetCashCr >= 0m)
@@ -65,7 +76,9 @@ namespace SoundMoney.Services
                 else if (data.CapitalAdequacyPercent >= 12m) score += 12m;
             }
 
-            // 4. Cash Flow Quality: OCF / Net Profit (Max 15 Pts)
+            // -------------------------------------------------------------
+            // 4. CASH FLOW QUALITY: OCF / NET PROFIT (Max 15 Pts)
+            // -------------------------------------------------------------
             if (!data.IsFinancialSector && data.NetProfitCr > 0m && data.CashFromOperationsCr > 0m)
             {
                 decimal cashConversion = data.CashFromOperationsCr / data.NetProfitCr;
@@ -77,17 +90,21 @@ namespace SoundMoney.Services
                 score += 12m;
             }
 
-            // 5. OCF Growth Stability & Multi-Year Sales Growth Analysis (Max 15 Pts)
+            // -------------------------------------------------------------
+            // 5. HISTORICAL GROWTH & ACCRUAL QUALITY (Max 15 Pts)
+            // -------------------------------------------------------------
             var historyList = historicals?.OrderBy(h => h.Year).ToList();
             decimal salesGrowth = 0m;
+            bool hasValidHistory = historyList != null && historyList.Count >= 3;
 
-            if (historyList != null && historyList.Count >= 3)
+            if (hasValidHistory)
             {
                 var oldest = historyList.First();
                 var newest = historyList.Last();
                 int periods = historyList.Count - 1;
 
-                if (!data.IsFinancialSector && oldest.HistoricalOcfCr > 0 && newest.HistoricalOcfCr > 0)
+                // OCF CAGR Check (Handles negative numbers gracefully without throwing NaN)
+                if (!data.IsFinancialSector && oldest.HistoricalOcfCr > 0m && newest.HistoricalOcfCr > 0m)
                 {
                     double ratio = (double)(newest.HistoricalOcfCr / oldest.HistoricalOcfCr);
                     decimal ocfCagr = (decimal)(Math.Pow(ratio, 1.0 / periods) - 1.0);
@@ -100,29 +117,24 @@ namespace SoundMoney.Services
                     score += 10m;
                 }
 
-                // Robust Sales Growth calculation supporting negative trends
-                if (oldest.HistoricalRevenueCr > 0m)
+                // Multi-Year Sales Growth
+                if (oldest.HistoricalRevenueCr > 0m && newest.HistoricalRevenueCr > 0m)
                 {
-                    if (newest.HistoricalRevenueCr > 0m)
-                    {
-                        double revRatio = (double)(newest.HistoricalRevenueCr / oldest.HistoricalRevenueCr);
-                        salesGrowth = (decimal)(Math.Pow(revRatio, 1.0 / periods) - 1.0);
-                    }
-                    else
-                    {
-                        salesGrowth = -1.0m; // Complete revenue loss flag
-                    }
+                    double revRatio = (double)(newest.HistoricalRevenueCr / oldest.HistoricalRevenueCr);
+                    salesGrowth = (decimal)(Math.Pow(revRatio, 1.0 / periods) - 1.0);
+                }
+                else if (oldest.HistoricalRevenueCr > 0m && newest.HistoricalRevenueCr <= 0m)
+                {
+                    salesGrowth = -1.0m;
                 }
 
-                // --- Additional Institutional Quality Checks ---
-
-                // A. Share Dilution Penalty (Piotroski Criterion)
+                // Share Dilution Penalty
                 if (oldest.HistoricalSharesCr > 0m && newest.HistoricalSharesCr > oldest.HistoricalSharesCr * 1.02m)
                 {
                     score -= 5m;
                 }
 
-                // B. Accrual Quality Penalty
+                // Accrual Quality Penalty
                 decimal totalOcf = historyList.Sum(h => h.HistoricalOcfCr);
                 decimal totalPat = historyList.Sum(h => h.HistoricalPatCr);
                 if (!data.IsFinancialSector && totalPat > 0m && totalOcf < (0.5m * totalPat))
@@ -132,42 +144,54 @@ namespace SoundMoney.Services
             }
             else
             {
-                score += 7m;
+                score += 7m; // Default allocation for insufficient history
             }
 
-            // --- Working Capital & Capital Allocation Penalties ---
-
-            // C. Financial Distress Check
-            if (!data.IsFinancialSector && data.CwipCr < 0m && data.NetCashCr < 0m)
+            // -------------------------------------------------------------
+            // 6. WORKING CAPITAL & DIVIDEND PENALTIES
+            // -------------------------------------------------------------
+            if (!data.IsFinancialSector && data.WorkingCapitalCr < 0m && data.NetCashCr < 0m)
             {
                 score -= 8m;
             }
 
-            // D. Capital Allocation Penalty
-            decimal dividendPayout = data.DividendPayoutPercent < 1m ? data.DividendPayoutPercent : data.DividendPayoutPercent / 100m;
-            if (data.NetCashCr >= 0m && data.NetProfitCr > 0m && dividendPayout == 0m)
+            decimal dividendPayoutPercent = data.DividendPayoutPercent <= 1.0m
+                ? data.DividendPayoutPercent * 100m
+                : data.DividendPayoutPercent;
+
+            if (data.NetCashCr >= 0m && data.NetProfitCr > 0m && dividendPayoutPercent == 0m)
             {
                 score -= 5m;
             }
 
-            // --- Quality & Growth Gatekeeper Penalties (Value Trap Protection) ---
-            if (roeDecimal < 0.08m)
+            // -------------------------------------------------------------
+            // 7. STRUCTURAL GATEKEEPERS & VALUE-TRAP PROTECTION
+            // -------------------------------------------------------------
+
+            // Standard Penalties
+            if (roePercent < 8.0m)
             {
                 score -= 15m;
             }
 
-            if (salesGrowth < 0m)
+            if (salesGrowth < 0m && hasValidHistory)
             {
                 score -= 15m;
             }
 
-            // Hard cap to prevent clean balance sheets with declining fundamentals from scoring "Strong"
-            if (roeDecimal < 0.08m && salesGrowth < 0m)
+            // VALUE TRAP HARD CAP: 
+            // If a company fails basic profitability (ROE < 5%) OR has structurally declining revenue, 
+            // cap its maximum score to 35 (UNSOUND) regardless of how "cheap" the margin of safety looks.
+            bool isValueTrap = roePercent < 5.0m || (salesGrowth < 0m && hasValidHistory) || data.NetProfitCr <= 0m;
+
+            int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
+
+            if (isValueTrap)
             {
-                score = Math.Min(score, 55m);
+                return Math.Min(finalScore, 35); 
             }
 
-            return (int)Math.Clamp(Math.Round(score), 0, 100);
+            return finalScore;
         }
     }
 }

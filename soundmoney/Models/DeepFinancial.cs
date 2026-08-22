@@ -1,6 +1,4 @@
-﻿using static System.Runtime.InteropServices.JavaScript.JSType;
-
-namespace SoundMoney.Models
+﻿namespace SoundMoney.Models
 {
     public class DeepFinancial
     {
@@ -44,6 +42,7 @@ namespace SoundMoney.Models
         public decimal TotalLiabilitiesCr { get; set; }
         public decimal TotalAssetsCr { get; set; }
         public decimal NetCashCr { get; set; }
+        public decimal WorkingCapitalCr { get; set; }
 
         // --- Cash Flow Metrics (Cr) ---
         public decimal CashFromOperationsCr { get; set; }
