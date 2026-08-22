@@ -21,14 +21,16 @@ WHERE UpdatedAt < '2026-08-16 15:00:00';
 
 select count(sector) from stockvaluations where sector is not null;
 
-select * from stockvaluations where symbol ='ALEMBICLTD';
+select * from stockvaluations where symbol ='WIPRO';
 
+select * from stockvaluations where verdict in ('BUY','STRONG BUY') 
+and SoundScoreRating in ('STRONG SOUND','SOUND') order by soundscore desc,marginofsafety desc;
 
 Select distinct sector from stockvaluations;
 
 /* UPDATE StockValuations 
  SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
- SoundScore=0,SoundScoreRating='', UpdatedAt = GETDATE() - 2; */
+ SoundScore=0,SoundScoreRating='', UpdatedAt = GETDATE() - 2 where symbol ='ARCHIES';*/
  
 
 
