@@ -1,3 +1,39 @@
 body {
     padding-bottom: 40px;
+    background-color: #f8f9fa;
+}
+
+.font-monospace {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.table th {
+    font-size: 0.825rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+}
+
+.card {
+    border-radius: 0.5rem;
+}
+
+
+/* Fix for native multi-select dropdown */
+.custom-multi-select summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.custom-multi-select summary::-webkit-details-marker {
+    display: none;
+}
+
+/* Ensure filter form container doesn't clip absolute dropdown popovers */
+.card-body, form.row {
+    overflow: visible !important;
+}
+
+.cursor-pointer {
+    cursor: pointer;
 }

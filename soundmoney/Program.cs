@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SoundMoney.Data;
 using SoundMoney.Services;
-using SoundMoney.Services.IntrinsicValue;
 using Google.GenAI;
 
 var builder = WebApplication.CreateBuilder(args);
