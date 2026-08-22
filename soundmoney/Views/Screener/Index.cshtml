@@ -162,8 +162,26 @@
 
     <!-- Methodology Disclosure -->
     <div class="card border-0 bg-light p-3">
+        <p class="text-muted small mb-2">
+            <strong>Methodology & Disclaimer:</strong> Intrinsic value is calculated dynamically using sector-specific valuation models, applying a justified Price-to-Book or Excess Returns approach for financial institutions and cash-flow or growth-adjusted models like Owner Earnings, DCF, and relative multiples for non-financial sectors.
+        </p>
+
+        <!-- Formula Wrapper -->
+        <div class="d-flex align-items-center flex-wrap my-2 p-2 bg-white rounded border font-monospace text-dark small" style="line-height: 1.2;">
+            <span class="fw-bold me-2">Margin of Safety % =</span>
+            <div class="d-inline-flex align-items-center me-2">
+                <span class="fs-4 fw-light me-1">(</span>
+                <div class="d-inline-flex flex-column text-center px-1">
+                    <span class="border-bottom border-dark pb-1 mb-1">Intrinsic Value - Current Price</span>
+                    <span>Current Price</span>
+                </div>
+                <span class="fs-4 fw-light ms-1">)</span>
+            </div>
+            <span class="fw-bold">× 100%</span>
+        </div>
+
         <p class="text-muted small mb-0">
-            <strong>Methodology & Disclaimer:</strong> Intrinsic value is calculated dynamically using sector-specific valuation models, applying a justified Price-to-Book or Excess Returns approach for financial institutions and cash-flow or growth-adjusted models like Owner Earnings, DCF, and relative multiples for non-financial sectors. The Margin of Safety is calculated as $\frac{\text{Intrinsic Value} - \text{Current Price}}{\text{Current Price}} \times 100\%$. Designed strictly for educational and screening purposes—always verify inputs before making investment decisions.
+            Designed strictly for educational and screening purposes—always verify inputs before making investment decisions.
         </p>
     </div>
 </div>
