@@ -3,10 +3,17 @@
     ViewData["Title"] = "Screener";
 }
 
+<style>
+    
+</style>
+
 <div class="container-fluid px-2 px-md-4 py-3">
-    <!-- Header -->
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <h2 class="h4 mb-0 font-weight-bold">Stock Screener</h2>
+    <!-- Page Header -->
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-4 gap-2">
+        <div>
+            <h3 class="h4 fw-bold mb-1">Screener</h3>
+            <p class="text-muted small mb-0">Screen stocks based on margin of safety and fundamentals.</p>
+        </div>
     </div>
 
     <!-- Filter Form -->
@@ -22,7 +29,7 @@
                     <input type="number" name="minMarginOfSafety" value="@Model.MinMarginOfSafety" class="form-control form-control-sm" step="1" />
                 </div>
 
-                <!-- Multi-Check Score Filter (Zero-JS Native Dropdown) -->
+                <!-- Score Filter Dropdown -->
                 <div class="col-12 col-sm-6 col-md-3">
                     <label class="form-label small text-muted font-weight-bold d-block">Score Filter</label>
                     <details class="custom-multi-select position-relative">
@@ -69,34 +76,42 @@
     }
     else
     {
-        <!-- DESKTOP VIEW (Table) -->
-        <div class="d-none d-md-block card border-0 shadow-sm mb-4">
+        <!-- DESKTOP VIEW (Rounded Rectangle Table Rows with Last Analyzed Column) -->
+        <div class="d-none d-md-block mb-4">
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
+                <table class="table table-borderless align-middle table-rounded-rows mb-0">
+                    <thead class="text-secondary small text-uppercase">
                         <tr>
-                            <th>Symbol</th>
+                            <th class="ps-3">Symbol</th>
                             <th>Company</th>
                             <th>Sector</th>
                             <th class="text-end">Current Price (₹)</th>
                             <th class="text-end">Intrinsic Value (₹)</th>
                             <th class="text-end">Margin of Safety</th>
-                            <th class="text-center">Verdict</th>
+                            <th class="text-center">Last Analyzed</th>
+                            <th class="text-center pe-3">Verdict</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var row in Model.Results)
                         {
                             <tr>
-                                <td><span class="badge bg-light text-dark border font-monospace fs-6">@row.Symbol</span></td>
-                                <td class="fw-semibold">@row.CompanyName</td>
-                                <td><span class="badge bg-light text-secondary border fw-normal">@row.Sector</span></td>
+                                <td class="ps-3">
+                                    <span class="badge bg-light text-dark border font-monospace fs-6">@row.Symbol</span>
+                                </td>
+                                <td class="fw-semibold text-dark">@row.CompanyName</td>
+                                <td>
+                                    <span class="badge bg-light text-secondary border fw-normal">@row.Sector</span>
+                                </td>
                                 <td class="text-end font-monospace">₹@row.CurrentPrice.ToString("N2")</td>
                                 <td class="text-end font-monospace">₹@row.IntrinsicValue.ToString("N2")</td>
                                 <td class="text-end font-monospace fw-bold @(row.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
                                     @row.MarginOfSafetyPercent.ToString("N2")%
                                 </td>
-                                <td class="text-center">
+                                <td class="text-center small font-monospace text-muted">
+                                    @(row.LastAnalyzed.HasValue? row.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
+                                </td>
+                                <td class="text-center pe-3">
                                     <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary") me-1">
                                         @row.Verdict
                                     </span>
@@ -111,7 +126,7 @@
             </div>
         </div>
 
-        <!-- MOBILE VIEW (Cards) -->
+        <!-- MOBILE VIEW (Cards with Last Analyzed Date) -->
         <div class="d-md-none row g-3 mb-4">
             @foreach (var row in Model.Results)
             {
@@ -133,8 +148,11 @@
                             </div>
 
                             <h6 class="fw-bold mb-1">@row.CompanyName</h6>
-                            <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="badge bg-light text-secondary border fw-normal small">@row.Sector</span>
+                                <span class="text-muted extra-small font-monospace">
+                                    Analyzed: @(row.LastAnalyzed.HasValue? row.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
+                                </span>
                             </div>
 
                             <div class="row g-2 text-center bg-light p-2 rounded mb-2 font-monospace small">

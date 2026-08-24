@@ -2,14 +2,15 @@ namespace SoundMoney.Models;
 
 public class ScreenerResultRow
 {
-    public string Symbol { get; set; } = "";
-    public string CompanyName { get; set; } = "";
+    public string Symbol { get; set; } = string.Empty;
+    public string CompanyName { get; set; } = string.Empty;
     public SectorCategory Sector { get; set; }
     public decimal CurrentPrice { get; set; }
     public decimal IntrinsicValue { get; set; }
     public decimal MarginOfSafetyPercent { get; set; }
-    public string Verdict { get; set; } = "";
-    public string SoundScoreRating { get; set; } = "";
+    public string Verdict { get; set; } = string.Empty;
+    public string SoundScoreRating { get; set; } = string.Empty;
+    public DateTime? LastAnalyzed { get; set; } // Added field
 }
 
 public class ScreenerViewModel

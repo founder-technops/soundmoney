@@ -191,7 +191,7 @@ namespace SoundMoney.Data
         {
             return await _context.StockValuations
                 .AsNoTracking()
-                .Where(v => v.UpdatedAt < DateTime.Today.AddDays(-1))
+                .Where(v => v.UpdatedAt < DateTime.Today)
                 //.Where(v=>v.Symbol == "BEL")
                 .OrderBy(v => v.Symbol)
                 .ToListAsync(ct);

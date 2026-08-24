@@ -39,6 +39,14 @@ builder.Services.AddHttpClient<NseStockSeederService>();
 
 builder.Services.AddHostedService<AutomationService>();
 
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(30); // Session timeout duration
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+});
+
 var app = builder.Build();
 
 // Apply migrations automatically
@@ -66,6 +74,9 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+
+// Enable Session Middleware (MUST be placed between UseRouting and UseAuthorization)
+app.UseSession();
 app.UseAuthorization();
 
 app.MapControllerRoute(

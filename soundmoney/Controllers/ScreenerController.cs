@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using SoundMoney.Models;
 using SoundMoney.Services;
 
@@ -27,8 +27,7 @@ public class ScreenerController : Controller
         }
 
         // Run screen for the first score or pass null if no scores selected
-        var primaryScore = hasScoreFilter ? scores!.First() : null;
-        var results = await _screener.RunScreenAsync(minMarginOfSafety, null, primaryScore);
+        var results = await _screener.RunScreenAsync(minMarginOfSafety, null, scores);
 
         // Local filtering for multi-selected scores
         if (hasScoreFilter && scores!.Count > 1)

@@ -1,0 +1,110 @@
+﻿@model SoundMoney.Models.AccountDashboardViewModel
+@{
+    ViewData["Title"] = "Users Management";
+}
+
+<div class="container-fluid px-2 px-md-4 py-4">
+
+    <!-- Page Header -->
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-4 gap-2">
+        <div>
+            <h3 class="h4 fw-bold mb-1">User Management</h3>
+            <p class="text-muted small mb-0">Manage system roles, permissions, and status.</p>
+        </div>
+        <div>
+            <button class="btn btn-primary btn-sm px-3">+ Add New User</button>
+        </div>
+    </div>
+
+    @if (!Model.Users.Any())
+    {
+        <div class="alert alert-info border-0 shadow-sm">No users found.</div>
+    }
+    else
+    {
+        <!-- DESKTOP VIEW (Table) -->
+        <div class="d-none d-md-block card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">User</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Last Active</th>
+                            <th class="text-end pe-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in Model.Users)
+                        {
+                            <tr>
+                                <td class="ps-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="avatar-placeholder rounded-circle bg-light text-primary fw-bold d-flex justify-content-center align-items-center me-3" style="width: 38px; height: 38px; font-size: 0.9rem;">
+                                            @user.Name.Substring(0, 1)
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold text-dark">@user.Name</div>
+                                            <div class="text-muted small">@user.Email</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border fw-normal">@user.Role</span>
+                                </td>
+                                <td>
+                                    <span class="badge @(user.Status == "Active" ? "bg-success-subtle text-success" : user.Status == "Pending" ? "bg-warning-subtle text-warning" : "bg-secondary-subtle text-secondary") border-0 px-2 py-1">
+                                        ● @user.Status
+                                    </span>
+                                </td>
+                                <td class="text-muted small font-monospace">
+                                    @user.LastLogin.ToString("MMM dd, yyyy HH:mm")
+                                </td>
+                                <td class="text-end pe-3">
+                                    <button class="btn btn-sm btn-outline-secondary me-1">Edit</button>
+                                    <button class="btn btn-sm btn-outline-danger">Disable</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- MOBILE VIEW (Card Grid) -->
+        <div class="d-md-none row g-3">
+            @foreach (var user in Model.Users)
+            {
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-placeholder rounded-circle bg-light text-primary fw-bold d-flex justify-content-center align-items-center me-2" style="width: 32px; height: 32px; font-size: 0.8rem;">
+                                    @user.Name.Substring(0, 1)
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-0">@user.Name</h6>
+                                    <span class="text-muted small">@user.Email</span>
+                                </div>
+                            </div>
+                            <span class="badge @(user.Status == "Active" ? "bg-success-subtle text-success" : user.Status == "Pending" ? "bg-warning-subtle text-warning" : "bg-secondary-subtle text-secondary") border-0">
+                                @user.Status
+                            </span>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center bg-light p-2 rounded my-2 small">
+                            <span class="text-muted">Role: <strong>@user.Role</strong></span>
+                            <span class="text-muted font-monospace">@user.LastLogin.ToString("MMM dd")</span>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 mt-2">
+                            <button class="btn btn-sm btn-outline-secondary w-50">Edit</button>
+                            <button class="btn btn-sm btn-outline-danger w-50">Disable</button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>

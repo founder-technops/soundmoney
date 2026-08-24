@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SoundMoney.Data;
+using System.Security.Cryptography;
 
 namespace SoundMoney.Services
 {
@@ -21,7 +22,7 @@ namespace SoundMoney.Services
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             // Set timer tick interval to 1 minute
-            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1440));
+            using var timer = new PeriodicTimer(TimeSpan.FromDays(1));
 
             _logger.LogInformation("Stock scraper background service started. Executing every 1 minute.");
 
@@ -85,7 +86,7 @@ namespace SoundMoney.Services
                 }
 
                 // 1 minute throttle delay between individual stock scrapes to prevent rate limiting
-                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(RandomNumberGenerator.GetInt32(10)), cancellationToken);
             }
         }
     }

@@ -11,7 +11,7 @@ public interface IValuationRepository
 {
     Task<StockValuation?> GetBySymbolAsync(string symbol);
     Task<List<StockValuation>> GetAllAsync();
-    Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, string? score);
+    Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, List<string>? score);
     Task AddOrUpdateAsync(StockValuation stock);
     Task DeleteAsync(string symbol);
     Task DeleteAllAsync();
@@ -86,7 +86,7 @@ public class ValuationRepository : IValuationRepository
     /// <summary>
     /// Retrieve stocks filtered by margin of safety and optional sector.
     /// </summary>
-    public async Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, string? score)
+    public async Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, List<string>? score)
     {
         try
         {
@@ -101,7 +101,7 @@ public class ValuationRepository : IValuationRepository
 
             if(score is not null)
             {
-                query = query.Where(s => s.SoundScoreRating == score);
+                query = query.Where(s => score.Contains(s.SoundScoreRating));
             }
 
             return await query

@@ -37,3 +37,41 @@ body {
 .cursor-pointer {
     cursor: pointer;
 }
+/* Desktop Table - Rounded Floating Rectangle Rows */
+.table-rounded-rows {
+    border-collapse: separate !important;
+    border-spacing: 0 8px !important;
+}
+
+    .table-rounded-rows tbody tr {
+        background-color: #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+        .table-rounded-rows tbody tr:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Round outer left corners of each row */
+        .table-rounded-rows tbody tr td:first-child {
+            border-top-left-radius: 8px;
+            border-bottom-left-radius: 8px;
+            border-left: 1px solid #e9ecef;
+        }
+
+        /* Round outer right corners of each row */
+        .table-rounded-rows tbody tr td:last-child {
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+            border-right: 1px solid #e9ecef;
+        }
+
+        /* Cell styling */
+        .table-rounded-rows tbody tr td {
+            border-top: 1px solid #e9ecef;
+            border-bottom: 1px solid #e9ecef;
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
