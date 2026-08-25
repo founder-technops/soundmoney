@@ -42,6 +42,8 @@
 
         public decimal HistoricalSharesCr { get; set; } = 0m;
 
+        public decimal DividendPayoutPercent { get; set; } = 0m;
+
         /// <summary>
         /// Historical Cash Conversion Ratio (OCF / Net Profit)
         /// </summary>

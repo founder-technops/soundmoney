@@ -91,6 +91,8 @@ namespace SoundMoney.Services
                 CurrentPrice = cmp,
                 IntrinsicValue = blendedIntrinsicValue,
                 MarginOfSafety = marginOfSafety,
+                DividendYieldPercent = valuationData.DividendYieldPercent,
+                IsDividendConsistent = historicalData.Any(a=>a.DividendPayoutPercent == 0) ? false: true,
                 Verdict = verdict,
                 SoundScore = soundScore,
                 SoundScoreRating = soundRating,

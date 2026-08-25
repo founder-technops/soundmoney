@@ -121,7 +121,7 @@ namespace SoundMoney.Services
         {
             var df = new DeepFinancial { Symbol = symbol };
 
-            // A. Top Ratios List
+            // A. Top Ratios
             var ratioNodes = doc.DocumentNode.SelectNodes("//ul[@id='top-ratios']/li");
             if (ratioNodes != null)
             {
@@ -137,15 +137,28 @@ namespace SoundMoney.Services
                     else if (name.Contains("ROE", StringComparison.OrdinalIgnoreCase)) df.ReportedRoePercent = val;
                     else if (name.Contains("Face Value", StringComparison.OrdinalIgnoreCase)) df.FaceValue = val;
                     else if (name.Contains("Dividend Yield", StringComparison.OrdinalIgnoreCase)) df.DividendYieldPercent = val;
+                    else if (name.Contains("Pledged", StringComparison.OrdinalIgnoreCase)) df.PromoterPledgePercent = val;
                 }
             }
 
-            if (df.CurrentPrice > 0 && df.MarketCapCr > 0)
+            // Fallback: If Promoter Pledge wasn't in top ratios, extract from Shareholding Pattern
+            if (df.PromoterPledgePercent == 0m)
+            {
+                df.PromoterPledgePercent = ExtractPromoterPledgeFromShareholding(doc);
+            }
+
+            // Fallback 2: Extract from Shareholding section if Pros & Cons didn't mention it
+            if (df.PromoterPledgePercent == 0m)
+            {
+                df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
+            }
+
+            if (df.CurrentPrice > 0m && df.MarketCapCr > 0m)
             {
                 df.TotalSharesCr = df.MarketCapCr / df.CurrentPrice;
             }
 
-            // B. Profit & Loss Section (Includes Interest Expense & Tax for WACC)
+            // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             if (pnlSection != null)
             {
@@ -154,12 +167,12 @@ namespace SoundMoney.Services
                 if (df.OperatingProfitEbitdaCr == 0m)
                     df.OperatingProfitEbitdaCr = GetLastCellRowValue(pnlSection, "OP");
 
-                df.InterestExpenseCr = Math.Abs(GetLastCellRowValue(pnlSection, "Interest")); // Required for Rd
+                df.InterestExpenseCr = Math.Abs(GetLastCellRowValue(pnlSection, "Interest"));
                 df.DepreciationCr = Math.Abs(GetLastCellRowValue(pnlSection, "Depreciation"));
                 df.ProfitBeforeTaxCr = GetLastCellRowValue(pnlSection, "Profit before tax");
-                df.TaxPercent = GetLastCellRowValue(pnlSection, "Tax %"); // Required for Tax Rate
+                df.TaxPercent = GetLastCellRowValue(pnlSection, "Tax %");
                 df.NetProfitCr = GetLastCellRowValue(pnlSection, "Net Profit");
-                df.DividendPayoutPercent = GetLastCellRowValue(pnlSection, "Dividend Payout") / 100m;
+                df.DividendPayoutPercent = GetLastCellRowValue(pnlSection, "Dividend Payout");
 
                 df.EbitCr = df.OperatingProfitEbitdaCr - df.DepreciationCr;
             }
@@ -171,22 +184,23 @@ namespace SoundMoney.Services
                 df.ShareCapitalCr = GetLastCellRowValue(bsSection, "Equity Capital");
                 df.ReservesCr = GetLastCellRowValue(bsSection, "Reserves");
                 df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowings"));
-
-                decimal otherLiabilities = GetLastCellRowValue(bsSection, "Other Liabilities");
-                df.TotalLiabilitiesCr = df.TotalBorrowingsCr + otherLiabilities;
+                df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
+                df.TotalLiabilitiesCr = df.TotalBorrowingsCr + df.CurrentLiabilitiesCr;
 
                 df.NetFixedAssetsCr = GetLastCellRowValue(bsSection, "Fixed Assets");
                 df.CwipCr = GetLastCellRowValue(bsSection, "CWIP");
                 df.InvestmentsCr = GetLastCellRowValue(bsSection, "Investments");
-                
                 df.IntangibleAssetsCr = GetLastCellRowValue(bsSection, "Intangible Assets");
                 df.TotalAssetsCr = GetLastCellRowValue(bsSection, "Total Assets");
+
                 decimal nonCurrentAssets = df.NetFixedAssetsCr + df.CwipCr + df.InvestmentsCr + df.IntangibleAssetsCr;
                 df.CurrentAssetsCr = Math.Max(0m, df.TotalAssetsCr - nonCurrentAssets);
-                df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
                 df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
                 df.WorkingCapitalCr = df.CurrentAssetsCr - df.CurrentLiabilitiesCr;
-                df.CashAndEquivalentsCr = Math.Max(0m, df.CurrentAssetsCr * 0.20m);
+
+                // Actual cash component extraction or fallback
+                decimal scrapedCash = GetLastCellRowValue(bsSection, "Cash & Equivalents");
+                df.CashAndEquivalentsCr = scrapedCash > 0m ? scrapedCash : Math.Max(0m, df.CurrentAssetsCr * 0.20m);
                 df.NetCashCr = df.CashAndEquivalentsCr - df.TotalBorrowingsCr;
             }
 
@@ -202,6 +216,55 @@ namespace SoundMoney.Services
             }
 
             return df;
+        }
+
+        /// <summary>
+        /// Helper to extract Promoter Pledging from the Shareholding Pattern table if top ratios do not contain it.
+        /// </summary>
+        private decimal ExtractPromoterPledgeFromShareholding(HtmlDocument doc)
+        {
+            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
+            if (shareholdingSection == null) return 0m;
+
+            // Search for rows containing "Pledged" or "Pledged percentage" inside shareholding tables
+            var pledgeRow = shareholdingSection.SelectSingleNode(".//tr[td[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'pledged')]]");
+            var lastCell = pledgeRow?.SelectNodes("td")?.LastOrDefault();
+
+            if (lastCell != null)
+            {
+                string text = lastCell.InnerText.Trim().Replace(",", "").Replace("%", "");
+                return ParseDecimal(text);
+            }
+
+            return 0m;
+        }
+
+        private decimal ExtractPromoterPledgeFromProsAndCons(HtmlDocument doc)
+        {
+            // Find the Cons container
+            var consNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class, 'cons')]");
+            if (consNode == null) return 0m;
+
+            // Look through all list items under Cons
+            var bulletNodes = consNode.SelectNodes(".//ul/li");
+            if (bulletNodes == null) return 0m;
+
+            foreach (var li in bulletNodes)
+            {
+                string text = li.InnerText.Trim();
+
+                // Screener typically writes: "Promoter pledge is 12.5%" or "Company has pledged 12.5% of its shares"
+                if (text.Contains("pledge", StringComparison.OrdinalIgnoreCase))
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(\.\d+)?)%");
+                    if (match.Success && decimal.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal pledgedPct))
+                    {
+                        return pledgedPct;
+                    }
+                }
+            }
+
+            return 0m;
         }
 
         private List<HistoricalFinancial> ExtractHistoricalFinancials(HtmlDocument doc, DeepFinancial deepFinancial, string symbol)
@@ -243,6 +306,8 @@ namespace SoundMoney.Services
             var ocfDict = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
             var fcfDict = GetRowValuesByColumn(cfSection, "Free Cash Flow");
             var equityCapitalDict = GetRowValuesByColumn(balanceSheetSection, "Equity Capital");
+            var DividendPayoutPercentDict = GetRowValuesByColumn(pnlSection, "Dividend Payout %");
+
             foreach (var header in yearHeaderList)
             {
                 revenueDict.TryGetValue(header.ColumnIndex, out decimal rev);
@@ -250,18 +315,20 @@ namespace SoundMoney.Services
                 ocfDict.TryGetValue(header.ColumnIndex, out decimal ocf);
                 fcfDict.TryGetValue(header.ColumnIndex, out decimal fcf);
                 equityCapitalDict.TryGetValue(header.ColumnIndex, out decimal equityCap);
+                DividendPayoutPercentDict.TryGetValue(header.ColumnIndex, out decimal dividendPayoutPer);
                 historyList.Add(new HistoricalFinancial
                 {
                     Symbol = symbol,
                     Year = header.Year,
                     HistoricalRevenueCr = rev,
-                    HistoricalNetProfitCr = netProfit, // Populated
+                    HistoricalNetProfitCr = netProfit,
                     HistoricalOcfCr = ocf,
                     HistoricalFcfCr = fcf,
                     HistoricalCapexCr = ocf - fcf,
                     EquityCapitalCr = equityCap,
-                    HistoricalSharesCr = deepFinancial.FaceValue > 0 ? equityCap / deepFinancial.FaceValue : 0m,
-                    HistoricalPatCr = netProfit, // Populated
+                    DividendPayoutPercent = dividendPayoutPer,
+                    HistoricalSharesCr = deepFinancial.FaceValue > 0m ? equityCap / deepFinancial.FaceValue : 0m,
+                    HistoricalPatCr = netProfit
                 });
             }
 
@@ -300,7 +367,7 @@ namespace SoundMoney.Services
             {
                 for (int colIndex = 1; colIndex < cells.Count; colIndex++)
                 {
-                    string text = cells[colIndex].InnerText.Trim().Replace(",", "");
+                    string text = cells[colIndex].InnerText.Trim().Replace(",", "").Replace("%","");
                     result[colIndex] = ParseDecimal(text);
                 }
             }

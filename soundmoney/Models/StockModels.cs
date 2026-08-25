@@ -11,6 +11,9 @@ public class ScreenerResultRow
     public string Verdict { get; set; } = string.Empty;
     public string SoundScoreRating { get; set; } = string.Empty;
     public DateTime? LastAnalyzed { get; set; } // Added field
+
+    public decimal DividendYieldPercent { get; set; }
+    public bool IsDividendConsistent { get; set; }
 }
 
 public class ScreenerViewModel

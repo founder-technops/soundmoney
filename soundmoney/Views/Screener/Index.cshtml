@@ -1,6 +1,6 @@
 @model SoundMoney.Models.ScreenerViewModel
 @{
-    ViewData["Title"] = "Screener";
+    ViewData["Title"] = "SoundMoney";
 }
 
 <style>
@@ -87,6 +87,8 @@
                             <th>Sector</th>
                             <th class="text-end">Current Price (₹)</th>
                             <th class="text-end">Intrinsic Value (₹)</th>
+                            <th class="text-end">Div. Yield</th>
+                            <th class="text-center">Div. Consistency</th>
                             <th class="text-end">Margin of Safety</th>
                             <th class="text-center">Last Analyzed</th>
                             <th class="text-center pe-3">Verdict</th>
@@ -105,6 +107,24 @@
                                 </td>
                                 <td class="text-end font-monospace">₹@row.CurrentPrice.ToString("N2")</td>
                                 <td class="text-end font-monospace">₹@row.IntrinsicValue.ToString("N2")</td>
+
+                                <!-- Dividend Yield Column -->
+                                <td class="text-end font-monospace">
+                                    @row.DividendYieldPercent.ToString("N2")%
+                                </td>
+
+                                <!-- Dividend Consistency Column -->
+                                <td class="text-center">
+                                    @if (row.IsDividendConsistent)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border">Inconsistent</span>
+                                    }
+                                </td>
+
                                 <td class="text-end font-monospace fw-bold @(row.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
                                     @row.MarginOfSafetyPercent.ToString("N2")%
                                 </td>
@@ -156,20 +176,35 @@
                             </div>
 
                             <div class="row g-2 text-center bg-light p-2 rounded mb-2 font-monospace small">
-                                <div class="col-4 border-end">
-                                    <span class="text-muted d-block small">Price</span>
+                                <div class="col-3 border-end">
+                                    <span class="text-muted d-block extra-small">Price</span>
                                     <strong>₹@row.CurrentPrice.ToString("N2")</strong>
                                 </div>
-                                <div class="col-4 border-end">
-                                    <span class="text-muted d-block small">Intrinsic</span>
+                                <div class="col-3 border-end">
+                                    <span class="text-muted d-block extra-small">Intrinsic</span>
                                     <strong>₹@row.IntrinsicValue.ToString("N2")</strong>
                                 </div>
-                                <div class="col-4">
-                                    <span class="text-muted d-block small">MoS</span>
+                                <div class="col-3 border-end">
+                                    <span class="text-muted d-block extra-small">Div. Yield</span>
+                                    <strong>@row.DividendYieldPercent.ToString("N2")%</strong>
+                                </div>
+                                <div class="col-3">
+                                    <span class="text-muted d-block extra-small">MoS</span>
                                     <strong class="@(row.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
                                         @row.MarginOfSafetyPercent.ToString("N2")%
                                     </strong>
                                 </div>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center px-1 mb-1">
+                                <span class="text-muted small">Dividend Consistency:</span>
+                                @if (row.IsDividendConsistent)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-muted border">Inconsistent</span>
+                                }
                             </div>
                         </div>
                     </div>

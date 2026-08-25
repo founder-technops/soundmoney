@@ -129,7 +129,7 @@ public class ValuationRepository : IValuationRepository
 
             if (existing is not null)
             {
-                // Update existing record
+                // Existing field updates...
                 existing.CompanyName = stock.CompanyName;
                 existing.CurrentPrice = stock.CurrentPrice;
                 existing.Sector = stock.Sector;
@@ -138,18 +138,23 @@ public class ValuationRepository : IValuationRepository
                 existing.IntrinsicValue = stock.IntrinsicValue;
                 existing.MarginOfSafety = stock.MarginOfSafety;
                 existing.Verdict = stock.Verdict;
+                existing.SoundScore = stock.SoundScore;
+                existing.SoundScoreRating = stock.SoundScoreRating;
+
+                // Update Dividend Metrics
+                existing.DividendYieldPercent = stock.DividendYieldPercent;
+                existing.IsDividendConsistent = stock.IsDividendConsistent;
+
                 existing.FetchedAt = stock.FetchedAt;
                 existing.UpdatedAt = DateTime.Now;
 
                 _context.StockValuations.Update(existing);
-                _logger.LogInformation("Updated stock record for {Symbol}", stock.Symbol);
             }
             else
             {
-                // Add new record
                 stock.FetchedAt = DateTime.Now;
+                stock.UpdatedAt = DateTime.Now;
                 await _context.StockValuations.AddAsync(stock);
-                _logger.LogInformation("Added new stock record for {Symbol}", stock.Symbol);
             }
 
             await _context.SaveChangesAsync();

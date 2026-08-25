@@ -1,11 +1,5 @@
-using System.Text.Json.Serialization;
-
 namespace SoundMoney.Models;
 
-/// <summary>
-/// Represents a stock record in the SQLite database.
-/// Stores all fundamental data fetched from Gemini API.
-/// </summary>
 public class StockValuation
 {
     public string Symbol { get; set; } = "";
@@ -15,32 +9,17 @@ public class StockValuation
     public string PrimaryMethod { get; set; } = "";
     public string SecondaryMethod { get; set; } = "";
 
-    /// <summary>
-    /// Calculated intrinsic value based on sector-specific strategy.
-    /// </summary>
-    /// 
     public decimal IntrinsicValue { get; set; }
-
-    /// <summary>
-    /// Margin of safety percentage.
-    /// </summary>
-    public decimal MarginOfSafety{ get; set; }
-
-    /// <summary>
-    /// Verdict: "Undervalued", "Fair value", or "Overvalued"
-    /// </summary>
+    public decimal MarginOfSafety { get; set; }
     public string Verdict { get; set; } = "";
-    
-    /// <summary>
-    /// Timestamp when the record was fetched/updated from Gemini.
-    /// </summary>
+
     public DateTime FetchedAt { get; set; }
-    
-    /// <summary>
-    /// Timestamp when the record was last updated in the database.
-    /// </summary>
     public DateTime? UpdatedAt { get; set; }
 
     public decimal SoundScore { get; set; }
-    public string SoundScoreRating { get; set; }
+    public string SoundScoreRating { get; set; } = "";
+
+    // Added metrics
+    public decimal DividendYieldPercent { get; set; }
+    public bool IsDividendConsistent { get; set; } // Or string/int depending on your consistency evaluation logic
 }

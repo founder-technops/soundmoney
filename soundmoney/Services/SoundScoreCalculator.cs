@@ -20,11 +20,11 @@ namespace SoundMoney.Services
             // 0. UNIT NORMALIZATION & DERIVED METRICS
             // Standardizes percentages so 15% is represented as 15.0m
             // -------------------------------------------------------------
-            decimal roePercent = data.ReportedRoePercent <= 1.0m && data.ReportedRoePercent > -1.0m
+            decimal roePercent = (data.ReportedRoePercent <= 1.0m && data.ReportedRoePercent > -1.0m)
                 ? data.ReportedRoePercent * 100m
                 : data.ReportedRoePercent;
 
-            decimal roaPercent = data.ReportedRoaPercent <= 1.0m && data.ReportedRoaPercent > -1.0m
+            decimal roaPercent = (data.ReportedRoaPercent <= 1.0m && data.ReportedRoaPercent > -1.0m)
                 ? data.ReportedRoaPercent * 100m
                 : data.ReportedRoaPercent;
 
@@ -39,11 +39,19 @@ namespace SoundMoney.Services
             decimal maxMosContribution = (roePercent < 12.0m && !data.IsFinancialSector) ? 12m : 25m;
 
             if (marginOfSafety >= 30m)
+            {
                 score += maxMosContribution;
+            }
             else if (marginOfSafety > 0m)
-                score += Math.Min(maxMosContribution, 10m + (marginOfSafety / 30m * 15m));
+            {
+                // Smooth interpolation between 10 pts and maxMosContribution
+                score += 10m + ((marginOfSafety / 30m) * (maxMosContribution - 10m));
+            }
             else if (marginOfSafety >= -20m)
-                score += Math.Max(0m, 10m + (marginOfSafety / 20m * 10m));
+            {
+                // Smooth reduction down from 10 pts to 0 pts
+                score += Math.Max(0m, 10m * (1m + (marginOfSafety / 20m)));
+            }
 
             // -------------------------------------------------------------
             // 2. CAPITAL EFFICIENCY: ROE / ROA (Max 25 Pts)
@@ -53,6 +61,7 @@ namespace SoundMoney.Services
                 if (roaPercent >= 2.0m) score += 25m;
                 else if (roaPercent >= 1.5m) score += 18m;
                 else if (roaPercent >= 1.0m) score += 10m;
+                else if (roaPercent >= 0.5m) score += 5m;
             }
             else
             {
@@ -79,12 +88,14 @@ namespace SoundMoney.Services
 
                     if (debtToEbit <= 1.5m) score += 15m;
                     else if (debtToEbit <= 3.0m) score += 8m;
+                    else if (debtToEbit <= 4.5m) score += 4m;
                 }
             }
             else
             {
                 if (data.CapitalAdequacyPercent >= 16m) score += 20m;
                 else if (data.CapitalAdequacyPercent >= 13m) score += 12m;
+                else if (data.CapitalAdequacyPercent >= 11m) score += 5m;
             }
 
             // -------------------------------------------------------------
@@ -97,6 +108,7 @@ namespace SoundMoney.Services
                     decimal cashConversion = data.CashFromOperationsCr / data.NetProfitCr;
                     if (cashConversion >= 1.0m) score += 15m;
                     else if (cashConversion >= 0.7m) score += 10m;
+                    else if (cashConversion >= 0.4m) score += 5m;
                 }
             }
             else
@@ -137,8 +149,22 @@ namespace SoundMoney.Services
             }
 
             // -------------------------------------------------------------
-            // 6. MARGIN & CAPITAL DEDUCTIONS
+            // 6. GOVERNANCE & MARGIN DEDUCTIONS
             // -------------------------------------------------------------
+            // Promoter Share Pledging Penalty (Crucial for stocks like ASHOKLEY)
+            decimal pledgePercent = (data.PromoterPledgePercent <= 1.0m && data.PromoterPledgePercent > 0m)
+                ? data.PromoterPledgePercent * 100m
+                : data.PromoterPledgePercent;
+
+            if (pledgePercent >= 25.0m)
+            {
+                score -= 15m;
+            }
+            else if (pledgePercent >= 10.0m)
+            {
+                score -= 8m;
+            }
+
             if (!data.IsFinancialSector)
             {
                 // Thin Operating Margin Penalty (< 8%)
@@ -156,34 +182,34 @@ namespace SoundMoney.Services
                 // Low ROE Penalty
                 if (roePercent < 10.0m)
                 {
-                    score -= 15m;
+                    score -= 12m;
                 }
             }
 
             if (salesGrowth < 0m && hasValidHistory)
             {
-                score -= 15m;
+                score -= 10m;
             }
 
             // -------------------------------------------------------------
             // 7. VALUE TRAP INTERCEPTOR & CAP
             // -------------------------------------------------------------
-            bool isMicroProfit = data.NetProfitCr < 10.0m;
-            bool isCapitalDestroyer = !data.IsFinancialSector && roePercent < 10.0m && salesGrowth < 0.05m;
-            bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 10.0m && data.NetCashCr < -200m;
+            bool isCapitalDestroyer = !data.IsFinancialSector && roePercent < 8.0m && salesGrowth < 0.05m;
+            bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 8.0m && data.NetCashCr < -300m;
             bool isDeclining = salesGrowth < 0m && hasValidHistory;
+            bool isSeverePledge = pledgePercent >= 35.0m; // High promoter pledge cap
 
             bool isValueTrap = roePercent < 5.0m
                 || isDeclining
                 || data.NetProfitCr <= 0m
-                || isMicroProfit
                 || isCapitalDestroyer
-                || isHighDebtCommodity;
+                || isHighDebtCommodity
+                || isSeverePledge;
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
 
-            // Hard Cap at 35 for Value Traps
-            return isValueTrap ? Math.Min(finalScore, 35) : finalScore;
+            // Hard Cap at 40 for Value Traps / Governance Risk
+            return isValueTrap ? Math.Min(finalScore, 40) : finalScore;
         }
     }
 }

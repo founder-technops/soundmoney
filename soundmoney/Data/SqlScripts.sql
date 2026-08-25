@@ -1,3 +1,4 @@
+Drop Table [dbo].[StockValuations];
 CREATE TABLE [dbo].[StockValuations] (
     [Symbol]           VARCHAR (20)    NOT NULL,
     [CompanyName]      VARCHAR (500)   NOT NULL,
@@ -7,6 +8,8 @@ CREATE TABLE [dbo].[StockValuations] (
     [CurrentPrice]     DECIMAL (18, 2) NOT NULL,
     [IntrinsicValue]   DECIMAL (18, 2) NOT NULL,
     [MarginOfSafety]   DECIMAL (18, 2) NOT NULL,
+    [DividendYieldPercent]   DECIMAL (18, 2) NOT NULL,
+    [IsDividendConsistent] bit not null default 0,
     [Verdict]          VARCHAR (50)    NOT NULL,
     [SoundScore]       DECIMAL (18, 2) NOT NULL,
     [SoundScoreRating] VARCHAR (50)    NOT NULL,

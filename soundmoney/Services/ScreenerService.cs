@@ -38,6 +38,8 @@ namespace SoundMoney.Services
                 Sector = SectorMapper.Map(value.Sector),
                 CurrentPrice = value.CurrentPrice,
                 IntrinsicValue = value.IntrinsicValue,
+                DividendYieldPercent = value.DividendYieldPercent,
+                IsDividendConsistent = value.IsDividendConsistent,
                 MarginOfSafetyPercent = value.MarginOfSafety,
                 Verdict = value.Verdict,
                 SoundScoreRating = value.SoundScoreRating,
