@@ -11,7 +11,7 @@ public interface IValuationRepository
 {
     Task<StockValuation?> GetBySymbolAsync(string symbol);
     Task<List<StockValuation>> GetAllAsync();
-    Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, List<string>? score);
+    Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
     Task AddOrUpdateAsync(StockValuation stock);
     Task DeleteAsync(string symbol);
     Task DeleteAllAsync();
@@ -86,17 +86,21 @@ public class ValuationRepository : IValuationRepository
     /// <summary>
     /// Retrieve stocks filtered by margin of safety and optional sector.
     /// </summary>
-    public async Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, List<string>? score)
+    public async Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score)
     {
         try
         {
             var query = _context.StockValuations
-                .Where(s => s.UpdatedAt != null && s.MarginOfSafety >= minMarginOfSafety);
+                .Where(s => s.UpdatedAt != null);
 
-            if (sectorFilter is not null)
+            if(minMarginOfSafety != 0)
             {
-                var sectorName = sectorFilter.ToString();
-                query = query.Where(s => s.Sector == sectorName);
+                query = query.Where(s => s.MarginOfSafety >= minMarginOfSafety);
+            }
+
+            if (searchQuery is not null)
+            {
+                query = query.Where(s => s.Symbol.Contains(searchQuery) || s.CompanyName.Contains(searchQuery));
             }
 
             if(score is not null)

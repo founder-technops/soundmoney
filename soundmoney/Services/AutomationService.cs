@@ -1,14 +1,18 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Diagnostics;
+using System.Security.Cryptography;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SoundMoney.Data;
 using SoundMoney.Models;
-using System.Security.Cryptography;
 
 namespace SoundMoney.Services
 {
-    public class AutomationService : BackgroundService
+    public sealed class AutomationService : BackgroundService
     {
+        private static readonly TimeSpan TargetMarketCloseUtcOffset = new(5, 30, 0); // IST Offset (+05:30)
+        private const int TargetRunHourIst = 16; // 4:00 PM IST
+
         private readonly ILogger<AutomationService> _logger;
         private readonly IServiceProvider _serviceProvider;
 
@@ -16,37 +20,69 @@ namespace SoundMoney.Services
             ILogger<AutomationService> logger,
             IServiceProvider serviceProvider)
         {
-            _logger = logger;
-            _serviceProvider = serviceProvider;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Stock Automation Service initialized with Screener rate-limiting (5-10s delay).");
+            _logger.LogInformation("Stock Automation Service initialized with rate-limiting throttling.");
+
+            bool hasRunInCurrentSession = false;
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                // Calculate time remaining until market close (4:00 PM IST)
-                TimeSpan delayUntilMarketClose = GetDelayUntilMarketClose();
-                _logger.LogInformation("Next daily scraping batch scheduled to start in {Hours}h {Minutes}m.",
-                    delayUntilMarketClose.Hours, delayUntilMarketClose.Minutes);
-
-                await Task.Delay(delayUntilMarketClose, stoppingToken);
-
                 try
                 {
-                    _logger.LogInformation("Market closed. Starting rate-limited sequential scraping for all pending stocks...");
+                    DateTime nowIst = GetCurrentIstTime();
+                    DateTime targetRunTimeIst = nowIst.Date.AddHours(TargetRunHourIst);
+
+                    // If starting after 4:00 PM IST and hasn't executed during this host uptime, run catch-up
+                    if (nowIst >= targetRunTimeIst && !hasRunInCurrentSession)
+                    {
+                        _logger.LogInformation("Startup detected post-market hours ({CurrentTime} IST). Triggering immediate catch-up batch execution.",
+                            nowIst.ToString("yyyy-MM-dd HH:mm:ss"));
+                    }
+                    else
+                    {
+                        if (nowIst >= targetRunTimeIst)
+                        {
+                            targetRunTimeIst = targetRunTimeIst.AddDays(1);
+                        }
+
+                        TimeSpan delayUntilNextRun = targetRunTimeIst - nowIst;
+                        _logger.LogInformation("Next daily scraping batch scheduled in {TotalHours:F1}h ({Minutes}m) at {TargetTime} IST.",
+                            delayUntilNextRun.TotalHours, delayUntilNextRun.Minutes, targetRunTimeIst.ToString("yyyy-MM-dd HH:mm:ss"));
+
+                        await Task.Delay(delayUntilNextRun, stoppingToken);
+                    }
+
+                    _logger.LogInformation("Executing market close processing sequence...");
                     await ProcessStocksSequentiallyAsync(stoppingToken);
+
+                    hasRunInCurrentSession = true;
                     _logger.LogInformation("Daily batch completed successfully.");
+
+                    // Enforce delay boundary so continuous processing doesn't re-trigger immediately
+                    await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("Stock scraping background task was canceled.");
+                    _logger.LogInformation("Automation background task received cancellation signal. Gracefully exiting.");
                     break;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "An error occurred during daily batch scraping execution.");
+                    _logger.LogError(ex, "Unhandled exception occurred during daily batch scraping loop. Retrying in 5 minutes.");
+
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
                 }
             }
         }
@@ -59,17 +95,30 @@ namespace SoundMoney.Services
             var scraperService = scope.ServiceProvider.GetRequiredService<IScraperService>();
             var valuationService = scope.ServiceProvider.GetRequiredService<IValuationService>();
 
-            var pendingSymbols = (await valuationRepo.GetPendingValuationsAsync()).ToList();
-
-            if (!pendingSymbols.Any())
+            IReadOnlyList<StockValuation> pendingSymbols;
+            try
             {
-                _logger.LogInformation("No pending stocks found for today.");
+                var symbols = await valuationRepo.GetPendingValuationsAsync();
+                pendingSymbols = symbols?.ToList() ?? new List<StockValuation>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to retrieve pending valuation symbols from database.");
                 return;
             }
 
-            _logger.LogInformation("Processing {Count} stocks sequentially. Estimated completion time: ~5.5 hours.", pendingSymbols.Count);
+            if (pendingSymbols.Count == 0)
+            {
+                _logger.LogInformation("No pending stock valuations found for today's queue.");
+                return;
+            }
 
+            _logger.LogInformation("Processing {Count} stocks sequentially. Estimated completion time: ~{Hours:F1} hours.",
+                pendingSymbols.Count, (pendingSymbols.Count * 7.5) / 3600.0);
+
+            var stopwatch = Stopwatch.StartNew();
             int processedCount = 0;
+            int successCount = 0;
             int totalCount = pendingSymbols.Count;
 
             foreach (var symbol in pendingSymbols)
@@ -77,7 +126,7 @@ namespace SoundMoney.Services
                 cancellationToken.ThrowIfCancellationRequested();
 
                 processedCount++;
-                _logger.LogInformation("[{Current}/{Total}] Fetching data for symbol: {Symbol}",
+                _logger.LogInformation("[{Current}/{Total}] Scraping symbol: {Symbol}",
                     processedCount, totalCount, symbol.Symbol);
 
                 try
@@ -90,36 +139,43 @@ namespace SoundMoney.Services
                         symbol.Sector = stockValuation.Sector;
                         var valuation = valuationService.EvaluateData(symbol, deepFinancials, historicalFinancials);
 
-                        // Save individually so progress is preserved if interrupted
                         await valuationRepo.SaveValuationAsync(valuation);
-                        _logger.LogInformation("Successfully analyzed and saved: {Symbol}", symbol.Symbol);
+                        successCount++;
+                        _logger.LogInformation("Successfully analyzed and persisted: {Symbol}", symbol.Symbol);
                     }
+                    else
+                    {
+                        _logger.LogWarning("Incomplete data retrieved for symbol: {Symbol}. Skipping valuation save.", symbol.Symbol);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogWarning("Execution canceled while processing symbol: {Symbol}", symbol.Symbol);
+                    throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing stock: {Symbol}", symbol.Symbol);
+                    _logger.LogError(ex, "Error processing stock symbol: {Symbol}", symbol.Symbol);
                 }
 
-                // Enforce 5 to 10 seconds random delay to prevent IP block
+                // Random jitter delay (5–10 seconds) for rate-limiting compliance
                 int delaySeconds = RandomNumberGenerator.GetInt32(5, 11);
-                _logger.LogDebug("Throttling request. Waiting {Seconds} seconds...", delaySeconds);
+                _logger.LogDebug("Throttling request. Sleeping for {Seconds}s...", delaySeconds);
                 await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
             }
+
+            stopwatch.Stop();
+            _logger.LogInformation("Batch execution finished. Processed {Success}/{Total} successfully in {ElapsedMinutes:F1} minutes.",
+                successCount, totalCount, stopwatch.Elapsed.TotalMinutes);
         }
 
-        private static TimeSpan GetDelayUntilMarketClose()
+        private static DateTime GetCurrentIstTime()
         {
-            var nowUtc = DateTime.UtcNow;
-            var nowIst = nowUtc.AddHours(5).AddMinutes(30); // IST Offset
-
-            var targetRunTime = new DateTime(nowIst.Year, nowIst.Month, nowIst.Day, 16, 0, 0); // 4:00 PM IST
-
-            if (nowIst >= targetRunTime)
-            {
-                targetRunTime = targetRunTime.AddDays(1);
-            }
-
-            return targetRunTime - nowIst;
+            // Cross-platform time zone conversion (Linux/Docker/Windows)
+            return TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+                DateTime.UtcNow,
+                OperatingSystem.IsWindows() ? "India Standard Time" : "Asia/Kolkata"
+            );
         }
     }
 }

@@ -35,6 +35,6 @@ Select distinct sector from stockvaluations;
  SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
  SoundScore=0,SoundScoreRating='', UpdatedAt = GETDATE() - 2 where symbol ='ARCHIES';*/
  
-
+ select SYSDATETIME(), GETUTCDATE();
 
 

@@ -6,7 +6,7 @@ namespace SoundMoney.Services
 {
     public interface IScreenerService
     {
-        Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, List<string>? score);
+        Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
     }
     public class ScreenerService :IScreenerService
     {
@@ -19,9 +19,9 @@ namespace SoundMoney.Services
             _valuationRepo = valuationRepo;
             _logger = logger;
         }
-        public async Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, SectorCategory? sectorFilter, List<string>? score)
+        public async Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score)
         {
-            var symbols = await _valuationRepo.GetByFilterAsync(minMarginOfSafety, sectorFilter, score);
+            var symbols = await _valuationRepo.GetByFilterAsync(minMarginOfSafety, searchQuery, score);
             var screenRows = symbols.Select(s => StockValuationToScreenResultRow(s)).ToList();
             return screenRows;
         }
