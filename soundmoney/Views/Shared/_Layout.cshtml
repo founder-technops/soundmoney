@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - SoundMoney</title>
+    <title>SoundMoney</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
@@ -27,10 +27,77 @@
     {
         <nav class="navbar navbar-expand-md navbar-dark bg-dark mb-4 shadow-sm">
             <div class="container-fluid px-3">
-                <a class="navbar-brand mb-0 h1 fw-bold text-white text-decoration-none" asp-controller="Screener" asp-action="Index">
-                    SoundMoney | Institutional Lens
-                </a>
+               @*  <a class="navbar-brand brand-lens-wrapper" asp-controller="Screener" asp-action="Index">
+                    <div class="lens-icon-container">
+                        <!-- Technops Geometric "S" Logo SVG -->
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="32" height="32" fill="none">
+                            <!-- Top Pink Accent -->
+                            <polygon points="65,13 78,17 74,28" fill="#FF79B8" />
 
+                            <!-- Bottom Pink Accent -->
+                            <polygon points="51,80 61,89 51,89" fill="#FF79B8" />
+
+                            <!-- Dark Blue Top-Right Segment -->
+                            <path d="M 49,8 C 65,8 73,20 73,28 C 73,42 51,60 51,60 Z" fill="#0058AB" />
+
+                            <!-- Light Blue Top Left Circle Segment -->
+                            <path d="M 49,8 A 20,20 0 1,0 49,48 Z" fill="#1B9CFC" />
+
+                            <!-- Dark Blue Bottom-Left Polygon -->
+                            <polygon points="23,60 49,52 32,79" fill="#0058AB" />
+
+                            <!-- Light Blue Bottom Semi-Circle -->
+                            <path d="M 65,52 C 65,74 51,91 27,91 C 36,75 51,60 51,60 Z" fill="#1B9CFC" />
+                        </svg>
+                    </div>
+                    <span class="brand-title">SoundMoney</span>
+                    <span class="brand-divider">|</span>
+                    <span class="brand-badge">Institutional Lens</span>
+                </a>
+                <a class="navbar-brand brand-lens-wrapper" asp-controller="Screener" asp-action="Index">
+                    <!-- Geometric Logo Container with Active Ambient Glow -->
+                    <div class="lens-logo-wrapper">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="brand-logo-svg" fill="none">
+                            <!-- Top Pink Accent -->
+                            <polygon points="65,13 78,17 74,28" fill="#FF79B8" />
+                            <!-- Bottom Pink Accent -->
+                            <polygon points="51,80 61,89 51,89" fill="#FF79B8" />
+                            <!-- Dark Blue Top-Right Segment -->
+                            <path d="M 49,8 C 65,8 73,20 73,28 C 73,42 51,60 51,60 Z" fill="#0058AB" />
+                            <!-- Light Blue Top Left Circle Segment -->
+                            <path d="M 49,8 A 20,20 0 1,0 49,48 Z" fill="#1B9CFC" />
+                            <!-- Dark Blue Bottom-Left Polygon -->
+                            <polygon points="23,60 49,52 32,79" fill="#0058AB" />
+                            <!-- Light Blue Bottom Semi-Circle -->
+                            <path d="M 65,52 C 65,74 51,91 27,91 C 36,75 51,60 51,60 Z" fill="#1B9CFC" />
+                        </svg>
+                    </div>
+
+                    <!-- Typography Group -->
+                    <div class="d-flex align-items-center gap-2 ms-1">
+                        <span class="brand-title">SoundMoney</span>
+                        <span class="brand-divider">/</span>
+
+                        <!-- Interactive Institutional Lens Badge -->
+                        <div class="institutional-badge">
+                            <span class="status-dot"></span>
+                            <span class="badge-text">Institutional Lens</span>
+                        </div>
+                    </div>
+                </a> *@
+                <a class="navbar-brand brand-lens-wrapper" asp-controller="Screener" asp-action="Index">
+                    <div class="brand-coin-logo">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rupee-coin-svg">
+                            <circle cx="14" cy="14" r="12.5"></circle>
+                            <circle cx="14" cy="14" r="10" stroke-dasharray="2 1.5" opacity="0.5"></circle>
+                            <path d="M10.5 8.5h7"></path>
+                            <path d="M10.5 11.5h6.5"></path>
+                            <path d="M10.5 8.5v6.5c3 0 5-1.2 5-3.25s-2-3.25-5-3.25"></path>
+                            <path d="M11.5 15l5 5"></path>
+                        </svg>
+                    </div>
+                    <span class="brand-title ms-2">SoundMoney</span>
+                </a>
                 <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#headerNavbar" aria-controls="headerNavbar" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
