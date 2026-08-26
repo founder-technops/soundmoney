@@ -81,6 +81,8 @@ namespace SoundMoney.Services
                 _ => "UNSOUND"
             };
 
+            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(historicalData);
+
             var result = new StockValuation
             {
                 Symbol = valuationData.Symbol,
@@ -92,7 +94,7 @@ namespace SoundMoney.Services
                 IntrinsicValue = blendedIntrinsicValue,
                 MarginOfSafety = marginOfSafety,
                 DividendYieldPercent = deepData.DividendYieldPercent,
-                IsDividendConsistent = historicalData.Any(a=>a.DividendPayoutPercent == 0) ? false: true,
+                IsDividendConsistent = dividendAnalysis.IsConsistent,
                 Verdict = verdict,
                 SoundScore = soundScore,
                 SoundScoreRating = soundRating,
