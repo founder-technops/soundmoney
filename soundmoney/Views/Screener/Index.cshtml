@@ -4,7 +4,7 @@
 }
 
 <style>
-    
+
 </style>
 
 <div class="container-fluid px-2 px-md-4 py-3">
@@ -76,88 +76,19 @@
     }
     else
     {
-        <!-- DESKTOP VIEW (Rounded Rectangle Table Rows with Last Analyzed Column) -->
-        <div class="d-none d-md-block mb-4">
-            <div class="table-responsive">
-                <table class="table table-borderless align-middle table-rounded-rows mb-0">
-                    <thead class="text-secondary small text-uppercase">
-                        <tr>
-                            <th class="ps-3">Symbol</th>
-                            <th>Company</th>
-                            <th>Sector</th>
-                            <th class="text-end">Current Price (₹)</th>
-                            <th class="text-end">Intrinsic Value (₹)</th>
-                            <th class="text-end">Div. Yield</th>
-                            <th class="text-center">Div. Consistency</th>
-                            <th class="text-end">Margin of Safety</th>
-                            <th class="text-center">Last Analyzed</th>
-                            <th class="text-center pe-3">Verdict</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in Model.Results)
-                        {
-                            <tr>
-                                <td class="ps-3">
-                                    <span class="badge bg-light text-dark border font-monospace fs-6">@row.Symbol</span>
-                                </td>
-                                <td class="fw-semibold text-dark">@row.CompanyName</td>
-                                <td>
-                                    <span class="badge bg-light text-secondary border fw-normal">@row.Sector</span>
-                                </td>
-                                <td class="text-end font-monospace">₹@row.CurrentPrice.ToString("N2")</td>
-                                <td class="text-end font-monospace">₹@row.IntrinsicValue.ToString("N2")</td>
-
-                                <!-- Dividend Yield Column -->
-                                <td class="text-end font-monospace">
-                                    @row.DividendYieldPercent.ToString("N2")%
-                                </td>
-
-                                <!-- Dividend Consistency Column -->
-                                <td class="text-center">
-                                    @if (row.IsDividendConsistent)
-                                    {
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-light text-muted border">Inconsistent</span>
-                                    }
-                                </td>
-
-                                <td class="text-end font-monospace fw-bold @(row.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
-                                    @row.MarginOfSafetyPercent.ToString("N2")%
-                                </td>
-                                <td class="text-center small font-monospace text-muted">
-                                    @(row.LastAnalyzed.HasValue? row.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
-                                </td>
-                                <td class="text-center pe-3">
-                                    <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary") me-1">
-                                        @row.Verdict
-                                    </span>
-                                    <span class="badge bg-primary">
-                                        @row.SoundScoreRating
-                                    </span>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- MOBILE VIEW (Cards with Last Analyzed Date) -->
-        <div class="d-md-none row g-3 mb-4">
+        <!-- 100% FULL WIDTH CARD GRID (1 CARD PER ROW ALWAYS) -->
+        <div class="row g-3 mb-4">
             @foreach (var row in Model.Results)
             {
                 <div class="col-12">
                     <div class="card border-0 shadow-sm">
-                        <div class="card-body p-3">
+                        <div class="card-body p-3 p-md-4">
+                            <!-- Header: Symbol & Verdict Badges -->
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
                                     <span class="badge bg-light text-dark border font-monospace fs-6 me-1">@row.Symbol</span>
                                 </div>
-                                <div>
+                                <div class="d-flex gap-1">
                                     <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary")">
                                         @row.Verdict
                                     </span>
@@ -167,6 +98,7 @@
                                 </div>
                             </div>
 
+                            <!-- Title & Sector / Date -->
                             <h6 class="fw-bold mb-1">@row.CompanyName</h6>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="badge bg-light text-secondary border fw-normal small">@row.Sector</span>
@@ -175,7 +107,8 @@
                                 </span>
                             </div>
 
-                            <div class="row g-2 text-center bg-light p-2 rounded mb-2 font-monospace small">
+                            <!-- Financial Metrics Grid -->
+                            <div class="row g-2 text-center bg-light p-2 rounded mb-3 font-monospace small">
                                 <div class="col-3 border-end">
                                     <span class="text-muted d-block extra-small">Price</span>
                                     <strong>₹@row.CurrentPrice.ToString("N2")</strong>
@@ -195,16 +128,24 @@
                                     </strong>
                                 </div>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center px-1 mb-1">
-                                <span class="text-muted small">Dividend Consistency:</span>
-                                @if (row.IsDividendConsistent)
-                                {
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-light text-muted border">Inconsistent</span>
-                                }
+
+                            <!-- Footer: Dividend Consistency & Deep Analysis Button -->
+                            <div class="d-flex justify-content-between align-items-center px-1">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="text-muted small">Dividend Consistency:</span>
+                                    @if (row.IsDividendConsistent)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-muted border">Inconsistent</span>
+                                    }
+                                </div>
+
+                                <a asp-controller="Screener" asp-action="Details" asp-route-symbol="@row.Symbol" class="btn btn-outline-primary btn-sm">
+                                    Deep Analysis
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -212,7 +153,6 @@
             }
         </div>
     }
-
     <!-- Methodology Disclosure -->
     <div class="card border-0 bg-light p-3">
         <p class="text-muted small mb-2">
