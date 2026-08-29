@@ -104,7 +104,6 @@ namespace SoundMoney.Services
                         Verdict = string.Empty,
                         SoundScore = 0m,
                         SoundScoreRating = string.Empty,
-                        UpdatedAt = DateTime.Now
                     });
                 }
 

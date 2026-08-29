@@ -15,6 +15,7 @@ public class StockValuation
 
     public DateTime FetchedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    public string? ErrorMessage { get; set; } // Optional property to store error messages
 
     public decimal SoundScore { get; set; }
     public string SoundScoreRating { get; set; } = "";

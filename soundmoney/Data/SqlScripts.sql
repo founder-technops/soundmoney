@@ -15,6 +15,7 @@ CREATE TABLE [dbo].[StockValuations] (
     [SoundScoreRating] VARCHAR (50)    NOT NULL,
     [FetchedAt]        DATETIME2 (7)   NOT NULL,
     [UpdatedAt]        DATETIME2 (7)   NULL,
+    [ErrorMessage]      VARCHAR (4000)  NULL,
     PRIMARY KEY CLUSTERED ([Symbol] ASC)
 );
 
@@ -33,7 +34,7 @@ Select distinct sector from stockvaluations;
 
 /* UPDATE StockValuations 
  SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
- SoundScore=0,SoundScoreRating='', UpdatedAt = GETDATE() - 2 where symbol ='ARCHIES';*/
+ SoundScore=0,SoundScoreRating='', UpdatedAt = NULL where symbol ='ARCHIES';*/
  
  select SYSDATETIME(), GETUTCDATE();
 

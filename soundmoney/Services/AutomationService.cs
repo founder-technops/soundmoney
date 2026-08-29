@@ -1,17 +1,18 @@
-﻿using System.Diagnostics;
-using System.Security.Cryptography;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SoundMoney.Data;
 using SoundMoney.Models;
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Threading;
 
 namespace SoundMoney.Services
 {
     public sealed class AutomationService : BackgroundService
     {
-        private static readonly TimeSpan TargetMarketCloseUtcOffset = new(5, 30, 0); // IST Offset (+05:30)
-        private const int TargetRunHourIst = 16; // 4:00 PM IST
+        private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(5);
+        private static readonly TimeSpan RestartDelayOnCancellation = TimeSpan.FromMinutes(5);
 
         private readonly ILogger<AutomationService> _logger;
         private readonly IServiceProvider _serviceProvider;
@@ -26,68 +27,41 @@ namespace SoundMoney.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("Stock Automation Service initialized with rate-limiting throttling.");
-
-            bool hasRunInCurrentSession = false;
-
+            _logger.LogInformation("Stock Automation Service initialized.");
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
-                    DateTime nowIst = GetCurrentIstTime();
-                    DateTime targetRunTimeIst = nowIst.Date.AddHours(TargetRunHourIst);
-
-                    // If starting after 4:00 PM IST and hasn't executed during this host uptime, run catch-up
-                    if (nowIst >= targetRunTimeIst && !hasRunInCurrentSession)
-                    {
-                        _logger.LogInformation("Startup detected post-market hours ({CurrentTime} IST). Triggering immediate catch-up batch execution.",
-                            nowIst.ToString("yyyy-MM-dd HH:mm:ss"));
-                    }
-                    else
-                    {
-                        if (nowIst >= targetRunTimeIst)
-                        {
-                            targetRunTimeIst = targetRunTimeIst.AddDays(1);
-                        }
-
-                        TimeSpan delayUntilNextRun = targetRunTimeIst - nowIst;
-                        _logger.LogInformation("Next daily scraping batch scheduled in {TotalHours:F1}h ({Minutes}m) at {TargetTime} IST.",
-                            delayUntilNextRun.TotalHours, delayUntilNextRun.Minutes, targetRunTimeIst.ToString("yyyy-MM-dd HH:mm:ss"));
-
-                        await Task.Delay(delayUntilNextRun, stoppingToken);
-                    }
-
-                    _logger.LogInformation("Executing market close processing sequence...");
-                    await ProcessStocksSequentiallyAsync(stoppingToken);
-
-                    hasRunInCurrentSession = true;
-                    _logger.LogInformation("Daily batch completed successfully.");
-
-                    // Enforce delay boundary so continuous processing doesn't re-trigger immediately
-                    await Task.Delay(TimeSpan.FromMinutes(2), stoppingToken);
+                    await ProcessNextPendingValuationAsync(stoppingToken);
+                    await DelayWithCancellationAsync(TimeSpan.FromSeconds(RandomNumberGenerator.GetInt32(5, 10)), stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogInformation("Stock Automation Service host cancellation requested. Exiting.");
+                    //break;
                 }
                 catch (OperationCanceledException)
                 {
-                    _logger.LogInformation("Automation background task received cancellation signal. Gracefully exiting.");
-                    break;
+                    _logger.LogWarning("Processing task was cancelled internally. Automatic restart scheduled in 5 minutes...");
+                    if (!await DelayWithCancellationAsync(RestartDelayOnCancellation, stoppingToken))
+                    {
+                        //break;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Unhandled exception occurred during daily batch scraping loop. Retrying in 5 minutes.");
-
-                    try
+                    _logger.LogError(ex, "Unhandled exception occurred during processing loop. Retrying automatically in 5 minutes...");
+                    if (!await DelayWithCancellationAsync(RestartDelayOnCancellation, stoppingToken))
                     {
-                        await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        break;
+                        //break;
                     }
                 }
             }
-        }
 
-        private async Task ProcessStocksSequentiallyAsync(CancellationToken cancellationToken)
+            _logger.LogInformation("Stock Automation Service fully stopped.");
+        }
+ 
+        private async Task ProcessNextPendingValuationAsync(CancellationToken cancellationToken)
         {
             using var scope = _serviceProvider.CreateScope();
 
@@ -95,87 +69,87 @@ namespace SoundMoney.Services
             var scraperService = scope.ServiceProvider.GetRequiredService<IScraperService>();
             var valuationService = scope.ServiceProvider.GetRequiredService<IValuationService>();
 
-            IReadOnlyList<StockValuation> pendingSymbols;
+            StockValuation? pendingSymbol;
             try
             {
-                var symbols = await valuationRepo.GetPendingValuationsAsync();
-                pendingSymbols = symbols?.ToList() ?? new List<StockValuation>();
+                pendingSymbol = await valuationRepo.GetPendingValuationsAsync();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to retrieve pending valuation symbols from database.");
+                _logger.LogError(ex, "Failed to retrieve next pending valuation from repository.");
                 return;
             }
 
-            if (pendingSymbols.Count == 0)
+            if (pendingSymbol is null)
             {
-                _logger.LogInformation("No pending stock valuations found for today's queue.");
+                _logger.LogDebug("No pending stock valuations found. Waiting for next interval.");
                 return;
             }
 
-            _logger.LogInformation("Processing {Count} stocks sequentially. Estimated completion time: ~{Hours:F1} hours.",
-                pendingSymbols.Count, (pendingSymbols.Count * 7.5) / 3600.0);
+            _logger.LogInformation("Processing symbol: {Symbol}", pendingSymbol.Symbol);
 
-            var stopwatch = Stopwatch.StartNew();
-            int processedCount = 0;
-            int successCount = 0;
-            int totalCount = pendingSymbols.Count;
-
-            foreach (var symbol in pendingSymbols)
+            var valuation = new StockValuation
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                Symbol = pendingSymbol.Symbol,
+                CompanyName = pendingSymbol.CompanyName ?? string.Empty,
+                CurrentPrice = pendingSymbol.CurrentPrice,
+                Sector = pendingSymbol.Sector ?? string.Empty,
+                FetchedAt = DateTime.UtcNow
+            };
 
-                processedCount++;
-                _logger.LogInformation("[{Current}/{Total}] Scraping symbol: {Symbol}",
-                    processedCount, totalCount, symbol.Symbol);
+            try
+            {
+                var (stockValuation, deepFinancials, historicalFinancials) =
+                    await scraperService.ScrapeStockAsync(pendingSymbol.Symbol, cancellationToken);
 
+                if (stockValuation is not null && deepFinancials is not null && historicalFinancials is not null)
+                {
+                    pendingSymbol.Sector = stockValuation.Sector;
+                    valuation = valuationService.EvaluateData(pendingSymbol, deepFinancials, historicalFinancials);
+                    valuation.ErrorMessage = $"Successfully analyzed and persisted: {pendingSymbol.Symbol}";
+                    _logger.LogInformation("Successfully processed symbol: {Symbol}", pendingSymbol.Symbol);
+                }
+                else
+                {
+                    valuation.ErrorMessage = $"Incomplete data retrieved for symbol: {pendingSymbol.Symbol}. Skipping valuation calculation.";
+                    _logger.LogWarning("Incomplete data for symbol: {Symbol}", pendingSymbol.Symbol);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                valuation.ErrorMessage = "Automation background task received cancellation signal.";
+                _logger.LogWarning("Processing canceled for symbol: {Symbol}", pendingSymbol.Symbol);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                valuation.ErrorMessage = ex.Message;
+                _logger.LogError(ex, "Error occurred while processing symbol: {Symbol}", pendingSymbol.Symbol);
+            }
+            finally
+            {
                 try
                 {
-                    var (stockValuation, deepFinancials, historicalFinancials) =
-                        await scraperService.ScrapeStockAsync(symbol.Symbol, cancellationToken);
-
-                    if (stockValuation is not null && deepFinancials is not null && historicalFinancials is not null)
-                    {
-                        symbol.Sector = stockValuation.Sector;
-                        var valuation = valuationService.EvaluateData(symbol, deepFinancials, historicalFinancials);
-
-                        await valuationRepo.SaveValuationAsync(valuation);
-                        successCount++;
-                        _logger.LogInformation("Successfully analyzed and persisted: {Symbol}", symbol.Symbol);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Incomplete data retrieved for symbol: {Symbol}. Skipping valuation save.", symbol.Symbol);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    _logger.LogWarning("Execution canceled while processing symbol: {Symbol}", symbol.Symbol);
-                    throw;
+                    await valuationRepo.SaveValuationAsync(valuation);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing stock symbol: {Symbol}", symbol.Symbol);
+                    _logger.LogError(ex, "Failed to save valuation state for symbol: {Symbol}", pendingSymbol.Symbol);
                 }
-
-                // Random jitter delay (5–10 seconds) for rate-limiting compliance
-                int delaySeconds = RandomNumberGenerator.GetInt32(5, 11);
-                _logger.LogDebug("Throttling request. Sleeping for {Seconds}s...", delaySeconds);
-                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), cancellationToken);
             }
-
-            stopwatch.Stop();
-            _logger.LogInformation("Batch execution finished. Processed {Success}/{Total} successfully in {ElapsedMinutes:F1} minutes.",
-                successCount, totalCount, stopwatch.Elapsed.TotalMinutes);
         }
 
-        private static DateTime GetCurrentIstTime()
+        private static async Task<bool> DelayWithCancellationAsync(TimeSpan delay, CancellationToken stoppingToken)
         {
-            // Cross-platform time zone conversion (Linux/Docker/Windows)
-            return TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
-                DateTime.UtcNow,
-                OperatingSystem.IsWindows() ? "India Standard Time" : "Asia/Kolkata"
-            );
+            try
+            {
+                await Task.Delay(delay, stoppingToken);
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
         }
     }
 }

@@ -102,7 +102,9 @@
                             <h6 class="fw-bold mb-1">@row.CompanyName</h6>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="badge bg-light text-secondary border fw-normal small">@row.Sector</span>
-                                <span class="text-muted extra-small font-monospace">
+
+                                <!-- Reduced font size using inline style -->
+                                <span class="text-muted font-monospace" style="font-size: 0.8rem;">
                                     Analyzed: @(row.LastAnalyzed.HasValue? row.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
                                 </span>
                             </div>

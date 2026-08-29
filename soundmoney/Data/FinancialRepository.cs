@@ -20,7 +20,7 @@ namespace SoundMoney.Data
         Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default);
         Task<List<StockValuation>> GetValuationsByVerdictAsync(string verdict, CancellationToken ct = default);
         Task<List<StockValuation>> GetAllValuationsAsync(CancellationToken ct = default);
-        Task<List<StockValuation>> GetPendingValuationsAsync(CancellationToken ct = default);
+        Task<StockValuation> GetPendingValuationsAsync(CancellationToken ct = default);
         // Delete Methods
         Task<bool> DeleteFinancialDataBySymbolAsync(string symbol, CancellationToken ct = default);
     }
@@ -187,14 +187,11 @@ namespace SoundMoney.Data
                 .ToListAsync(ct);
         }
 
-        public async Task<List<StockValuation>> GetPendingValuationsAsync(CancellationToken ct = default)
+        public async Task<StockValuation> GetPendingValuationsAsync(CancellationToken ct = default)
         {
             return await _context.StockValuations
                 .AsNoTracking()
-                .Where(v => v.UpdatedAt < DateTime.Today)
-                //.Where(v=>v.Symbol == "360ONE")
-                .OrderBy(v => v.Symbol)
-                .ToListAsync(ct);
+                .FirstOrDefaultAsync(v => (v.UpdatedAt == null || v.UpdatedAt < DateTime.Today), cancellationToken: ct);
         }
 
         #endregion
