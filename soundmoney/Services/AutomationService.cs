@@ -130,6 +130,7 @@ namespace SoundMoney.Services
             {
                 try
                 {
+                    valuation.UpdatedAt = DateTime.Now;
                     await valuationRepo.SaveValuationAsync(valuation);
                 }
                 catch (Exception ex)
