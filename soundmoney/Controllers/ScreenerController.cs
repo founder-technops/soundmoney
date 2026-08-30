@@ -56,6 +56,19 @@ public class ScreenerController : Controller
         return View(vm);
     }
 
+    [HttpGet("Screener/Details/{symbol}")]
+    public async Task<IActionResult> Details(string symbol, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            return BadRequest("Stock symbol is required.");
+        }
+
+        var model = await _screener.RunScreenDetailsAsync(symbol);
+
+        return View(model);
+    }
+
     [HttpGet]
     public IActionResult Error() => View();
 }

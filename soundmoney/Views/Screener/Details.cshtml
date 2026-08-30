@@ -1,0 +1,239 @@
+﻿@model SoundMoney.Models.StockDetailsViewModel
+@{
+    ViewData["Title"] = $"{Model.Symbol} - Deep Analysis";
+}
+
+<style>
+    .extra-small {
+        font-size: 0.8rem !important;
+    }
+    .metric-card {
+        background-color: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+    }
+</style>
+
+<div class="container-fluid px-2 px-md-4 py-3">
+    <!-- Navigation Back Button -->
+    <div class="mb-3">
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">
+            &larr; Back to Screener
+        </a>
+    </div>
+
+    <!-- 1. Basic Stock Information Header -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge bg-dark text-white font-monospace fs-6">@Model.Symbol</span>
+                        <span class="badge bg-light text-secondary border">@Model.Sector</span>
+                    </div>
+                    <h3 class="fw-bold mb-1">@Model.CompanyName</h3>
+                    <p class="text-muted extra-small font-monospace mb-0">
+                        Last Analyzed: @(Model.LastAnalyzed.HasValue? Model.LastAnalyzed.Value.ToString("dd MMM yyyy HH:mm") : "N/A")
+                    </p>
+                </div>
+
+                <div class="text-md-end">
+                    <span class="text-muted small d-block">Current Market Price</span>
+                    <h2 class="fw-bold text-primary mb-0">₹@Model.CurrentPrice.ToString("N2")</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Core Valuation Output & Verdict -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="fw-bold mb-0">Valuation Verdict & Sound Score</h5>
+        </div>
+        <div class="card-body p-3 p-md-4 pt-0">
+            <div class="row g-3">
+                <div class="col-12 col-sm-6 col-md-3">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Intrinsic Value</span>
+                        <h4 class="fw-bold text-dark mb-0">₹@Model.IntrinsicValue.ToString("N2")</h4>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-3">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Margin of Safety</span>
+                        <h4 class="fw-bold mb-0 @(Model.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
+                            @Model.MarginOfSafetyPercent.ToString("N2")%
+                        </h4>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-3">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Valuation Verdict</span>
+                        <span class="badge fs-6 mt-1 @(Model.Verdict == "Undervalued" ? "bg-success" : Model.Verdict == "Overvalued" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.Verdict
+                        </span>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-md-3">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Sound Score Rating</span>
+                        <span class="badge fs-6 mt-1 @(Model.SoundScoreRating == "STRONG SOUND" || Model.SoundScoreRating == "SOUND" ? "bg-primary" : "bg-secondary")">
+                            @Model.SoundScoreRating
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Detailed Financial Indicators (deepFinancials) -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="fw-bold mb-0">Financial Indicators</h5>
+        </div>
+        <div class="card-body p-3 p-md-4 pt-0">
+            <div class="row g-4">
+                <!-- Valuation Multiples -->
+                <div class="col-12 col-md-6 col-lg-3">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Valuation Multiples</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">P/E Ratio</span>
+                            <strong>@Model.PE.ToString("N2")</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">P/B Ratio</span>
+                            <strong>@Model.PB.ToString("N2")</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">EV / EBITDA</span>
+                            <strong>@Model.EvToEbitda.ToString("N2")</strong>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Profitability Metrics -->
+                <div class="col-12 col-md-6 col-lg-3">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Profitability</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">ROE</span>
+                            <strong>@Model.ROEPercent.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">ROCE</span>
+                            <strong>@Model.ROCEPercent.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Net Profit Margin</span>
+                            <strong>@Model.NetProfitMarginPercent.ToString("N2")%</strong>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Financial Health & Debt -->
+                <div class="col-12 col-md-6 col-lg-3">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Health & Debt</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Debt to Equity</span>
+                            <strong>@Model.DebtToEquity.ToString("N2")</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Interest Coverage</span>
+                            <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Current Ratio</span>
+                            <strong>@Model.CurrentRatio.ToString("N2")</strong>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Cash Flow & Dividends -->
+                <div class="col-12 col-md-6 col-lg-3">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Cash Flow & Dividends</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Free Cash Flow</span>
+                            <strong>₹@Model.FreeCashFlowCr.ToString("N2") Cr</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Dividend Yield</span>
+                            <strong>@Model.DividendYieldPercent.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Dividend Status</span>
+                            @if (Model.IsDividendConsistent)
+                            {
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted border">Inconsistent</span>
+                            }
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Historical Trends (historicalFinancials) -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 border-0">
+            <h5 class="fw-bold mb-0">Historical Trends & Stability</h5>
+        </div>
+        <div class="card-body p-3 p-md-4 pt-0">
+            <div class="row g-4">
+                <!-- Growth CAGRs -->
+                <div class="col-12 col-md-6">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Compounded Growth Rates</h6>
+                    <table class="table table-bordered table-sm align-middle font-monospace small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Metric</th>
+                                <th class="text-center">3-Year CAGR</th>
+                                <th class="text-center">5-Year CAGR</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Revenue Growth</td>
+                                <td class="text-center fw-bold">@Model.RevenueCagr3Yr.ToString("N2")%</td>
+                                <td class="text-center fw-bold">@Model.RevenueCagr5Yr.ToString("N2")%</td>
+                            </tr>
+                            <tr>
+                                <td>Net Profit Growth</td>
+                                <td class="text-center fw-bold">@Model.ProfitCagr3Yr.ToString("N2")%</td>
+                                <td class="text-center fw-bold">@Model.ProfitCagr5Yr.ToString("N2")%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ROE Stability & Dividend History -->
+                <div class="col-12 col-md-6">
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Historical Stability</h6>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">3-Yr Average ROE</span>
+                            <strong>@Model.AverageRoe3Yr.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">5-Yr Average ROE</span>
+                            <strong>@Model.AverageRoe5Yr.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
+                            <span class="text-muted small">Dividend Payout Track Record</span>
+                            <strong>@Model.ConsecutiveDividendYears Years Paid</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

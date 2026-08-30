@@ -91,7 +91,7 @@ public class ValuationRepository : IValuationRepository
         try
         {
             var query = _context.StockValuations
-                .Where(s => s.UpdatedAt != null);
+                .Where(v=>v.FetchedAt != null);
 
             if(minMarginOfSafety != 0)
             {
@@ -111,7 +111,7 @@ public class ValuationRepository : IValuationRepository
             return await query
                 .AsNoTracking()
                 .OrderByDescending(s => s.MarginOfSafety)
-                .OrderByDescending(s => s.SoundScore)
+                .ThenByDescending(s => s.SoundScore)
                 .ToListAsync();
         }
         catch (Exception ex)

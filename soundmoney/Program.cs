@@ -38,6 +38,7 @@ builder.Services.AddHttpClient<IScraperService, ScraperService>();
 builder.Services.AddHttpClient<NseStockSeederService>();
 
 builder.Services.AddHostedService<AutomationService>();
+builder.Services.AddHostedService<SelfAwakenService>();
 
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
