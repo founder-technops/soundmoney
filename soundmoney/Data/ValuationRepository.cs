@@ -110,8 +110,8 @@ public class ValuationRepository : IValuationRepository
 
             return await query
                 .AsNoTracking()
-                .OrderByDescending(s => s.MarginOfSafety)
-                .ThenByDescending(s => s.SoundScore)
+                .OrderByDescending(s => s.SoundScore)
+                .ThenByDescending(s=>s.MarginOfSafety)
                 .ToListAsync();
         }
         catch (Exception ex)
