@@ -73,6 +73,11 @@ namespace SoundMoney.Services
 
             int soundScore = SoundScoreCalculator.CalculateSoundScore(marginOfSafety, deepData, historicalData);
 
+            if (verdict == "INSUFFICIENT DATA")
+            {
+                soundScore = 0;
+            }
+
             string soundRating = soundScore switch
             {
                 >= 80 => "STRONG SOUND",

@@ -32,6 +32,10 @@ namespace SoundMoney.Services
                 ? (data.EbitCr / data.RevenueCr) * 100m
                 : 0m;
 
+            // Evaluate Dividend Health Rating from historical financials
+            var historyList = historicals?.OrderBy(h => h.Year).ToList();
+            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(historyList ?? new List<HistoricalFinancial>());
+
             // -------------------------------------------------------------
             // 1. MARGIN OF SAFETY (Max 25 Pts - Scaled to ROE Quality)
             // -------------------------------------------------------------
@@ -119,8 +123,6 @@ namespace SoundMoney.Services
             // -------------------------------------------------------------
             // 5. HISTORICAL GROWTH & PEAK TESTS (Max 15 Pts)
             // -------------------------------------------------------------
-            var historyList = historicals?.OrderBy(h => h.Year).ToList();
-
             decimal salesGrowth = 0m;
             bool hasValidHistory = historyList != null && historyList.Count >= 3;
 
@@ -149,9 +151,32 @@ namespace SoundMoney.Services
             }
 
             // -------------------------------------------------------------
-            // 6. GOVERNANCE & MARGIN DEDUCTIONS
+            // 6. DIVIDEND HEALTH RATING INTEGRATION
+            // Bonus / Penalty based on DividendEvaluator rating
             // -------------------------------------------------------------
-            // Promoter Share Pledging Penalty (Crucial for stocks like ASHOKLEY)
+            switch (dividendAnalysis.HealthRating)
+            {
+                case "Elite (Dividend Champion)":
+                    score += 5m; // Bonus for consistent, cash flow supported payouts
+                    break;
+                case "Reliable":
+                    score += 3m;
+                    break;
+                case "Moderate":
+                    score += 1m;
+                    break;
+                case "Unstable":
+                    if (dividendAnalysis.ConsecutiveYearsPaid > 0 && !dividendAnalysis.IsFcfSupported)
+                    {
+                        score -= 5m; // Penalty if dividends are paid without FCF support
+                    }
+                    break;
+            }
+
+            // -------------------------------------------------------------
+            // 7. GOVERNANCE & MARGIN DEDUCTIONS
+            // -------------------------------------------------------------
+            // Promoter Share Pledging Penalty
             decimal pledgePercent = (data.PromoterPledgePercent <= 1.0m && data.PromoterPledgePercent > 0m)
                 ? data.PromoterPledgePercent * 100m
                 : data.PromoterPledgePercent;
@@ -192,12 +217,12 @@ namespace SoundMoney.Services
             }
 
             // -------------------------------------------------------------
-            // 7. VALUE TRAP INTERCEPTOR & CAP
+            // 8. VALUE TRAP INTERCEPTOR & CAP
             // -------------------------------------------------------------
             bool isCapitalDestroyer = !data.IsFinancialSector && roePercent < 8.0m && salesGrowth < 0.05m;
             bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 8.0m && data.NetCashCr < -300m;
             bool isDeclining = salesGrowth < 0m && hasValidHistory;
-            bool isSeverePledge = pledgePercent >= 35.0m; // High promoter pledge cap
+            bool isSeverePledge = pledgePercent >= 35.0m;
 
             bool isValueTrap = roePercent < 5.0m
                 || isDeclining

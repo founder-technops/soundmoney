@@ -1,4 +1,5 @@
-Drop Table [dbo].[StockValuations];
+/*Drop Table [dbo].[StockValuations];
+
 CREATE TABLE [dbo].[StockValuations] (
     [Symbol]           VARCHAR (20)    NOT NULL,
     [CompanyName]      VARCHAR (500)   NOT NULL,
@@ -17,7 +18,11 @@ CREATE TABLE [dbo].[StockValuations] (
     [UpdatedAt]        DATETIME2 (7)   NULL,
     [ErrorMessage]      VARCHAR (4000)  NULL,
     PRIMARY KEY CLUSTERED ([Symbol] ASC)
-);
+); 
+
+UPDATE StockValuations 
+ SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
+ SoundScore=0,SoundScoreRating='', UpdatedAt = NULL where symbol ='ARCHIES';
 
 SELECT COUNT(Sector) 
 FROM StockValuations 
@@ -32,10 +37,10 @@ and SoundScoreRating in ('STRONG SOUND','SOUND') order by soundscore desc,margin
 
 Select distinct sector from stockvaluations;
 
-/* UPDATE StockValuations 
- SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
- SoundScore=0,SoundScoreRating='', UpdatedAt = NULL where symbol ='ARCHIES';*/
+
  
  select SYSDATETIME(), GETUTCDATE();
 
+
+ */
 
