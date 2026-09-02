@@ -7,10 +7,18 @@ namespace SoundMoney.Services
 {
     public static class DividendEvaluator
     {
-        public static DividendAnalysisResult Evaluate(List<HistoricalFinancial> historicalData)
+        /// <summary>
+        /// Evaluates historical dividend performance and safety metrics.
+        /// </summary>
+        /// <param name="historicalData">List of historical financial records.</param>
+        /// <param name="data">Current DeepFinancial metrics (for NetProfit, CapitalAdequacy, etc.).</param>
+        /// <returns>DividendAnalysisResult containing consistency checks and safety rating.</returns>
+        public static DividendAnalysisResult Evaluate(DeepFinancial data, List<HistoricalFinancial> historicalData)
         {
-            if (historicalData == null || !historicalData.Any())
+            if (historicalData == null || !historicalData.Any() || data == null)
                 return new DividendAnalysisResult();
+
+            bool isFinancialSector = data.IsFinancialSector;
 
             // Sort historical records by year descending (newest first)
             var sortedHistory = historicalData.OrderByDescending(h => h.Year).ToList();
@@ -22,27 +30,29 @@ namespace SoundMoney.Services
             {
                 var current = sortedHistory[i];
 
-                // 1. Uninterrupted Payment Streak
+                // 1. Uninterrupted Payment Streak Check
                 if (current.DividendPayoutPercent > 0m)
                 {
                     paidStreak++;
                 }
                 else
                 {
-                    break; // Payment streak breaks on zero-payout years
+                    break; // Streak breaks on non-payment years
                 }
 
-                // 2. Growth / Non-Reduction Streak
+                // 2. Growth / Consistency Streak
                 if (i < sortedHistory.Count - 1)
                 {
                     var previous = sortedHistory[i + 1];
-                    if (current.DividendPayoutPercent >= previous.DividendPayoutPercent)
+
+                    // Maintain growth/stability streak if payout ratio stays within 10% tolerance
+                    if (current.DividendPayoutPercent >= previous.DividendPayoutPercent * 0.9m)
                     {
                         growthStreak++;
                     }
                     else
                     {
-                        growthStreak = 0; // Reset growth streak on dividend reduction
+                        growthStreak = 0; // Reset streak on major dividend cuts
                     }
                 }
             }
@@ -56,22 +66,30 @@ namespace SoundMoney.Services
                 cagr = (decimal)(Math.Pow(endVal / startVal, 1.0 / 5.0) - 1.0) * 100m;
             }
 
-            // 4. Safety Metrics (Last 5 Years)
+            // 4. Safety & Coverage Metrics (Last 5 Years)
             var recentYears = sortedHistory.Take(5).ToList();
-            decimal avgPayout = recentYears.Any() ? recentYears.Average(x => x.DividendPayoutPercent) : 0m;
+            decimal averagePayoutRatio = recentYears.Any() ? recentYears.Average(x => x.DividendPayoutPercent) : 0m;
 
-            // Validate that Operating Cash Flow covers CapEx and Dividend commitments
-            bool fcfSupported = recentYears.All(x => x.HistoricalFcfCr > 0m || x.HistoricalOcfCr > 0m);
+            // FCF Support check for traditional non-financial sectors
+            bool isFcfSupported = recentYears.All(x => x.HistoricalFcfCr > 0m || x.HistoricalOcfCr > 0m);
 
-            // 5. Final Classification
-            bool isConsistent = paidStreak >= 3 && avgPayout <= 75m && fcfSupported;
+            // -------------------------------------------------------------
+            // DYNAMIC DIVIDEND SAFETY CHECK
+            // Uses CAR & Profitability for Financials; FCF & Payout for Non-Financials
+            // -------------------------------------------------------------
+            bool isDividendSafe = isFinancialSector
+                ? (data.NetProfitCr > 0m && averagePayoutRatio <= 60m && data.CapitalAdequacyPercent >= 13m)
+                : (averagePayoutRatio <= 75m && isFcfSupported);
+
+            // 5. Final Consistency & Classification Logic
+            bool isConsistent = paidStreak >= 3 && isDividendSafe;
 
             string rating = "Unstable";
-            if (paidStreak >= 5 && growthStreak >= 3 && avgPayout <= 60m && fcfSupported)
+            if (paidStreak >= 5 && growthStreak >= 3 && isDividendSafe && averagePayoutRatio <= 60m)
                 rating = "Elite (Dividend Champion)";
-            else if (paidStreak >= 5 && avgPayout <= 75m)
+            else if (paidStreak >= 5 && isDividendSafe)
                 rating = "Reliable";
-            else if (paidStreak >= 3)
+            else if (paidStreak >= 3 && isDividendSafe)
                 rating = "Moderate";
 
             return new DividendAnalysisResult
@@ -79,8 +97,8 @@ namespace SoundMoney.Services
                 ConsecutiveYearsPaid = paidStreak,
                 ConsecutiveYearsGrown = growthStreak,
                 FiveYearCagr = Math.Round(cagr, 2),
-                AveragePayoutRatio = Math.Round(avgPayout, 2),
-                IsFcfSupported = fcfSupported,
+                AveragePayoutRatio = Math.Round(averagePayoutRatio, 2),
+                IsFcfSupported = isFinancialSector ? true : isFcfSupported,
                 IsConsistent = isConsistent,
                 HealthRating = rating
             };

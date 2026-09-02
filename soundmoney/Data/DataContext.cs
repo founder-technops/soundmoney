@@ -122,10 +122,10 @@ public class DataContext : DbContext
             // ==========================================
             // P&L Metrics
             // ==========================================
-            builder.Property(e => e.RevenueCr)
+            builder.Property(e => e.SalesCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.OperatingProfitEbitdaCr)
+            builder.Property(e => e.OperatingProfitCr)
                 .HasPrecision(18, 4);
 
             builder.Property(e => e.DepreciationCr)

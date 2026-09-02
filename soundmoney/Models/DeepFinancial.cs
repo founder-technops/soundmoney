@@ -9,28 +9,37 @@ namespace SoundMoney.Models
         // --- Header & Market Metrics ---
         public decimal CurrentPrice { get; set; }
         public decimal MarketCapCr { get; set; }
+        public decimal ReportedPePercent { get; set; }
         public decimal BookValuePerShare { get; set; }
-        public decimal TotalSharesCr { get; set; }
-        public decimal ReportedRoePercent { get; set; }
         public decimal DividendYieldPercent { get; set; }
+        public decimal ReportedRocePercent { get; set; }
+        public decimal ReportedRoePercent { get; set; }
         public decimal FaceValue { get; set; }
+
+        // --- Shareholding Metrics ---
+        public decimal TotalSharesCr { get; set; }
         public decimal Beta { get; set; } = 1.0m;
         public decimal PromoterPledgePercent { get; set; }
 
         // --- Sector Classifier ---
         public bool IsFinancialSector { get; set; }
 
+
         // --- P&L Metrics (Cr) ---
-        public decimal RevenueCr { get; set; }
+        public decimal SalesCr { get; set; }
+        public decimal ExpenseCr { get; set; }
         public decimal OperatingProfitCr { get; set; }
-        public decimal OperatingProfitEbitdaCr { get; set; }
-        public decimal EbitCr { get; set; }
-        public decimal InterestExpenseCr { get; set; }
+        public decimal OperatingProfitMargin => SalesCr > 0m ? Math.Round((OperatingProfitCr / SalesCr) * 100m, 2) : 0m;
+        public decimal OtherIncomeCr { get; set; }
+        public decimal IntrestIncomeCr { get; set; }
+        public decimal DepreciationCr { get; set; }
         public decimal ProfitBeforeTaxCr { get; set; }
         public decimal TaxPercent { get; set; }
-        public decimal DepreciationCr { get; set; }
         public decimal NetProfitCr { get; set; }
+        public decimal InterestExpenseCr { get; set; }
+        public decimal Eps { get; set; }
         public decimal DividendPayoutPercent { get; set; }
+        public decimal EbitCr => ((OperatingProfitCr + OtherIncomeCr + IntrestIncomeCr) - (InterestExpenseCr + DepreciationCr));
 
         // --- Balance Sheet Metrics (Cr) ---
         public decimal ShareCapitalCr { get; set; }

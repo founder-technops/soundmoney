@@ -133,10 +133,12 @@ namespace SoundMoney.Services
 
                     if (name.Contains("Market Cap", StringComparison.OrdinalIgnoreCase)) df.MarketCapCr = val;
                     else if (name.Contains("Current Price", StringComparison.OrdinalIgnoreCase)) df.CurrentPrice = val;
+                    else if (name.Contains("Stock P/E", StringComparison.OrdinalIgnoreCase)) df.ReportedPePercent = val;
                     else if (name.Contains("Book Value", StringComparison.OrdinalIgnoreCase)) df.BookValuePerShare = val;
+                    else if (name.Contains("Dividend Yield", StringComparison.OrdinalIgnoreCase)) df.DividendYieldPercent = val;
+                    else if (name.Contains("ROCE", StringComparison.OrdinalIgnoreCase)) df.ReportedRocePercent = val;
                     else if (name.Contains("ROE", StringComparison.OrdinalIgnoreCase)) df.ReportedRoePercent = val;
                     else if (name.Contains("Face Value", StringComparison.OrdinalIgnoreCase)) df.FaceValue = val;
-                    else if (name.Contains("Dividend Yield", StringComparison.OrdinalIgnoreCase)) df.DividendYieldPercent = val;
                     else if (name.Contains("Pledged", StringComparison.OrdinalIgnoreCase)) df.PromoterPledgePercent = val;
                 }
             }
@@ -162,19 +164,17 @@ namespace SoundMoney.Services
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             if (pnlSection != null)
             {
-                df.RevenueCr = GetLastCellRowValue(pnlSection, "Sales");
-                df.OperatingProfitEbitdaCr = GetLastCellRowValue(pnlSection, "Operating Profit");
-                if (df.OperatingProfitEbitdaCr == 0m)
-                    df.OperatingProfitEbitdaCr = GetLastCellRowValue(pnlSection, "OP");
-
+                df.SalesCr = GetLastCellRowValue(pnlSection, "Sales");
+                df.ExpenseCr = GetLastCellRowValue(pnlSection, "Expenses");
+                df.OperatingProfitCr = GetLastCellRowValue(pnlSection, "Operating Profit");
+                df.OtherIncomeCr = GetLastCellRowValue(pnlSection, "Other Income");
                 df.InterestExpenseCr = Math.Abs(GetLastCellRowValue(pnlSection, "Interest"));
                 df.DepreciationCr = Math.Abs(GetLastCellRowValue(pnlSection, "Depreciation"));
                 df.ProfitBeforeTaxCr = GetLastCellRowValue(pnlSection, "Profit before tax");
                 df.TaxPercent = GetLastCellRowValue(pnlSection, "Tax %");
                 df.NetProfitCr = GetLastCellRowValue(pnlSection, "Net Profit");
+                df.Eps = GetLastCellRowValue(pnlSection, "EPS in Rs");
                 df.DividendPayoutPercent = GetLastCellRowValue(pnlSection, "Dividend Payout");
-
-                df.EbitCr = df.OperatingProfitEbitdaCr - df.DepreciationCr;
             }
 
             // C. Balance Sheet Section

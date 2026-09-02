@@ -28,13 +28,13 @@ namespace SoundMoney.Services
                 ? data.ReportedRoaPercent * 100m
                 : data.ReportedRoaPercent;
 
-            decimal opmPercent = (data.RevenueCr > 0m && !data.IsFinancialSector)
-                ? (data.EbitCr / data.RevenueCr) * 100m
+            decimal opmPercent = (data.SalesCr > 0m && !data.IsFinancialSector)
+                ? data.OperatingProfitMargin
                 : 0m;
 
             // Evaluate Dividend Health Rating from historical financials
             var historyList = historicals?.OrderBy(h => h.Year).ToList();
-            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(historyList ?? new List<HistoricalFinancial>());
+            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(data, historyList ?? new List<HistoricalFinancial>());
 
             // -------------------------------------------------------------
             // 1. MARGIN OF SAFETY (Max 25 Pts - Scaled to ROE Quality)

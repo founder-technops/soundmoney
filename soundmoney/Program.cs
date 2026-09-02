@@ -22,8 +22,6 @@ builder.Services.AddDbContext<DataContext>(options =>
     }));
 
 // Register repository
-builder.Services.AddScoped<IValuationRepository, ValuationRepository>();
-// Register repository
 builder.Services.AddScoped<IFinancialRepository, FinancialRepository>();
 
 builder.Services.AddTransient<IValuationService, ValuationService>();

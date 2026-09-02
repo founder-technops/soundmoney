@@ -30,7 +30,7 @@ WHERE UpdatedAt < '2026-08-16 15:00:00';
 
 select count(symbol) from stockvaluations where updatedat is not null;
 
-select * from stockvaluations where symbol ='WIPRO';
+select * from stockvaluations where symbol in ('GMDCLTD', 'NMDC');
 
 select * from stockvaluations where verdict in ('BUY','STRONG BUY') 
 and SoundScoreRating in ('STRONG SOUND','SOUND') order by soundscore desc,marginofsafety desc;

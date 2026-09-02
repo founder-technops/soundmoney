@@ -1,6 +1,9 @@
 ﻿using SoundMoney.Data;
 using SoundMoney.Models;
 using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace SoundMoney.Services
 {
@@ -68,9 +71,6 @@ namespace SoundMoney.Services
                 };
             }
 
-            _logger.LogInformation("Completed valuation for {Symbol}. Intrinsic: {IV}, Verdict: {Verdict}",
-                valuationData.Symbol, blendedIntrinsicValue, verdict);
-
             int soundScore = SoundScoreCalculator.CalculateSoundScore(marginOfSafety, deepData, historicalData);
 
             if (verdict == "INSUFFICIENT DATA")
@@ -86,7 +86,8 @@ namespace SoundMoney.Services
                 _ => "UNSOUND"
             };
 
-            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(historicalData);
+            // FIX 1: Correct parameter order for DividendEvaluator.Evaluate call
+            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(deepData, historicalData);
 
             var result = new StockValuation
             {
@@ -115,7 +116,6 @@ namespace SoundMoney.Services
         {
             return methodName switch
             {
-                // Mapped precisely to strategy resolver output strings
                 "Excess Returns Model" => CalculateExcessReturns(data),
                 "Price-to-TBV (Tangible Book Value)" or "Price-to-Book (P/B)" or "Price-to-Book (P/B) Intrinsic Multiples" => CalculatePbIntrinsicValue(data),
 
@@ -136,8 +136,6 @@ namespace SoundMoney.Services
                 "Price-to-Earnings-to-Growth (PEG)" => CalculatePegRatioValue(data, historicals),
 
                 "Price-to-Earnings (P/E) Multiple" => CalculatePriceToEarnings(data),
-
-                // Core DCF Fallbacks
                 "Discounted Cash Flow (DCF)" or "Standard DCF" => CalculateStandardDcf(data, historicals),
                 _ => CalculateStandardDcf(data, historicals)
             };
@@ -145,7 +143,7 @@ namespace SoundMoney.Services
 
         #endregion
 
-        #region WACC & Dynamic Utilities
+        #region Dynamic Utilities & Target Multiples
 
         /// <summary>
         /// Calculates Weighted Average Cost of Capital (WACC) dynamically.
@@ -176,6 +174,18 @@ namespace SoundMoney.Services
             return Math.Clamp(wacc, 0.085m, 0.18m);
         }
 
+        /// <summary>
+        /// Dynamically scales target P/E multiple based on business quality (ROE).
+        /// </summary>
+        private static decimal ResolveDynamicTargetPe(DeepFinancial data)
+        {
+            decimal basePe = 15.0m;
+            if (data.ReportedRoePercent >= 25.0m) return 25.0m;
+            if (data.ReportedRoePercent >= 18.0m) return 20.0m;
+            if (data.ReportedRoePercent <= 8.0m) return 10.0m;
+            return basePe;
+        }
+
         private static decimal CalculateCagr(decimal initialValue, decimal finalValue, int periods)
         {
             if (initialValue <= 0 || finalValue <= 0 || periods <= 0)
@@ -187,10 +197,7 @@ namespace SoundMoney.Services
             return (decimal)cagr;
         }
 
-        private static decimal ResolveDynamicGrowthRate(
-            DeepFinancial data,
-            IEnumerable<HistoricalFinancial> historicals,
-            decimal defaultFallback = 0.08m)
+        private static decimal ResolveDynamicGrowthRate(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals, decimal defaultFallback = 0.08m)
         {
             if (data.ReportedRoePercent > 0)
             {
@@ -317,7 +324,9 @@ namespace SoundMoney.Services
 
             decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.10m);
             decimal discountRate = CalculateWacc(data);
-            const decimal evEbitMultiple = 15.0m;
+
+            // FIX: Dynamically adjust EV/EBIT Multiple based on return metrics
+            decimal evEbitMultiple = data.ReportedRoePercent >= 18.0m ? 18.0m : 12.0m;
 
             decimal cumulativePv = 0m;
             decimal projectedFcf = fcfCr;
@@ -394,14 +403,35 @@ namespace SoundMoney.Services
             return Math.Round(d1 / denominator, 2);
         }
 
+        // FIX: Weighted Historical Average for Owner Earnings to account for business growth
         private static decimal CalculateOwnerEarnings(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
         {
             if (data.TotalSharesCr <= 0) return 0m;
 
-            decimal avgOcf = historicals != null && historicals.Any() ? historicals.Average(h => h.HistoricalOcfCr) : data.CashFromOperationsCr;
-            decimal avgCapex = historicals != null && historicals.Any() ? historicals.Average(h => h.HistoricalCapexCr) : data.GrossCapexCr;
+            var historyList = historicals?.OrderBy(h => h.Year).ToList();
+            decimal ownerEarningsCr;
 
-            decimal ownerEarningsCr = avgOcf - avgCapex;
+            if (historyList != null && historyList.Count >= 3)
+            {
+                decimal weightedOcfSum = 0m;
+                decimal weightedCapexSum = 0m;
+                decimal weightTotal = 0m;
+
+                for (int i = 0; i < historyList.Count; i++)
+                {
+                    decimal weight = i + 1m; // Recent years get higher weight
+                    weightedOcfSum += historyList[i].HistoricalOcfCr * weight;
+                    weightedCapexSum += historyList[i].HistoricalCapexCr * weight;
+                    weightTotal += weight;
+                }
+
+                ownerEarningsCr = (weightedOcfSum / weightTotal) - (weightedCapexSum / weightTotal);
+            }
+            else
+            {
+                ownerEarningsCr = data.CashFromOperationsCr - data.GrossCapexCr;
+            }
+
             if (ownerEarningsCr <= 0) return 0m;
 
             return Math.Round((ownerEarningsCr * 12m) / data.TotalSharesCr, 2);
@@ -415,7 +445,7 @@ namespace SoundMoney.Services
             if (avgNetProfitCr <= 0) return 0m;
 
             decimal normalizedEps = avgNetProfitCr / data.TotalSharesCr;
-            const decimal targetPe = 15.0m;
+            decimal targetPe = ResolveDynamicTargetPe(data);
 
             return Math.Round(normalizedEps * targetPe, 2);
         }
@@ -425,33 +455,34 @@ namespace SoundMoney.Services
             if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
 
             decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
-            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, 0.10m) * 100m; // as percentage
+            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, 0.10m) * 100m;
 
             if (eps <= 0 || growthRate <= 0) return 0m;
 
-            // Fair value PEG = 1.0 => Target P/E = Growth Rate
             decimal fairPe = Math.Clamp(growthRate, 4.0m, 30.0m);
             return Math.Round(eps * fairPe, 2);
         }
 
+        // FIX: Check RevenueCr instead of CashFromOperationsCr
         private static decimal CalculateEvSalesMultiple(DeepFinancial data)
         {
-            if (data.TotalSharesCr <= 0 || data.CashFromOperationsCr <= 0) return 0m;
+            if (data.TotalSharesCr <= 0 || data.SalesCr <= 0) return 0m;
 
             decimal targetEvSales = 2.5m;
-            decimal RevenueCr = data.RevenueCr;
+            decimal revenueCr = data.SalesCr;
             decimal netDebtCr = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
 
-            decimal targetEquityValueCr = (RevenueCr * targetEvSales) - netDebtCr;
+            decimal targetEquityValueCr = (revenueCr * targetEvSales) - netDebtCr;
             return Math.Max(0m, Math.Round(targetEquityValueCr / data.TotalSharesCr, 2));
         }
 
         private static decimal CalculatePriceToSales(DeepFinancial data)
         {
-            if (data.TotalSharesCr <= 0 || data.CashFromOperationsCr <= 0) return 0m;
+            if (data.TotalSharesCr <= 0 || data.SalesCr <= 0) return 0m;
 
-            decimal estimatedEps = (data.CashFromOperationsCr * 0.15m) / data.TotalSharesCr;
-            return Math.Round(estimatedEps * 12.0m, 2);
+            decimal salesPerShare = data.SalesCr / data.TotalSharesCr;
+            const decimal targetPs = 1.5m;
+            return Math.Round(salesPerShare * targetPs, 2);
         }
 
         private static decimal CalculateEvEbitdaMultiple(DeepFinancial data)
@@ -459,7 +490,7 @@ namespace SoundMoney.Services
             if (data.TotalSharesCr <= 0 || data.EbitCr <= 0) return 0m;
 
             decimal estimatedEbitdaCr = data.EbitCr * 1.2m;
-            const decimal targetEvEbitda = 10.0m;
+            decimal targetEvEbitda = data.ReportedRoePercent >= 18.0m ? 12.0m : 8.5m;
             decimal netDebtCr = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
 
             decimal targetEquityValueCr = (estimatedEbitdaCr * targetEvEbitda) - netDebtCr;
@@ -471,7 +502,7 @@ namespace SoundMoney.Services
             if (data.NetProfitCr <= 0 || data.TotalSharesCr <= 0) return 0m;
 
             decimal eps = data.NetProfitCr / data.TotalSharesCr;
-            const decimal fairPe = 15.0m;
+            decimal fairPe = ResolveDynamicTargetPe(data);
 
             return Math.Round(eps * fairPe, 2);
         }

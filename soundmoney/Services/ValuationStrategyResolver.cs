@@ -5,7 +5,6 @@ using SoundMoney.Models;
 
 namespace SoundMoney.Services
 {
-    // Context container holding calculated domain metrics
     public class EvaluationContext
     {
         public DeepFinancial Data { get; set; }
@@ -16,6 +15,7 @@ namespace SoundMoney.Services
         public decimal OcfToNetProfit { get; set; }
         public bool IsCashPredictable { get; set; }
         public bool IsCyclical { get; set; }
+        public bool IsInfrastructureUtility { get; set; } // Flagged to prevent incorrect cyclical routing
     }
 
     public interface IValuationRule
@@ -32,8 +32,8 @@ namespace SoundMoney.Services
             new FinancialSectorRule(),
             new ReinvestingGrowthRule(),
             new DistressTurnaroundRule(),
+            new HighLeverageCapitalIntensiveRule(), // Priority boosted above Cyclical Rule for Infrastructure/Utilities
             new CyclicalEarningsRule(),
-            new HighLeverageCapitalIntensiveRule(),
             new MatureHighPayoutRule(),
             new AssetLightMoatRule(),
             new DefaultFallbackRule()
@@ -55,7 +55,6 @@ namespace SoundMoney.Services
         {
             var historyList = historicals?.OrderBy(h => h.Year).ToList() ?? new List<HistoricalFinancial>();
 
-            // Correct Net Debt: Total Debt - Cash & Equivalents
             decimal actualNetDebt = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
             decimal debtToEbit = (actualNetDebt > 0 && data.EbitCr > 0) ? (actualNetDebt / data.EbitCr) : 0m;
             decimal capexToOcf = data.CashFromOperationsCr > 0 ? (data.GrossCapexCr / data.CashFromOperationsCr) : 1.0m;
@@ -67,8 +66,11 @@ namespace SoundMoney.Services
             int negativeOcfYears = historyList.Count(h => h.HistoricalOcfCr <= 0);
             if (negativeOcfYears > 1) cashPredictable = false;
 
+            // FIX: Identify infrastructure/utility companies with high debt + heavy ongoing CapEx (e.g., ADANIGREEN)
+            bool isInfraUtility = (debtToEbit >= 3.5m || capexToOcf >= 0.75m) && !data.IsFinancialSector;
+
             bool cyclical = false;
-            if (historyList.Count >= 3)
+            if (historyList.Count >= 3 && !isInfraUtility)
             {
                 decimal maxProfit = historyList.Max(h => h.HistoricalNetProfitCr);
                 decimal minProfit = historyList.Min(h => h.HistoricalNetProfitCr);
@@ -87,7 +89,8 @@ namespace SoundMoney.Services
                 CapexToOcf = capexToOcf,
                 OcfToNetProfit = ocfToNp,
                 IsCashPredictable = cashPredictable,
-                IsCyclical = cyclical
+                IsCyclical = cyclical,
+                IsInfrastructureUtility = isInfraUtility
             };
         }
     }
@@ -132,25 +135,25 @@ namespace SoundMoney.Services
 
     public class CyclicalEarningsRule : IValuationRule
     {
-        public int Priority => 40;
+        public int Priority => 50;
         public bool IsMatch(EvaluationContext ctx) => ctx.IsCyclical;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "Normalized Mid-Cycle P/E",
             SecondaryMethod = "Price-to-Book (P/B)",
-            Rationale = "High earnings volatility detected; using cycle-normalized metrics to prevent peak/trough errors."
+            Rationale = "High earnings volatility detected in non-utility entity; using cycle-normalized metrics to prevent peak/trough errors."
         };
     }
 
     public class HighLeverageCapitalIntensiveRule : IValuationRule
     {
-        public int Priority => 50;
-        public bool IsMatch(EvaluationContext ctx) => ctx.DebtToEbit >= 2.5m || ctx.CapexToOcf >= 0.60m;
+        public int Priority => 40; // Elevated priority to catch infrastructure utilities before Cyclical rule
+        public bool IsMatch(EvaluationContext ctx) => ctx.DebtToEbit >= 2.5m || ctx.CapexToOcf >= 0.60m || ctx.IsInfrastructureUtility;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "Exit Multiple DCF (FCFF)",
             SecondaryMethod = "EV/EBITDA Relative Multiple",
-            Rationale = "Capital-intensive balance sheet or high leverage; evaluating Enterprise Value (FCFF) models."
+            Rationale = "Capital-intensive balance sheet or high leverage utility/infrastructure profile; evaluating Enterprise Value (FCFF) models."
         };
     }
 

@@ -12,24 +12,24 @@ namespace SoundMoney.Services
     }
     public class ScreenerService :IScreenerService
     {
-        private readonly IValuationRepository _valuationRepo;
         private readonly ILogger<ScreenerService> _logger;
         private readonly IScraperService _scraperService;
         private readonly IValuationService _valuationService;
+        private readonly IFinancialRepository _repo;
         public ScreenerService(
-        IValuationRepository valuationRepo,
+        IFinancialRepository repo,
         IScraperService scraperService,
         IValuationService valuationService,
         ILogger<ScreenerService> logger)
         {
-            _valuationRepo = valuationRepo;
+            _repo = repo;
             _scraperService = scraperService;
             _valuationService = valuationService;
             _logger = logger;
         }
         public async Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score)
         {
-            var symbols = await _valuationRepo.GetByFilterAsync(minMarginOfSafety, searchQuery, score);
+            var symbols = await _repo.GetByFilterAsync(minMarginOfSafety, searchQuery, score);
             var screenRows = symbols.Select(s => StockValuationToScreenResultRow(s)).ToList();
             return screenRows;
         }

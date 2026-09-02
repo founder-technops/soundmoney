@@ -22,6 +22,7 @@ namespace SoundMoney.Data
         Task<List<StockValuation>> GetAllValuationsAsync(CancellationToken ct = default);
         Task<StockValuation> GetPendingValuationsAsync(CancellationToken ct = default);
         // Delete Methods
+        Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
         Task<bool> DeleteFinancialDataBySymbolAsync(string symbol, CancellationToken ct = default);
     }
     public class FinancialRepository : IFinancialRepository
@@ -191,8 +192,47 @@ namespace SoundMoney.Data
         {
             return await _context.StockValuations
                 .AsNoTracking()
+                //.Where(v => v.Symbol == "RECLTD")
                 .FirstOrDefaultAsync(v => (v.UpdatedAt == null || v.UpdatedAt < DateTime.Today), cancellationToken: ct);
         }
+
+        /// <summary>
+        /// Retrieve stocks filtered by margin of safety and optional sector.
+        /// </summary>
+        public async Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score)
+        {
+            try
+            {
+                var query = _context.StockValuations
+                    .Where(v => v.FetchedAt != null);
+
+                if (minMarginOfSafety != 0)
+                {
+                    query = query.Where(s => s.MarginOfSafety >= minMarginOfSafety);
+                }
+
+                if (searchQuery is not null)
+                {
+                    query = query.Where(s => s.Symbol.Contains(searchQuery) || s.CompanyName.Contains(searchQuery));
+                }
+
+                if (score is not null)
+                {
+                    query = query.Where(s => score.Contains(s.SoundScoreRating));
+                }
+
+                return await query
+                    .AsNoTracking()
+                    .OrderByDescending(s => s.SoundScore)
+                    .ThenByDescending(s => s.MarginOfSafety)
+                    .ToListAsync();
+            }
+            catch (Exception ex)
+            {
+                return new List<StockValuation>();
+            }
+        }
+
 
         #endregion
 
