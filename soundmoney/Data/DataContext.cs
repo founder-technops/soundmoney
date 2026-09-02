@@ -146,7 +146,7 @@ public class DataContext : DbContext
             builder.Property(e => e.ReservesCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.TotalEquityCr)
+            builder.Property(e => e.TotalEquityCapitalCr)
                 .HasPrecision(18, 4);
 
             builder.Property(e => e.TotalBorrowingsCr)
@@ -161,8 +161,7 @@ public class DataContext : DbContext
             builder.Property(e => e.CashAndEquivalentsCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.IntangibleAssetsCr)
-                .HasPrecision(18, 4);
+           
 
             builder.Property(e => e.TotalLiabilitiesCr)
                 .HasPrecision(18, 4);

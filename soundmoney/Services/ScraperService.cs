@@ -155,11 +155,6 @@ namespace SoundMoney.Services
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
             }
 
-            if (df.CurrentPrice > 0m && df.MarketCapCr > 0m)
-            {
-                df.TotalSharesCr = df.MarketCapCr / df.CurrentPrice;
-            }
-
             // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             if (pnlSection != null)
@@ -184,24 +179,13 @@ namespace SoundMoney.Services
                 df.ShareCapitalCr = GetLastCellRowValue(bsSection, "Equity Capital");
                 df.ReservesCr = GetLastCellRowValue(bsSection, "Reserves");
                 df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowings"));
-                df.CurrentLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
-                df.TotalLiabilitiesCr = df.TotalBorrowingsCr + df.CurrentLiabilitiesCr;
+                df.OtherLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
 
                 df.NetFixedAssetsCr = GetLastCellRowValue(bsSection, "Fixed Assets");
                 df.CwipCr = GetLastCellRowValue(bsSection, "CWIP");
                 df.InvestmentsCr = GetLastCellRowValue(bsSection, "Investments");
-                df.IntangibleAssetsCr = GetLastCellRowValue(bsSection, "Intangible Assets");
-                df.TotalAssetsCr = GetLastCellRowValue(bsSection, "Total Assets");
-
-                decimal nonCurrentAssets = df.NetFixedAssetsCr + df.CwipCr + df.InvestmentsCr + df.IntangibleAssetsCr;
-                df.CurrentAssetsCr = Math.Max(0m, df.TotalAssetsCr - nonCurrentAssets);
-                df.TotalEquityCr = df.ShareCapitalCr + df.ReservesCr;
-                df.WorkingCapitalCr = df.CurrentAssetsCr - df.CurrentLiabilitiesCr;
-
-                // Actual cash component extraction or fallback
-                decimal scrapedCash = GetLastCellRowValue(bsSection, "Cash & Equivalents");
-                df.CashAndEquivalentsCr = scrapedCash > 0m ? scrapedCash : Math.Max(0m, df.CurrentAssetsCr * 0.20m);
-                df.NetCashCr = df.CashAndEquivalentsCr - df.TotalBorrowingsCr;
+                df.OtherAssetsCr = GetLastCellRowValue(bsSection, "Other Assets");
+                
             }
 
             // D. Cash Flow Section
@@ -212,7 +196,6 @@ namespace SoundMoney.Services
                 df.CashFromInvestmentCr = GetLastCellRowValue(cfSection, "Cash from Investing Activity");
                 df.CashFromFinanceCr = GetLastCellRowValue(cfSection, "Cash from Financing Activity");
                 df.FreeCashFlowCr = GetLastCellRowValue(cfSection, "Free Cash Flow");
-                df.GrossCapexCr = df.CashFromOperationsCr - df.FreeCashFlowCr;
             }
 
             return df;

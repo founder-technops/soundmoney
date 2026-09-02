@@ -17,7 +17,9 @@ namespace SoundMoney.Models
         public decimal FaceValue { get; set; }
 
         // --- Shareholding Metrics ---
-        public decimal TotalSharesCr { get; set; }
+        public decimal TotalSharesCr => CurrentPrice > 0m && MarketCapCr > 0m
+            ? Math.Round(MarketCapCr / CurrentPrice, 4)
+            : 0m;
         public decimal Beta { get; set; } = 1.0m;
         public decimal PromoterPledgePercent { get; set; }
 
@@ -39,35 +41,41 @@ namespace SoundMoney.Models
         public decimal InterestExpenseCr { get; set; }
         public decimal Eps { get; set; }
         public decimal DividendPayoutPercent { get; set; }
+
+        // --- Derived P&L Metrics (Cr) ---
         public decimal EbitCr => ((OperatingProfitCr + OtherIncomeCr + IntrestIncomeCr) - (InterestExpenseCr + DepreciationCr));
 
         // --- Balance Sheet Metrics (Cr) ---
         public decimal ShareCapitalCr { get; set; }
         public decimal ReservesCr { get; set; }
-        public decimal TotalEquityCr { get; set; }
         public decimal TotalBorrowingsCr { get; set; }
+        public decimal OtherLiabilitiesCr { get; set; }
+        public decimal TotalLiabilitiesCr => ShareCapitalCr + ReservesCr + TotalBorrowingsCr + OtherLiabilitiesCr;
         public decimal NetFixedAssetsCr { get; set; }
         public decimal CwipCr { get; set; }
-        public decimal CashAndEquivalentsCr { get; set; }
-        public decimal IntangibleAssetsCr { get; set; }
         public decimal InvestmentsCr { get; set; }
-        public decimal TotalLiabilitiesCr { get; set; }
-        public decimal TotalAssetsCr { get; set; }
-        public decimal NetCashCr { get; set; }
-        public decimal WorkingCapitalCr { get; set; }
-        public decimal CurrentAssetsCr { get; set; }
-        public decimal CurrentLiabilitiesCr { get; set; }
+        public decimal OtherAssetsCr { get; set; }
+        public decimal TotalAssetsCr  => NetFixedAssetsCr + CwipCr + InvestmentsCr + OtherAssetsCr;
 
+        // --- Derived Balance Sheet Metrics (Cr) ---
+        public decimal TotalEquityCapitalCr => ShareCapitalCr + ReservesCr;
+        public decimal CashAndEquivalentsCr => TotalAssetsCr - (NetFixedAssetsCr + CwipCr + InvestmentsCr + OtherAssetsCr); //wrong calculations - Need to explore
+        public decimal NetCashCr => CashAndEquivalentsCr - TotalBorrowingsCr;
+        public decimal NonCurrentAssetsCr => NetFixedAssetsCr + CwipCr + InvestmentsCr;
+        public decimal CurrentAssetsCr => Math.Max(0m, TotalAssetsCr - NonCurrentAssetsCr);
+        public decimal WorkingCapitalCr => CurrentAssetsCr - OtherLiabilitiesCr;
+        
         // --- Cash Flow Metrics (Cr) ---
         public decimal CashFromOperationsCr { get; set; }
         public decimal CashFromInvestmentCr { get; set; }
         public decimal CashFromFinanceCr { get; set; }
-        public decimal GrossCapexCr { get; set; }
         public decimal FreeCashFlowCr { get; set; }
+        public decimal GrossCapexCr => CashFromOperationsCr - FreeCashFlowCr;
+
 
         // Computed metrics ensuring whole percentage representation
-        public decimal CapitalAdequacyPercent => IsFinancialSector && TotalEquityCr > 0m && TotalAssetsCr > 0m
-            ? Math.Round((TotalEquityCr / TotalAssetsCr) * 100m, 2)
+        public decimal CapitalAdequacyPercent => IsFinancialSector && TotalEquityCapitalCr > 0m && TotalAssetsCr > 0m
+            ? Math.Round((TotalEquityCapitalCr / TotalAssetsCr) * 100m, 2)
             : 0m;
 
         public decimal ReportedRoaPercent => TotalAssetsCr > 0m
