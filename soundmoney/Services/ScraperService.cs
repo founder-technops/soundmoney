@@ -288,6 +288,13 @@ namespace SoundMoney.Services
                 df.FreeCashFlowCr = GetLastCellRowValue(cfSection, "Free Cash Flow");
             }
 
+            // E. Ratios Section
+            var ratiosSection = doc.DocumentNode.SelectSingleNode("//section[@id='ratios']");
+            if (ratiosSection != null)
+            {
+               df.CashConversionCycleDays = GetLastCellRowValue(ratiosSection, "Cash Conversion Cycle");
+            }
+
             return df;
         }
 

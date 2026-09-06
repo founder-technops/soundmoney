@@ -94,8 +94,12 @@ namespace SoundMoney.Models
         public decimal CashFromInvestmentCr { get; set; }
         public decimal CashFromFinanceCr { get; set; }
         public decimal FreeCashFlowCr { get; set; }
-        public decimal netCashFlowCr => CashFromOperationsCr + CashFromInvestmentCr + CashFromFinanceCr;
+        public decimal NetCashFlowCr => CashFromOperationsCr + CashFromInvestmentCr + CashFromFinanceCr;
         public decimal GrossCapexCr => CashFromOperationsCr - FreeCashFlowCr;
+
+        // --- Ratios ---
+
+        public decimal CashConversionCycleDays { get; set; }
 
         /// <summary>
         /// Quality of Earnings Ratio (CFO / Operating Profit)

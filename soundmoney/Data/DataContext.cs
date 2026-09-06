@@ -255,7 +255,7 @@ public class DataContext : DbContext
             builder.Ignore(e => e.NonCurrentAssetsCr);
             builder.Ignore(e => e.CurrentAssetsCr);
             builder.Ignore(e => e.WorkingCapitalCr);
-            builder.Ignore(e => e.netCashFlowCr);
+            builder.Ignore(e => e.NetCashFlowCr);
             builder.Ignore(e => e.GrossCapexCr);
             builder.Ignore(e => e.CfoToOpRatio);
             builder.Ignore(e => e.CapitalAdequacyPercent);
