@@ -28,6 +28,8 @@ namespace SoundMoney.Services
                 ? data.ReportedRoaPercent * 100m
                 : data.ReportedRoaPercent;
 
+            decimal roicPercent = data.RoicPercent;
+
             decimal opmPercent = (data.SalesCr > 0m && !data.IsFinancialSector)
                 ? data.OperatingProfitMargin
                 : 0m;
@@ -37,10 +39,10 @@ namespace SoundMoney.Services
             DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(data, historyList ?? new List<HistoricalFinancial>());
 
             // -------------------------------------------------------------
-            // 1. MARGIN OF SAFETY (Max 25 Pts - Scaled to ROE Quality)
+            // 1. MARGIN OF SAFETY (Max 25 Pts - Scaled to ROE/ROIC Quality)
             // -------------------------------------------------------------
-            // Weak ROE (<12%) prevents cheap valuation from driving a high score
-            decimal maxMosContribution = (roePercent < 12.0m && !data.IsFinancialSector) ? 12m : 25m;
+            // Weak ROE (<12%) or weak ROIC (<10%) prevents cheap valuation from driving a high score
+            decimal maxMosContribution = ((roePercent < 12.0m || roicPercent < 10.0m) && !data.IsFinancialSector) ? 12m : 25m;
 
             if (marginOfSafety >= 30m)
             {
@@ -58,7 +60,7 @@ namespace SoundMoney.Services
             }
 
             // -------------------------------------------------------------
-            // 2. CAPITAL EFFICIENCY: ROE / ROA (Max 25 Pts)
+            // 2. CAPITAL EFFICIENCY: ROE & ROIC BLEND (Max 25 Pts)
             // -------------------------------------------------------------
             if (data.IsFinancialSector)
             {
@@ -69,10 +71,17 @@ namespace SoundMoney.Services
             }
             else
             {
-                if (roePercent >= 20m) score += 25m;
-                else if (roePercent >= 15m) score += 20m;
-                else if (roePercent >= 12m) score += 12m;
-                else if (roePercent >= 8m) score += 5m;
+                // ROE Allocation (Shareholder Return - Max 15 Pts)
+                if (roePercent >= 20m) score += 15m;
+                else if (roePercent >= 15m) score += 12m;
+                else if (roePercent >= 12m) score += 8m;
+                else if (roePercent >= 8m) score += 4m;
+
+                // ROIC Allocation (Operational Return on Capital - Max 10 Pts)
+                if (roicPercent >= 20m) score += 10m;
+                else if (roicPercent >= 15m) score += 8m;
+                else if (roicPercent >= 12m) score += 5m;
+                else if (roicPercent >= 8m) score += 2m;
             }
 
             // -------------------------------------------------------------
@@ -80,19 +89,12 @@ namespace SoundMoney.Services
             // -------------------------------------------------------------
             if (!data.IsFinancialSector)
             {
-                // NetCashCr relies on a cash balance rolled forward from scraped cash-flow
-                // history (Screener has no dedicated cash line item). For companies whose
-                // scraped history is short relative to their actual age, that roll-forward
-                // understates true cash and overstates leverage. When flagged unreliable,
-                // score leverage off gross borrowings against EBIT instead, so an old,
-                // genuinely cash-rich company isn't penalized for a data-derivation
-                // artifact rather than real balance-sheet risk.
                 decimal leverageCr = data.IsCashEstimateReliable ? -data.NetCashCr : data.TotalBorrowingsCr;
 
                 if (leverageCr <= 0m)
                 {
                     // Require capital efficiency to grant full solvency points
-                    score += (roePercent >= 12.0m) ? 20m : 10m;
+                    score += (roePercent >= 12.0m || roicPercent >= 10.0m) ? 20m : 10m;
                 }
                 else if (data.EbitCr > 0m)
                 {
@@ -130,9 +132,12 @@ namespace SoundMoney.Services
 
             // -------------------------------------------------------------
             // 5. HISTORICAL GROWTH & PEAK TESTS (Max 15 Pts)
+            // Blends Revenue Growth (Top-Line) & Net Profit Growth (Bottom-Line)
             // -------------------------------------------------------------
             decimal salesGrowth = 0m;
+            decimal profitGrowth = 0m;
             bool hasValidHistory = historyList != null && historyList.Count >= 3;
+            bool hasValidProfitGrowth = false;
 
             if (hasValidHistory)
             {
@@ -140,6 +145,7 @@ namespace SoundMoney.Services
                 var newest = historyList.Last();
                 int periods = historyList.Count - 1;
 
+                // 1. Revenue Growth (Top-Line)
                 if (oldest.HistoricalRevenueCr > 0m && newest.HistoricalRevenueCr > 0m)
                 {
                     double revRatio = (double)(newest.HistoricalRevenueCr / oldest.HistoricalRevenueCr);
@@ -149,13 +155,44 @@ namespace SoundMoney.Services
                 decimal peakRevenue = historyList.Max(h => h.HistoricalRevenueCr);
                 if (newest.HistoricalRevenueCr < (peakRevenue * 0.85m))
                 {
-                    salesGrowth = -0.10m; // Penalize structural top-line drop
+                    salesGrowth = -0.10m; // Penalize structural top-line drop (>15% from peak)
                 }
 
-                if (salesGrowth >= 0.15m)
-                    score += 15m;
-                else if (salesGrowth > 0m)
-                    score += (salesGrowth / 0.15m) * 15m;
+                // 2. Net Profit / PAT Growth (Bottom-Line)
+                if (oldest.HistoricalNetProfitCr > 0m && newest.HistoricalNetProfitCr > 0m)
+                {
+                    double patRatio = (double)(newest.HistoricalNetProfitCr / oldest.HistoricalNetProfitCr);
+                    profitGrowth = (decimal)(Math.Pow(patRatio, 1.0 / periods) - 1.0);
+                    hasValidProfitGrowth = true;
+                }
+
+                decimal peakProfit = historyList.Max(h => h.HistoricalNetProfitCr);
+                if (peakProfit > 0m && newest.HistoricalNetProfitCr < (peakProfit * 0.70m))
+                {
+                    profitGrowth = -0.10m; // Penalize severe bottom-line drop (>30% from peak)
+                }
+
+                // 3. Score Allocation
+                if (data.IsFinancialSector)
+                {
+                    decimal patPoints = (hasValidProfitGrowth && profitGrowth > 0m) ? Math.Min(10m, (profitGrowth / 0.15m) * 10m) : 0m;
+                    decimal revPoints = (salesGrowth > 0m) ? Math.Min(5m, (salesGrowth / 0.15m) * 5m) : 0m;
+                    score += (patPoints + revPoints);
+                }
+                else
+                {
+                    decimal revPoints = (salesGrowth > 0m) ? Math.Min(7.5m, (salesGrowth / 0.15m) * 7.5m) : 0m;
+                    decimal patPoints = 0m;
+                    if (hasValidProfitGrowth && profitGrowth > 0m)
+                    {
+                        decimal cfoPatRatio = (data.NetProfitCr > 0m && data.CashFromOperationsCr > 0m)
+                            ? (data.CashFromOperationsCr / data.NetProfitCr)
+                            : 0m;
+                        decimal maxPatPts = (cfoPatRatio < 0.50m) ? 3.75m : 7.5m;
+                        patPoints = Math.Min(maxPatPts, (profitGrowth / 0.15m) * maxPatPts);
+                    }
+                    score += (revPoints + patPoints);
+                }
             }
 
             // -------------------------------------------------------------
@@ -164,88 +201,64 @@ namespace SoundMoney.Services
             // -------------------------------------------------------------
             switch (dividendAnalysis.HealthRating)
             {
-                case "Elite (Dividend Champion)":
-                    score += 5m; // Bonus for consistent, cash flow supported payouts
-                    break;
-                case "Reliable":
-                    score += 3m;
-                    break;
-                case "Moderate":
-                    score += 1m;
-                    break;
+                case "Elite (Dividend Champion)": score += 5m; break;
+                case "Reliable": score += 3m; break;
+                case "Moderate": score += 1m; break;
                 case "Unstable":
-                    if (dividendAnalysis.ConsecutiveYearsPaid > 0 && !dividendAnalysis.IsFcfSupported)
-                    {
-                        score -= 5m; // Penalty if dividends are paid without FCF support
-                    }
+                    if (dividendAnalysis.ConsecutiveYearsPaid > 0 && !dividendAnalysis.IsFcfSupported) score -= 5m;
                     break;
             }
 
             // -------------------------------------------------------------
-            // 7. GOVERNANCE & MARGIN DEDUCTIONS
+            // 7. GOVERNANCE, MARGIN & ROIC DEDUCTIONS
             // -------------------------------------------------------------
-            // Promoter Share Pledging Penalty
             decimal pledgePercent = (data.PromoterPledgePercent <= 1.0m && data.PromoterPledgePercent > 0m)
                 ? data.PromoterPledgePercent * 100m
                 : data.PromoterPledgePercent;
 
-            if (pledgePercent >= 25.0m)
-            {
-                score -= 15m;
-            }
-            else if (pledgePercent >= 10.0m)
-            {
-                score -= 8m;
-            }
+            if (pledgePercent >= 25.0m) score -= 15m;
+            else if (pledgePercent >= 10.0m) score -= 8m;
 
             if (!data.IsFinancialSector)
             {
                 // Thin Operating Margin Penalty (< 8%)
-                if (opmPercent > 0m && opmPercent < 8.0m)
-                {
-                    score -= 10m;
-                }
+                if (opmPercent > 0m && opmPercent < 8.0m) score -= 10m;
 
                 // Working Capital Stress Check
                 bool hasNetDebt = data.IsCashEstimateReliable ? data.NetCashCr < 0m : data.TotalBorrowingsCr > 0m;
-                if (data.WorkingCapitalCr < 0m && hasNetDebt)
-                {
-                    score -= 8m;
-                }
+                if (data.WorkingCapitalCr < 0m && hasNetDebt) score -= 8m;
 
-                // Low ROE Penalty
-                if (roePercent < 10.0m)
-                {
-                    score -= 12m;
-                }
+                // Low ROE Penalty (< 10%)
+                if (roePercent < 10.0m) score -= 12m;
+
+                // Poor Operational ROIC Penalty (< 8% Cost of Capital Benchmark)
+                if (roicPercent < 8.0m) score -= 8m;
             }
 
-            if (salesGrowth < 0m && hasValidHistory)
-            {
-                score -= 10m;
-            }
+            if (salesGrowth < 0m && hasValidHistory) score -= 5m;
+            if (profitGrowth < 0m && hasValidHistory && hasValidProfitGrowth) score -= 5m;
 
             // -------------------------------------------------------------
             // 8. VALUE TRAP INTERCEPTOR & CAP
             // -------------------------------------------------------------
             bool hasHeavyNetDebt = data.IsCashEstimateReliable ? data.NetCashCr < -300m : data.TotalBorrowingsCr > 300m;
-            bool isCapitalDestroyer = !data.IsFinancialSector && roePercent < 8.0m && salesGrowth < 0.05m;
+            bool isCapitalDestroyer = !data.IsFinancialSector && (roePercent < 8.0m || roicPercent < 5.0m) && salesGrowth < 0.05m;
             bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 8.0m && hasHeavyNetDebt;
-            bool isDeclining = salesGrowth < 0m && hasValidHistory;
+            bool isDeclining = (salesGrowth < 0m || (hasValidProfitGrowth && profitGrowth < 0m)) && hasValidHistory;
             bool isSeverePledge = pledgePercent >= 35.0m;
 
-            // NEW: Catch paper profit value traps where CFO is negative or < 20% of PAT
             bool isPaperProfitTrap = !data.IsFinancialSector
                 && data.NetProfitCr > 0m
                 && (data.CashFromOperationsCr <= 0m || (data.CashFromOperationsCr / data.NetProfitCr) < 0.20m);
 
             bool isValueTrap = roePercent < 5.0m
+                || (!data.IsFinancialSector && roicPercent < 5.0m)
                 || isDeclining
                 || data.NetProfitCr <= 0m
                 || isCapitalDestroyer
                 || isHighDebtCommodity
                 || isSeverePledge
-                || isPaperProfitTrap; // Added condition
+                || isPaperProfitTrap;
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
 

@@ -147,5 +147,21 @@ namespace SoundMoney.Models
         public bool IsCoreInvestmentCompany =>
             IsCoreInvestmentCompanyExplicit ||
             (InvestmentAssetsToTotalAssetsRatio >= 0.70m && InterestIncomeToTotalRevenueRatio < 0.30m);
+
+        /// <summary>
+        /// Calculated Return on Invested Capital (ROIC %)
+        /// NOPAT / (Total Equity + Total Borrowings - Cash & Equivalents)
+        /// </summary>
+        public decimal RoicPercent
+        {
+            get
+            {
+                decimal investedCapital = TotalEquityCapitalCr + TotalBorrowingsCr - CashAndEquivalentsCr;
+                if (investedCapital <= 0m) return 0m;
+
+                decimal nopat = EbitCr * (1m - EffectiveTaxRate);
+                return Math.Round((nopat / investedCapital) * 100m, 2);
+            }
+        }
     }
 }
