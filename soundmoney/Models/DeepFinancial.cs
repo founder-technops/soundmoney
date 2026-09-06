@@ -26,7 +26,6 @@ namespace SoundMoney.Models
         // --- Sector Classifier ---
         public bool IsFinancialSector { get; set; }
 
-
         // --- P&L Metrics (Cr) ---
         public decimal SalesCr { get; set; }
         public decimal ExpenseCr { get; set; }
@@ -55,23 +54,55 @@ namespace SoundMoney.Models
         public decimal CwipCr { get; set; }
         public decimal InvestmentsCr { get; set; }
         public decimal OtherAssetsCr { get; set; }
-        public decimal TotalAssetsCr  => NetFixedAssetsCr + CwipCr + InvestmentsCr + OtherAssetsCr;
+        public decimal TotalAssetsCr => NetFixedAssetsCr + CwipCr + InvestmentsCr + OtherAssetsCr;
 
         // --- Derived Balance Sheet Metrics (Cr) ---
         public decimal TotalEquityCapitalCr => ShareCapitalCr + ReservesCr;
-        public decimal CashAndEquivalentsCr => TotalAssetsCr - (NetFixedAssetsCr + CwipCr + InvestmentsCr + OtherAssetsCr); //wrong calculations - Need to explore
+
+        /// <summary>
+        /// Audited / Derived Cash & Cash Equivalents populated by ScraperService.
+        /// NOTE: Screener.in does not expose a dedicated Cash & Equivalents balance-sheet
+        /// line (it is folded into Other Assets), so this is typically derived by rolling
+        /// forward net cash flows from the earliest scraped year. For companies with a long
+        /// operating history relative to how many years of cash-flow data were scraped
+        /// (see <see cref="CashHistoryYears"/> / <see cref="IsCashEstimateReliable"/>), this
+        /// will understate true cash because it assumes an opening balance of zero.
+        /// </summary>
+        public decimal CashAndEquivalentsCr { get; set; }
+
+        /// <summary>
+        /// Number of years of cash-flow history the CashAndEquivalentsCr roll-forward was
+        /// built from. Populated by ScraperService. 0 if unknown.
+        /// </summary>
+        public int CashHistoryYears { get; set; }
+
+        /// <summary>
+        /// False when the roll-forward has too little history to be trusted as an absolute
+        /// cash balance (e.g. a decades-old company with only ~10 years of scraped cash-flow
+        /// data). Consumers should treat NetCashCr as directional, not exact, when this is
+        /// false, and prefer gross-borrowings-based leverage checks instead.
+        /// </summary>
+        public bool IsCashEstimateReliable { get; set; } = true;
+
         public decimal NetCashCr => CashAndEquivalentsCr - TotalBorrowingsCr;
         public decimal NonCurrentAssetsCr => NetFixedAssetsCr + CwipCr + InvestmentsCr;
         public decimal CurrentAssetsCr => Math.Max(0m, TotalAssetsCr - NonCurrentAssetsCr);
         public decimal WorkingCapitalCr => CurrentAssetsCr - OtherLiabilitiesCr;
-        
+
         // --- Cash Flow Metrics (Cr) ---
         public decimal CashFromOperationsCr { get; set; }
         public decimal CashFromInvestmentCr { get; set; }
         public decimal CashFromFinanceCr { get; set; }
         public decimal FreeCashFlowCr { get; set; }
+        public decimal netCashFlowCr => CashFromOperationsCr + CashFromInvestmentCr + CashFromFinanceCr;
         public decimal GrossCapexCr => CashFromOperationsCr - FreeCashFlowCr;
 
+        /// <summary>
+        /// Quality of Earnings Ratio (CFO / Operating Profit)
+        /// </summary>
+        public decimal CfoToOpRatio => OperatingProfitCr > 0m
+            ? Math.Round(CashFromOperationsCr / OperatingProfitCr, 4)
+            : 0m;
 
         // Computed metrics ensuring whole percentage representation
         public decimal CapitalAdequacyPercent => IsFinancialSector && TotalEquityCapitalCr > 0m && TotalAssetsCr > 0m

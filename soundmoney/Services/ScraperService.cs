@@ -1,4 +1,5 @@
 ﻿using HtmlAgilityPack;
+using Microsoft.Extensions.Logging;
 using SoundMoney.Data;
 using SoundMoney.Models;
 using System.Globalization;
@@ -12,6 +13,11 @@ namespace SoundMoney.Services
 
     public class ScraperService : IScraperService
     {
+        // Screener typically exposes ~10-12 years of P&L/cash-flow history. Below this we
+        // treat the cumulative-cash-flow-derived balance as too short a window to trust as
+        // an absolute figure, especially for companies far older than the scraped window.
+        private const int MinReliableCashHistoryYears = 10;
+
         private readonly HttpClient _httpClient;
         private readonly ILogger<ScraperService> _logger;
 
@@ -55,7 +61,29 @@ namespace SoundMoney.Services
                 };
 
                 var deepFinancial = ExtractDeepFinancial(doc, cleanSymbol);
-                var historicalFinancials = ExtractHistoricalFinancials(doc, deepFinancial, cleanSymbol);
+
+                // Extract Cash & Cash Equivalents time-series (API Schedule Primary, CF Roll-Forward Fallback)
+                var cashTimeSeries = await ExtractCashAndEquivalentsAsync(cleanSymbol, doc, ct);
+
+                // Map cash balance into DeepFinancial latest reporting period
+                if (cashTimeSeries.Count > 0)
+                {
+                    deepFinancial.CashAndEquivalentsCr = cashTimeSeries.Values.LastOrDefault();
+                }
+
+                // Screener's balance sheet has no dedicated Cash & Equivalents line (it's
+                // folded into Other Assets), so the figure above is a roll-forward of net
+                // cash flow starting from an assumed zero balance in the earliest scraped
+                // year. That's a reasonable estimate for a company whose full operating
+                // history fits in the scraped window, but it systematically understates
+                // cash for older companies where the scraped window starts well after
+                // incorporation/IPO. Flag low-confidence years so downstream leverage and
+                // valuation logic can fall back to gross-debt-based checks instead of
+                // trusting NetCashCr outright.
+                deepFinancial.CashHistoryYears = cashTimeSeries.Count;
+                deepFinancial.IsCashEstimateReliable = cashTimeSeries.Count >= MinReliableCashHistoryYears;
+
+                var historicalFinancials = ExtractHistoricalFinancials(doc, deepFinancial, cleanSymbol, cashTimeSeries);
 
                 SectorCategory sectormap = SectorMapper.Map(sector);
                 deepFinancial.IsFinancialSector = sectormap == SectorCategory.Banking || sectormap == SectorCategory.FinancialServices;
@@ -115,6 +143,68 @@ namespace SoundMoney.Services
 
         #endregion
 
+        #region Cash & Schedule Parsing Engine
+
+        public async Task<Dictionary<int, decimal>> ExtractCashAndEquivalentsAsync(
+            string symbol,
+            HtmlDocument companyDoc,
+            CancellationToken ct = default)
+        {
+            // Method 2: Fallback Cash Flow Statement Roll-Forward
+            return DeriveCashFromCashFlowRollForward(companyDoc);
+        }
+
+        private Dictionary<int, decimal> DeriveCashFromCashFlowRollForward(HtmlDocument doc)
+        {
+            var result = new Dictionary<int, decimal>();
+
+            try
+            {
+                var cfSection = doc.DocumentNode.SelectSingleNode("//section[@id='cash-flow']");
+                if (cfSection == null) return result;
+
+                var headerCells = cfSection.SelectNodes(".//thead//th");
+                if (headerCells == null || headerCells.Count <= 1) return result;
+
+                var years = new List<int>();
+                for (int i = 1; i < headerCells.Count; i++)
+                {
+                    years.Add(ExtractYearFromHeader(headerCells[i].InnerText));
+                }
+
+                var ocfDict = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
+                var icfDict = GetRowValuesByColumn(cfSection, "Cash from Investing Activity");
+                var fcfDict = GetRowValuesByColumn(cfSection, "Cash from Financing Activity");
+
+                decimal runningCash = 0m;
+                for (int i = 0; i < years.Count; i++)
+                {
+                    int colIdx = i + 1;
+                    int year = years[i];
+
+                    ocfDict.TryGetValue(colIdx, out decimal ocf);
+                    icfDict.TryGetValue(colIdx, out decimal icf);
+                    fcfDict.TryGetValue(colIdx, out decimal fcf);
+
+                    decimal netCashFlow = ocf + icf + fcf;
+                    runningCash += netCashFlow;
+
+                    if (year > 0)
+                    {
+                        result[year] = runningCash;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error executing Cash Flow Roll-Forward logic.");
+            }
+
+            return result;
+        }
+
+        #endregion
+
         #region Financial Extraction Logic
 
         private DeepFinancial ExtractDeepFinancial(HtmlDocument doc, string symbol)
@@ -143,13 +233,11 @@ namespace SoundMoney.Services
                 }
             }
 
-            // Fallback: If Promoter Pledge wasn't in top ratios, extract from Shareholding Pattern
             if (df.PromoterPledgePercent == 0m)
             {
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromShareholding(doc);
             }
 
-            // Fallback 2: Extract from Shareholding section if Pros & Cons didn't mention it
             if (df.PromoterPledgePercent == 0m)
             {
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
@@ -185,7 +273,6 @@ namespace SoundMoney.Services
                 df.CwipCr = GetLastCellRowValue(bsSection, "CWIP");
                 df.InvestmentsCr = GetLastCellRowValue(bsSection, "Investments");
                 df.OtherAssetsCr = GetLastCellRowValue(bsSection, "Other Assets");
-                
             }
 
             // D. Cash Flow Section
@@ -201,15 +288,11 @@ namespace SoundMoney.Services
             return df;
         }
 
-        /// <summary>
-        /// Helper to extract Promoter Pledging from the Shareholding Pattern table if top ratios do not contain it.
-        /// </summary>
         private decimal ExtractPromoterPledgeFromShareholding(HtmlDocument doc)
         {
             var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
             if (shareholdingSection == null) return 0m;
 
-            // Search for rows containing "Pledged" or "Pledged percentage" inside shareholding tables
             var pledgeRow = shareholdingSection.SelectSingleNode(".//tr[td[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'pledged')]]");
             var lastCell = pledgeRow?.SelectNodes("td")?.LastOrDefault();
 
@@ -224,23 +307,19 @@ namespace SoundMoney.Services
 
         private decimal ExtractPromoterPledgeFromProsAndCons(HtmlDocument doc)
         {
-            // Find the Cons container
             var consNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class, 'cons')]");
             if (consNode == null) return 0m;
 
-            // Look through all list items under Cons
             var bulletNodes = consNode.SelectNodes(".//ul/li");
             if (bulletNodes == null) return 0m;
 
             foreach (var li in bulletNodes)
             {
                 string text = li.InnerText.Trim();
-
-                // Screener typically writes: "Promoter pledge is 12.5%" or "Company has pledged 12.5% of its shares"
                 if (text.Contains("pledge", StringComparison.OrdinalIgnoreCase))
                 {
                     var match = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(\.\d+)?)%");
-                    if (match.Success && decimal.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal pledgedPct))
+                    if (match.Success && decimal.TryParse(match.Groups[1].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal pledgedPct))
                     {
                         return pledgedPct;
                     }
@@ -250,7 +329,11 @@ namespace SoundMoney.Services
             return 0m;
         }
 
-        private List<HistoricalFinancial> ExtractHistoricalFinancials(HtmlDocument doc, DeepFinancial deepFinancial, string symbol)
+        private List<HistoricalFinancial> ExtractHistoricalFinancials(
+            HtmlDocument doc,
+            DeepFinancial deepFinancial,
+            string symbol,
+            Dictionary<int, decimal> cashTimeSeries)
         {
             var historyList = new List<HistoricalFinancial>();
 
@@ -285,25 +368,31 @@ namespace SoundMoney.Services
             }
 
             var revenueDict = GetRowValuesByColumn(pnlSection, "Sales");
+            var opDict = GetRowValuesByColumn(pnlSection, "Operating Profit");
             var netProfitDict = GetRowValuesByColumn(pnlSection, "Net Profit");
             var ocfDict = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
             var fcfDict = GetRowValuesByColumn(cfSection, "Free Cash Flow");
             var equityCapitalDict = GetRowValuesByColumn(balanceSheetSection, "Equity Capital");
-            var DividendPayoutPercentDict = GetRowValuesByColumn(pnlSection, "Dividend Payout %");
+            var dividendPayoutPercentDict = GetRowValuesByColumn(pnlSection, "Dividend Payout %");
 
             foreach (var header in yearHeaderList)
             {
                 revenueDict.TryGetValue(header.ColumnIndex, out decimal rev);
+                opDict.TryGetValue(header.ColumnIndex, out decimal op);
                 netProfitDict.TryGetValue(header.ColumnIndex, out decimal netProfit);
                 ocfDict.TryGetValue(header.ColumnIndex, out decimal ocf);
                 fcfDict.TryGetValue(header.ColumnIndex, out decimal fcf);
                 equityCapitalDict.TryGetValue(header.ColumnIndex, out decimal equityCap);
-                DividendPayoutPercentDict.TryGetValue(header.ColumnIndex, out decimal dividendPayoutPer);
+                dividendPayoutPercentDict.TryGetValue(header.ColumnIndex, out decimal dividendPayoutPer);
+
+                cashTimeSeries.TryGetValue(header.Year, out decimal cashAndEquiv);
+
                 historyList.Add(new HistoricalFinancial
                 {
                     Symbol = symbol,
                     Year = header.Year,
                     HistoricalRevenueCr = rev,
+                    HistoricalOperatingProfitCr = op,
                     HistoricalNetProfitCr = netProfit,
                     HistoricalOcfCr = ocf,
                     HistoricalFcfCr = fcf,
@@ -311,7 +400,8 @@ namespace SoundMoney.Services
                     EquityCapitalCr = equityCap,
                     DividendPayoutPercent = dividendPayoutPer,
                     HistoricalSharesCr = deepFinancial.FaceValue > 0m ? equityCap / deepFinancial.FaceValue : 0m,
-                    HistoricalPatCr = netProfit
+                    HistoricalPatCr = netProfit,
+                    HistoricalCashAndEquivalentsCr = cashAndEquiv
                 });
             }
 
@@ -350,7 +440,7 @@ namespace SoundMoney.Services
             {
                 for (int colIndex = 1; colIndex < cells.Count; colIndex++)
                 {
-                    string text = cells[colIndex].InnerText.Trim().Replace(",", "").Replace("%","");
+                    string text = cells[colIndex].InnerText.Trim().Replace(",", "").Replace("%", "");
                     result[colIndex] = ParseDecimal(text);
                 }
             }

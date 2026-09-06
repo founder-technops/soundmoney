@@ -80,15 +80,23 @@ namespace SoundMoney.Services
             // -------------------------------------------------------------
             if (!data.IsFinancialSector)
             {
-                if (data.NetCashCr >= 0m)
+                // NetCashCr relies on a cash balance rolled forward from scraped cash-flow
+                // history (Screener has no dedicated cash line item). For companies whose
+                // scraped history is short relative to their actual age, that roll-forward
+                // understates true cash and overstates leverage. When flagged unreliable,
+                // score leverage off gross borrowings against EBIT instead, so an old,
+                // genuinely cash-rich company isn't penalized for a data-derivation
+                // artifact rather than real balance-sheet risk.
+                decimal leverageCr = data.IsCashEstimateReliable ? -data.NetCashCr : data.TotalBorrowingsCr;
+
+                if (leverageCr <= 0m)
                 {
                     // Require capital efficiency to grant full solvency points
                     score += (roePercent >= 12.0m) ? 20m : 10m;
                 }
                 else if (data.EbitCr > 0m)
                 {
-                    decimal netDebt = Math.Abs(data.NetCashCr);
-                    decimal debtToEbit = netDebt / data.EbitCr;
+                    decimal debtToEbit = leverageCr / data.EbitCr;
 
                     if (debtToEbit <= 1.5m) score += 15m;
                     else if (debtToEbit <= 3.0m) score += 8m;
@@ -199,7 +207,8 @@ namespace SoundMoney.Services
                 }
 
                 // Working Capital Stress Check
-                if (data.WorkingCapitalCr < 0m && data.NetCashCr < 0m)
+                bool hasNetDebt = data.IsCashEstimateReliable ? data.NetCashCr < 0m : data.TotalBorrowingsCr > 0m;
+                if (data.WorkingCapitalCr < 0m && hasNetDebt)
                 {
                     score -= 8m;
                 }
@@ -219,8 +228,9 @@ namespace SoundMoney.Services
             // -------------------------------------------------------------
             // 8. VALUE TRAP INTERCEPTOR & CAP
             // -------------------------------------------------------------
+            bool hasHeavyNetDebt = data.IsCashEstimateReliable ? data.NetCashCr < -300m : data.TotalBorrowingsCr > 300m;
             bool isCapitalDestroyer = !data.IsFinancialSector && roePercent < 8.0m && salesGrowth < 0.05m;
-            bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 8.0m && data.NetCashCr < -300m;
+            bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 8.0m && hasHeavyNetDebt;
             bool isDeclining = salesGrowth < 0m && hasValidHistory;
             bool isSeverePledge = pledgePercent >= 35.0m;
 

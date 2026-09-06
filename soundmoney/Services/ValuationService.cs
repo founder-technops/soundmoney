@@ -146,12 +146,24 @@ namespace SoundMoney.Services
         #region Dynamic Utilities & Target Multiples
 
         /// <summary>
+        /// Net debt for EV-to-equity bridges. Falls back to gross borrowings when the
+        /// scraped cash-flow history is too short to trust the roll-forward cash balance
+        /// (see DeepFinancial.IsCashEstimateReliable) — treating an understated cash figure
+        /// as a full offset to debt would overstate net debt and understate equity value for
+        /// long-lived companies whose scraped window starts well after incorporation.
+        /// </summary>
+        private static decimal GetNetDebtCr(DeepFinancial data) =>
+            data.IsCashEstimateReliable
+                ? data.TotalBorrowingsCr - data.CashAndEquivalentsCr
+                : data.TotalBorrowingsCr;
+
+        /// <summary>
         /// Calculates Weighted Average Cost of Capital (WACC) dynamically.
         /// WACC = (E/V * Cost of Equity) + (D/V * Cost of Debt * (1 - Tax Rate))
         /// </summary>
-        private static decimal CalculateWacc(DeepFinancial data, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m, decimal taxRate = 0.25m)
+        private static decimal CalculateWacc(DeepFinancial data, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m)
         {
-            decimal equityValueCr = data.CurrentPrice * data.TotalSharesCr;
+            decimal equityValueCr = data.MarketCapCr;
             decimal debtValueCr = Math.Max(0m, data.TotalBorrowingsCr);
             decimal totalCapitalCr = equityValueCr + debtValueCr;
 
@@ -161,11 +173,11 @@ namespace SoundMoney.Services
             decimal beta = data.Beta > 0 ? Math.Clamp(data.Beta, 0.5m, 2.5m) : 1.0m;
             decimal costOfEquity = riskFreeRate + (beta * equityRiskPremium);
 
-            decimal costOfDebt = 0.08m;
-            if (debtValueCr > 0 && data.InterestExpenseCr > 0)
-            {
-                costOfDebt = Math.Clamp(data.InterestExpenseCr / debtValueCr, 0.04m, 0.18m);
-            }
+            // FIX: use DeepFinancial's own CostOfDebt/EffectiveTaxRate rather than
+            // reimplementing near-duplicate logic here — the two had drifted apart
+            // (0.04-0.18 clamp here vs. 0.03-0.18 on the model).
+            decimal costOfDebt = data.CostOfDebt;
+            decimal taxRate = data.EffectiveTaxRate;
 
             decimal weightEquity = equityValueCr / totalCapitalCr;
             decimal weightDebt = debtValueCr / totalCapitalCr;
@@ -266,7 +278,7 @@ namespace SoundMoney.Services
             decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 5);
 
             decimal enterpriseValueCr = cumulativePv + pvTerminal;
-            decimal netDebtCr = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
+            decimal netDebtCr = GetNetDebtCr(data);
             decimal equityValueCr = enterpriseValueCr - netDebtCr;
 
             return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
@@ -342,7 +354,7 @@ namespace SoundMoney.Services
             decimal terminalValue = projectedEbit * evEbitMultiple;
             decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 5);
 
-            decimal netDebtCr = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
+            decimal netDebtCr = GetNetDebtCr(data);
             decimal equityValueCr = (cumulativePv + pvTerminal) - netDebtCr;
 
             return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
@@ -434,7 +446,17 @@ namespace SoundMoney.Services
 
             if (ownerEarningsCr <= 0) return 0m;
 
-            return Math.Round((ownerEarningsCr * 12m) / data.TotalSharesCr, 2);
+            // FIX: Capitalize owner earnings using the same WACC/terminal-growth logic as
+            // the other cash-flow methods (Gordon-style: 1 / (r - g)), instead of a flat,
+            // unexplained 12x multiple. This keeps the "highest quality" bucket
+            // (AssetLightMoatRule routes here for ROE >= 20%) consistent with the discount
+            // rate and growth assumptions used everywhere else in the model.
+            decimal costOfEquity = CalculateWacc(data);
+            decimal terminalGrowth = Math.Min(0.04m, costOfEquity - 0.02m);
+            decimal capRateDenominator = Math.Max(0.02m, costOfEquity - terminalGrowth);
+            decimal capMultiple = 1m / capRateDenominator;
+
+            return Math.Round((ownerEarningsCr * capMultiple) / data.TotalSharesCr, 2);
         }
 
         private static decimal CalculateNormalizedPe(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
@@ -470,7 +492,7 @@ namespace SoundMoney.Services
 
             decimal targetEvSales = 2.5m;
             decimal revenueCr = data.SalesCr;
-            decimal netDebtCr = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
+            decimal netDebtCr = GetNetDebtCr(data);
 
             decimal targetEquityValueCr = (revenueCr * targetEvSales) - netDebtCr;
             return Math.Max(0m, Math.Round(targetEquityValueCr / data.TotalSharesCr, 2));
@@ -491,7 +513,7 @@ namespace SoundMoney.Services
 
             decimal estimatedEbitdaCr = data.EbitCr * 1.2m;
             decimal targetEvEbitda = data.ReportedRoePercent >= 18.0m ? 12.0m : 8.5m;
-            decimal netDebtCr = data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
+            decimal netDebtCr = GetNetDebtCr(data);
 
             decimal targetEquityValueCr = (estimatedEbitdaCr * targetEvEbitda) - netDebtCr;
             return Math.Max(0m, Math.Round(targetEquityValueCr / data.TotalSharesCr, 2));
