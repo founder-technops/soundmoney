@@ -4,7 +4,7 @@ public class ScreenerResultRow
 {
     public string Symbol { get; set; } = string.Empty;
     public string CompanyName { get; set; } = string.Empty;
-    public SectorCategory Sector { get; set; }
+    public MacroSector Sector { get; set; }
     public decimal CurrentPrice { get; set; }
     public decimal IntrinsicValue { get; set; }
     public decimal MarginOfSafetyPercent { get; set; }

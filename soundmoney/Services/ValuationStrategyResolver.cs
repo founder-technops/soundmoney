@@ -16,38 +16,21 @@ namespace SoundMoney.Services
         public decimal FcfCr { get; set; }
         public bool IsCashPredictable { get; set; }
         public bool IsCyclical { get; set; }
-        public bool IsInfrastructureUtility { get; set; } // Flagged to prevent incorrect cyclical routing
+        public bool IsInfrastructureUtility { get; set; }
 
-        /// <summary>
-        /// True when there's enough positive cash-flow/EBIT signal for an FCFF-style DCF
-        /// (Exit Multiple DCF, Standard/Two-Stage DCF) to actually compute a non-zero value.
-        /// A company can be genuinely capital-intensive/high-leverage (matching
-        /// HighLeverageCapitalIntensiveRule) while sitting at a cyclical trough with
-        /// negative free cash flow — in that case a DCF-family method would just return 0,
-        /// so rules should prefer a multiple-based method instead.
-        /// </summary>
         public bool CanComputeCashFlowDcf => FcfCr > 0m && Data.EbitCr > 0m;
     }
 
-    /// <summary>
-    /// Named priority tiers for IValuationRule.Priority. Lower runs first; the resolver picks
-    /// the first matching rule. Keeping these named (rather than inline magic numbers) makes
-    /// the intended ordering — and where a new rule should slot in — explicit at a glance.
-    /// </summary>
     internal static class RulePriority
     {
         public const int FinancialSector = 10;
         public const int ReinvestingGrowth = 20;
         public const int DistressTurnaround = 30;
-
-        // Must run before Cyclical: a capital-intensive/high-leverage utility or
-        // infrastructure company (e.g. a renewables build-out) can also show the earnings
-        // volatility that CyclicalEarningsRule looks for, but its debt-funded-growth profile
-        // needs an enterprise-value method, not a cycle-normalized P/E.
         public const int HighLeverageCapitalIntensive = 40;
         public const int CyclicalEarnings = 50;
         public const int MatureHighPayout = 60;
         public const int AssetLightMoat = 70;
+        public const int PoorCashConversion = 85; // Added priority tier
         public const int DefaultFallback = 999;
     }
 
@@ -62,13 +45,15 @@ namespace SoundMoney.Services
     {
         private static readonly List<IValuationRule> Rules = new()
         {
+            new CoreInvestmentCompanyRule(), // Added Priority 8 Rule
             new FinancialSectorRule(),
             new ReinvestingGrowthRule(),
             new DistressTurnaroundRule(),
-            new HighLeverageCapitalIntensiveRule(), // Priority boosted above Cyclical Rule for Infrastructure/Utilities
+            new HighLeverageCapitalIntensiveRule(),
             new CyclicalEarningsRule(),
             new MatureHighPayoutRule(),
             new AssetLightMoatRule(),
+            new PoorCashConversionRule(),
             new DefaultFallbackRule()
         };
 
@@ -88,11 +73,6 @@ namespace SoundMoney.Services
         {
             var historyList = historicals?.OrderBy(h => h.Year).ToList() ?? new List<HistoricalFinancial>();
 
-            // When the scraped cash-flow history is too short to trust the roll-forward cash
-            // balance (see DeepFinancial.IsCashEstimateReliable), net debt built from it can
-            // be overstated for long-lived, cash-rich companies. Fall back to gross
-            // borrowings against EBIT in that case rather than compounding an unreliable
-            // cash figure into the leverage read.
             decimal actualNetDebt = data.IsCashEstimateReliable
                 ? data.TotalBorrowingsCr - data.CashAndEquivalentsCr
                 : data.TotalBorrowingsCr;
@@ -106,15 +86,28 @@ namespace SoundMoney.Services
             int negativeOcfYears = historyList.Count(h => h.HistoricalOcfCr <= 0);
             if (negativeOcfYears > 1) cashPredictable = false;
 
-            // FIX: Identify infrastructure/utility companies with high debt + heavy ongoing CapEx (e.g., ADANIGREEN)
             bool isInfraUtility = (debtToEbit >= 3.5m || capexToOcf >= 0.75m) && !data.IsFinancialSector;
 
+            // Detect true cyclicality via trend reversals, not secular growth
             bool cyclical = false;
             if (historyList.Count >= 3 && !isInfraUtility)
             {
+                int trendReversals = 0;
+                for (int i = 1; i < historyList.Count - 1; i++)
+                {
+                    decimal prevChange = historyList[i].HistoricalNetProfitCr - historyList[i - 1].HistoricalNetProfitCr;
+                    decimal nextChange = historyList[i + 1].HistoricalNetProfitCr - historyList[i].HistoricalNetProfitCr;
+
+                    if ((prevChange > 0m && nextChange < 0m) || (prevChange < 0m && nextChange > 0m))
+                    {
+                        trendReversals++;
+                    }
+                }
+
                 decimal maxProfit = historyList.Max(h => h.HistoricalNetProfitCr);
                 decimal minProfit = historyList.Min(h => h.HistoricalNetProfitCr);
-                if (minProfit <= 0 || (maxProfit > 0 && (maxProfit - minProfit) / maxProfit > 0.35m))
+
+                if (minProfit <= 0m || trendReversals >= 2)
                 {
                     cyclical = true;
                 }
@@ -165,10 +158,6 @@ namespace SoundMoney.Services
     public class DistressTurnaroundRule : IValuationRule
     {
         public int Priority => RulePriority.DistressTurnaround;
-        // Only route to an asset-based floor when net income is negative. A negative book
-        // value alone (common for profitable companies that have funded buybacks with debt)
-        // should not force a NAV/P-B valuation, since both those methods return 0 whenever
-        // BookValuePerShare <= 0 — that would zero out a genuinely profitable business.
         public bool IsMatch(EvaluationContext ctx) => ctx.Data.NetProfitCr <= 0;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
@@ -196,11 +185,6 @@ namespace SoundMoney.Services
         public bool IsMatch(EvaluationContext ctx) => ctx.DebtToEbit >= 2.5m || ctx.CapexToOcf >= 0.60m || ctx.IsInfrastructureUtility;
         public ValuationMethodology Result(EvaluationContext ctx)
         {
-            // FIX: the leverage/capex signals that route a company here say nothing about
-            // whether it currently has usable free cash flow — a capital-intensive company
-            // can be genuinely mid-build (or at a cyclical trough) with negative FCF. Picking
-            // "Exit Multiple DCF" unconditionally in that case just returns 0 downstream.
-            // Degrade gracefully to a multiple that's still computable.
             if (ctx.CanComputeCashFlowDcf)
             {
                 return new ValuationMethodology
@@ -217,7 +201,7 @@ namespace SoundMoney.Services
                 {
                     PrimaryMethod = "EV/EBITDA Relative Multiple",
                     SecondaryMethod = "Price-to-Book (P/B)",
-                    Rationale = "Capital-intensive/high-leverage profile with currently negative free cash flow (build-out phase or cyclical trough); using an EBITDA-based multiple instead of a cash-flow DCF that would return no value."
+                    Rationale = "Capital-intensive/high-leverage profile with currently negative free cash flow; using an EBITDA-based multiple instead of a cash-flow DCF."
                 };
             }
 
@@ -251,6 +235,37 @@ namespace SoundMoney.Services
             PrimaryMethod = ctx.Data.ReportedRoePercent >= 20m ? "Buffett Owner Earnings Model" : "2-Stage FCFE DCF",
             SecondaryMethod = "Price-to-Earnings-to-Growth (PEG)",
             Rationale = "Low debt, low CapEx, and high cash flow predictability; ideal for equity-level discounted cash flow models."
+        };
+    }
+
+    public class PoorCashConversionRule : IValuationRule
+    {
+        public int Priority => RulePriority.PoorCashConversion;
+        public bool IsMatch(EvaluationContext ctx) =>
+            !ctx.Data.IsFinancialSector
+            && ctx.Data.NetProfitCr > 0m
+            && ctx.OcfToNetProfit < 0.30m;
+
+        public ValuationMethodology Result(EvaluationContext ctx) => new()
+        {
+            PrimaryMethod = "Net Asset Value (NAV)",
+            SecondaryMethod = "Price-to-Book (P/B)",
+            Rationale = "Reported earnings lack operating cash support (CFO/PAT < 0.30). Overriding relative multiples with asset-based liquidation metrics."
+        };
+    }
+
+    public class CoreInvestmentCompanyRule : IValuationRule
+    {
+        public int Priority => 8; // Priority 8 runs BEFORE generic FinancialSectorRule (Priority 10)
+
+        public bool IsMatch(EvaluationContext ctx) =>
+            ctx.Data.IsFinancialSector && ctx.Data.IsCoreInvestmentCompany;
+
+        public ValuationMethodology Result(EvaluationContext ctx) => new()
+        {
+            PrimaryMethod = "Adjusted Net Asset Value (SOTP with HoldCo Discount)",
+            SecondaryMethod = "Dividend Discount Model (Pass-Through Yield)",
+            Rationale = "Core Investment / Holding Company detected: Assets consist predominantly of passive equity stakes in group entities. Applying standard 50% Holding Company discount to NAV."
         };
     }
 

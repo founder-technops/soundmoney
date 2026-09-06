@@ -234,16 +234,22 @@ namespace SoundMoney.Services
             bool isDeclining = salesGrowth < 0m && hasValidHistory;
             bool isSeverePledge = pledgePercent >= 35.0m;
 
+            // NEW: Catch paper profit value traps where CFO is negative or < 20% of PAT
+            bool isPaperProfitTrap = !data.IsFinancialSector
+                && data.NetProfitCr > 0m
+                && (data.CashFromOperationsCr <= 0m || (data.CashFromOperationsCr / data.NetProfitCr) < 0.20m);
+
             bool isValueTrap = roePercent < 5.0m
                 || isDeclining
                 || data.NetProfitCr <= 0m
                 || isCapitalDestroyer
                 || isHighDebtCommodity
-                || isSeverePledge;
+                || isSeverePledge
+                || isPaperProfitTrap; // Added condition
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
 
-            // Hard Cap at 40 for Value Traps / Governance Risk
+            // Hard Cap at 40 for Value Traps / Governance Risk / Paper Profits
             return isValueTrap ? Math.Min(finalScore, 40) : finalScore;
         }
     }

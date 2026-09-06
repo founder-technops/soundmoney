@@ -285,7 +285,7 @@ Base your data on the most recent available information. Return ONLY valid JSON,
 
             var result = JsonSerializer.Deserialize<StockValuation>(jsonString);
            
-            result.Sector = SectorMapper.Map(result.Sector).ToString();
+            result.Sector = SectorClassifier.GetMacroSector(result.Sector).ToString();
             
             result.MarginOfSafety = result.IntrinsicValue > 0 ? Math.Round((result.IntrinsicValue - result.CurrentPrice) / result.IntrinsicValue * 100m, 2) : -100m;
             result.Verdict = result.MarginOfSafety >= 1 ? "Undervalued"

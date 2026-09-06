@@ -42,8 +42,8 @@ namespace SoundMoney.Models
         public decimal DividendPayoutPercent { get; set; }
 
         // --- Derived P&L Metrics (Cr) ---
-        public decimal EbitCr => ((OperatingProfitCr + OtherIncomeCr + IntrestIncomeCr) - (InterestExpenseCr + DepreciationCr));
-
+        public decimal EbitCr => (OperatingProfitCr + OtherIncomeCr) - DepreciationCr;
+        public decimal EbitdaCr => OperatingProfitCr + OtherIncomeCr;
         // --- Balance Sheet Metrics (Cr) ---
         public decimal ShareCapitalCr { get; set; }
         public decimal ReservesCr { get; set; }
@@ -121,5 +121,31 @@ namespace SoundMoney.Models
         public decimal CostOfDebt => TotalBorrowingsCr > 0m && InterestExpenseCr > 0m
             ? Math.Clamp(InterestExpenseCr / TotalBorrowingsCr, 0.03m, 0.18m)
             : 0.08m;
+
+        /// <summary>
+        /// Explicit flag set via metadata or sector classification tags.
+        /// </summary>
+        public bool IsCoreInvestmentCompanyExplicit { get; set; }
+
+         
+        /// <summary>
+        /// Proportion of total balance sheet assets held in equity and investment holdings.
+        /// </summary>
+        public decimal InvestmentAssetsToTotalAssetsRatio =>
+            TotalAssetsCr > 0m ? Math.Clamp(InvestmentsCr / TotalAssetsCr, 0m, 1m) : 0m;
+
+        /// <summary>
+        /// Proportion of total revenue generated via interest income (separates operating lenders from passive holding vehicles).
+        /// </summary>
+        public decimal InterestIncomeToTotalRevenueRatio =>
+            SalesCr > 0m ? Math.Clamp(IntrestIncomeCr / SalesCr, 0m, 1m) : 0m;
+
+        /// <summary>
+        /// Identifies whether the entity operates as a Core Investment Company (CIC) or Holding Company
+        /// using either explicit regulatory tags or balance sheet/revenue structure thresholds.
+        /// </summary>
+        public bool IsCoreInvestmentCompany =>
+            IsCoreInvestmentCompanyExplicit ||
+            (InvestmentAssetsToTotalAssetsRatio >= 0.70m && InterestIncomeToTotalRevenueRatio < 0.30m);
     }
 }

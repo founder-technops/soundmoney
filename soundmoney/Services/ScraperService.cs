@@ -52,6 +52,7 @@ namespace SoundMoney.Services
 
                 var companyName = ExtractCompanyName(doc, cleanSymbol);
                 var sector = ExtractSector(doc);
+                var sectorCategory = SectorClassifier.GetMacroSector(sector);
 
                 var stockValuation = new StockValuation
                 {
@@ -59,8 +60,13 @@ namespace SoundMoney.Services
                     CompanyName = companyName,
                     Sector = sector,
                 };
-
+                
                 var deepFinancial = ExtractDeepFinancial(doc, cleanSymbol);
+
+                deepFinancial.IsFinancialSector = sectorCategory == MacroSector.FinancialServices;
+                deepFinancial.IsCoreInvestmentCompanyExplicit = sectorCategory == MacroSector.FinancialServices
+                    && (sector.Equals("Holding", StringComparison.OrdinalIgnoreCase) ||
+                        sector.Equals("Investment", StringComparison.OrdinalIgnoreCase));
 
                 // Extract Cash & Cash Equivalents time-series (API Schedule Primary, CF Roll-Forward Fallback)
                 var cashTimeSeries = await ExtractCashAndEquivalentsAsync(cleanSymbol, doc, ct);
@@ -84,9 +90,6 @@ namespace SoundMoney.Services
                 deepFinancial.IsCashEstimateReliable = cashTimeSeries.Count >= MinReliableCashHistoryYears;
 
                 var historicalFinancials = ExtractHistoricalFinancials(doc, deepFinancial, cleanSymbol, cashTimeSeries);
-
-                SectorCategory sectormap = SectorMapper.Map(sector);
-                deepFinancial.IsFinancialSector = sectormap == SectorCategory.Banking || sectormap == SectorCategory.FinancialServices;
 
                 _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, historicalFinancials.Count);
                 return (stockValuation, deepFinancial, historicalFinancials);

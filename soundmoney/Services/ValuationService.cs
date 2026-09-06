@@ -86,7 +86,6 @@ namespace SoundMoney.Services
                 _ => "UNSOUND"
             };
 
-            // FIX 1: Correct parameter order for DividendEvaluator.Evaluate call
             DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(deepData, historicalData);
 
             var result = new StockValuation
@@ -129,6 +128,7 @@ namespace SoundMoney.Services
                 "EV/EBITDA Relative Multiple" => CalculateEvEbitdaMultiple(data),
 
                 "Dividend Discount Model (DDM)" => CalculateDdm(data),
+                "Dividend Discount Model (Pass-Through Yield)" => CalculateDdmPassThroughYield(data),
                 "Gordon Growth Model" or "Gordon Growth DDM" => CalculateGordonGrowthDdm(data),
 
                 "Buffett Owner Earnings Model" => CalculateOwnerEarnings(data, historicals),
@@ -137,6 +137,7 @@ namespace SoundMoney.Services
 
                 "Price-to-Earnings (P/E) Multiple" => CalculatePriceToEarnings(data),
                 "Discounted Cash Flow (DCF)" or "Standard DCF" => CalculateStandardDcf(data, historicals),
+                "Adjusted Net Asset Value (SOTP with HoldCo Discount)" => CalculateHoldingCompanyValue(data),
                 _ => CalculateStandardDcf(data, historicals)
             };
         }
@@ -145,37 +146,22 @@ namespace SoundMoney.Services
 
         #region Dynamic Utilities & Target Multiples
 
-        /// <summary>
-        /// Net debt for EV-to-equity bridges. Falls back to gross borrowings when the
-        /// scraped cash-flow history is too short to trust the roll-forward cash balance
-        /// (see DeepFinancial.IsCashEstimateReliable) — treating an understated cash figure
-        /// as a full offset to debt would overstate net debt and understate equity value for
-        /// long-lived companies whose scraped window starts well after incorporation.
-        /// </summary>
         private static decimal GetNetDebtCr(DeepFinancial data) =>
             data.IsCashEstimateReliable
                 ? data.TotalBorrowingsCr - data.CashAndEquivalentsCr
                 : data.TotalBorrowingsCr;
 
-        /// <summary>
-        /// Calculates Weighted Average Cost of Capital (WACC) dynamically.
-        /// WACC = (E/V * Cost of Equity) + (D/V * Cost of Debt * (1 - Tax Rate))
-        /// </summary>
         private static decimal CalculateWacc(DeepFinancial data, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m)
         {
             decimal equityValueCr = data.MarketCapCr;
             decimal debtValueCr = Math.Max(0m, data.TotalBorrowingsCr);
             decimal totalCapitalCr = equityValueCr + debtValueCr;
 
-            // Guardrail check against 0 capital base
             if (totalCapitalCr <= 0m) return 0.11m;
 
             decimal beta = data.Beta > 0 ? Math.Clamp(data.Beta, 0.5m, 2.5m) : 1.0m;
             decimal costOfEquity = riskFreeRate + (beta * equityRiskPremium);
 
-            // FIX: use DeepFinancial's own CostOfDebt/EffectiveTaxRate rather than
-            // reimplementing near-duplicate logic here — the two had drifted apart
-            // (0.04-0.18 clamp here vs. 0.03-0.18 on the model).
             decimal costOfDebt = data.CostOfDebt;
             decimal taxRate = data.EffectiveTaxRate;
 
@@ -186,9 +172,6 @@ namespace SoundMoney.Services
             return Math.Clamp(wacc, 0.085m, 0.18m);
         }
 
-        /// <summary>
-        /// Dynamically scales target P/E multiple based on business quality (ROE).
-        /// </summary>
         private static decimal ResolveDynamicTargetPe(DeepFinancial data)
         {
             decimal basePe = 15.0m;
@@ -295,21 +278,19 @@ namespace SoundMoney.Services
             if (fcfCr <= 0) return 0m;
 
             decimal stage1Growth = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.10m);
-            decimal stage2Growth = stage1Growth * 0.5m; // Decay stage
+            decimal stage2Growth = stage1Growth * 0.5m;
             decimal discountRate = CalculateWacc(data);
             decimal terminalRate = Math.Min(0.03m, stage2Growth);
 
             decimal cumulativePv = 0m;
             decimal projectedFcf = fcfCr;
 
-            // Stage 1 (Years 1-5)
             for (int yr = 1; yr <= 5; yr++)
             {
                 projectedFcf *= (1m + stage1Growth);
                 cumulativePv += projectedFcf / (decimal)Math.Pow((double)(1m + discountRate), yr);
             }
 
-            // Stage 2 (Years 6-10)
             for (int yr = 6; yr <= 10; yr++)
             {
                 projectedFcf *= (1m + stage2Growth);
@@ -326,56 +307,71 @@ namespace SoundMoney.Services
 
         private static decimal CalculateExitMultipleDcf(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
         {
-            if (data.TotalSharesCr <= 0) return 0m;
+            if (data.TotalSharesCr <= 0m || data.EbitCr <= 0m) return 0m;
 
-            decimal fcfCr = data.FreeCashFlowCr != 0
-                ? data.FreeCashFlowCr
-                : (data.CashFromOperationsCr - data.GrossCapexCr);
+            decimal taxRate = data.EffectiveTaxRate;
+            // Unlevered Operating Cash Flow (FCFF approximation)
+            decimal ebitAfterTax = data.EbitCr * (1m - taxRate);
+            decimal fcffCr = ebitAfterTax + data.DepreciationCr - data.GrossCapexCr;
 
-            if (fcfCr <= 0 || data.EbitCr <= 0) return 0m;
+            if (fcffCr <= 0m) return 0m;
 
-            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.10m);
-            decimal discountRate = CalculateWacc(data);
-
-            // FIX: Dynamically adjust EV/EBIT Multiple based on return metrics
-            decimal evEbitMultiple = data.ReportedRoePercent >= 18.0m ? 18.0m : 12.0m;
+            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.08m);
+            decimal wacc = CalculateWacc(data);
+            decimal evEbitdaMultiple = data.ReportedRoePercent >= 18.0m ? 14.0m : 10.0m;
 
             decimal cumulativePv = 0m;
-            decimal projectedFcf = fcfCr;
-            decimal projectedEbit = data.EbitCr;
+            decimal projectedFcff = fcffCr;
+            decimal projectedEbitda = data.EbitdaCr;
 
             for (int yr = 1; yr <= 5; yr++)
             {
-                projectedFcf *= (1m + growthRate);
-                projectedEbit *= (1m + growthRate);
-                cumulativePv += projectedFcf / (decimal)Math.Pow((double)(1m + discountRate), yr);
+                projectedFcff *= (1m + growthRate);
+                projectedEbitda *= (1m + growthRate);
+                cumulativePv += projectedFcff / (decimal)Math.Pow((double)(1m + wacc), yr);
             }
 
-            decimal terminalValue = projectedEbit * evEbitMultiple;
-            decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 5);
+            decimal terminalEv = projectedEbitda * evEbitdaMultiple;
+            decimal pvTerminal = terminalEv / (decimal)Math.Pow((double)(1m + wacc), 5);
 
+            decimal enterpriseValueCr = cumulativePv + pvTerminal;
             decimal netDebtCr = GetNetDebtCr(data);
-            decimal equityValueCr = (cumulativePv + pvTerminal) - netDebtCr;
+            decimal equityValueCr = enterpriseValueCr - netDebtCr;
 
             return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
         }
 
         private static decimal CalculateExcessReturns(DeepFinancial data)
         {
-            if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
+            if (data.BookValuePerShare <= 0m || data.ReportedRoePercent <= 0m) return 0m;
 
-            // Cost of Equity via WACC/CAPM principle
             decimal costOfEquity = CalculateWacc(data);
-            const decimal terminalGrowth = 0.04m;
-            decimal roeDecimal = data.ReportedRoePercent / 100m;
+            decimal roe = data.ReportedRoePercent / 100m;
 
-            if (roeDecimal <= costOfEquity) return Math.Round(data.BookValuePerShare, 2);
+            if (roe <= costOfEquity) return Math.Round(data.BookValuePerShare, 2);
 
-            decimal denominator = Math.Max(0.005m, costOfEquity - terminalGrowth);
-            decimal excessReturnRate = roeDecimal - costOfEquity;
-            decimal excessValue = (data.BookValuePerShare * excessReturnRate) / denominator;
+            decimal payoutRatio = Math.Clamp(data.DividendPayoutPercent / 100m, 0m, 0.80m);
+            decimal retentionRatio = 1m - payoutRatio;
 
-            return Math.Round(data.BookValuePerShare + excessValue, 2);
+            decimal currentBookValue = data.BookValuePerShare;
+            decimal pvExcessReturns = 0m;
+
+            // 5-Year Explicit Forecast Horizon with Compounding Book Value
+            for (int yr = 1; yr <= 5; yr++)
+            {
+                decimal excessReturnPerShare = (roe - costOfEquity) * currentBookValue;
+                pvExcessReturns += excessReturnPerShare / (decimal)Math.Pow((double)(1m + costOfEquity), yr);
+                currentBookValue += excessReturnPerShare * retentionRatio; // Compound equity base
+            }
+
+            // Terminal Excess Return Value
+            const decimal terminalGrowth = 0.03m;
+            decimal denominator = Math.Max(0.01m, costOfEquity - terminalGrowth);
+            decimal terminalExcessReturn = ((roe - costOfEquity) * currentBookValue) / denominator;
+            decimal pvTerminalExcess = terminalExcessReturn / (decimal)Math.Pow((double)(1m + costOfEquity), 5);
+
+            decimal totalIntrinsicValue = data.BookValuePerShare + pvExcessReturns + pvTerminalExcess;
+            return Math.Round(totalIntrinsicValue, 2);
         }
 
         private static decimal CalculateDdm(DeepFinancial data)
@@ -393,6 +389,42 @@ namespace SoundMoney.Services
 
             decimal denominator = Math.Max(0.005m, costOfEquity - dividendGrowth);
             decimal d1 = d0 * (1m + dividendGrowth);
+            return Math.Round(d1 / denominator, 2);
+        }
+
+        private static decimal CalculateDdmPassThroughYield(DeepFinancial data)
+        {
+            if (data.TotalSharesCr <= 0) return 0m;
+
+            // Compute realized dividend per share (d0) received by parent shareholders
+            decimal d0 = 0m;
+            if (data.CurrentPrice > 0 && data.DividendYieldPercent > 0)
+            {
+                d0 = data.CurrentPrice * (data.DividendYieldPercent / 100m);
+            }
+            else if (data.BookValuePerShare > 0 && data.ReportedRoePercent > 0 && data.DividendPayoutPercent > 0)
+            {
+                decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
+                decimal rawDividend = eps * (data.DividendPayoutPercent / 100m);
+
+                // Apply a 50% pass-through friction haircut for investment/holding entities
+                d0 = rawDividend * 0.50m;
+            }
+
+            if (d0 <= 0m) return 0m;
+
+            decimal costOfEquity = CalculateWacc(data);
+            // Conservative growth cap for holding entity pass-through cash flow
+            const decimal dividendGrowth = 0.035m;
+
+            if (costOfEquity <= dividendGrowth)
+            {
+                costOfEquity = dividendGrowth + 0.05m;
+            }
+
+            decimal denominator = Math.Max(0.02m, costOfEquity - dividendGrowth);
+            decimal d1 = d0 * (1m + dividendGrowth);
+
             return Math.Round(d1 / denominator, 2);
         }
 
@@ -415,7 +447,6 @@ namespace SoundMoney.Services
             return Math.Round(d1 / denominator, 2);
         }
 
-        // FIX: Weighted Historical Average for Owner Earnings to account for business growth
         private static decimal CalculateOwnerEarnings(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
         {
             if (data.TotalSharesCr <= 0) return 0m;
@@ -431,7 +462,7 @@ namespace SoundMoney.Services
 
                 for (int i = 0; i < historyList.Count; i++)
                 {
-                    decimal weight = i + 1m; // Recent years get higher weight
+                    decimal weight = i + 1m;
                     weightedOcfSum += historyList[i].HistoricalOcfCr * weight;
                     weightedCapexSum += historyList[i].HistoricalCapexCr * weight;
                     weightTotal += weight;
@@ -446,11 +477,6 @@ namespace SoundMoney.Services
 
             if (ownerEarningsCr <= 0) return 0m;
 
-            // FIX: Capitalize owner earnings using the same WACC/terminal-growth logic as
-            // the other cash-flow methods (Gordon-style: 1 / (r - g)), instead of a flat,
-            // unexplained 12x multiple. This keeps the "highest quality" bucket
-            // (AssetLightMoatRule routes here for ROE >= 20%) consistent with the discount
-            // rate and growth assumptions used everywhere else in the model.
             decimal costOfEquity = CalculateWacc(data);
             decimal terminalGrowth = Math.Min(0.04m, costOfEquity - 0.02m);
             decimal capRateDenominator = Math.Max(0.02m, costOfEquity - terminalGrowth);
@@ -485,7 +511,6 @@ namespace SoundMoney.Services
             return Math.Round(eps * fairPe, 2);
         }
 
-        // FIX: Check RevenueCr instead of CashFromOperationsCr
         private static decimal CalculateEvSalesMultiple(DeepFinancial data)
         {
             if (data.TotalSharesCr <= 0 || data.SalesCr <= 0) return 0m;
@@ -526,6 +551,18 @@ namespace SoundMoney.Services
             decimal eps = data.NetProfitCr / data.TotalSharesCr;
             decimal fairPe = ResolveDynamicTargetPe(data);
 
+            if (!data.IsFinancialSector)
+            {
+                decimal cashConversion = data.NetProfitCr > 0
+                    ? Math.Clamp(data.CashFromOperationsCr / data.NetProfitCr, 0m, 1m)
+                    : 0m;
+
+                if (cashConversion < 0.50m)
+                {
+                    fairPe *= Math.Max(0.20m, cashConversion);
+                }
+            }
+
             return Math.Round(eps * fairPe, 2);
         }
 
@@ -547,6 +584,22 @@ namespace SoundMoney.Services
             justifiedPb = Math.Clamp(justifiedPb, 0.5m, 12.0m);
 
             return Math.Round(data.BookValuePerShare * justifiedPb, 2);
+        }
+
+        private static decimal CalculateHoldingCompanyValue(DeepFinancial data)
+        {
+            if (data.BookValuePerShare <= 0) return 0m;
+
+            decimal rawNavPerShare = data.BookValuePerShare;
+            decimal holdCoDiscount = 0.50m;
+
+            if (data.DividendYieldPercent < 1.0m)
+            {
+                holdCoDiscount += 0.10m;
+            }
+
+            decimal adjustedNav = rawNavPerShare * (1.0m - holdCoDiscount);
+            return Math.Round(adjustedNav, 2);
         }
 
         #endregion

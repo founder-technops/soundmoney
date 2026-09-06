@@ -99,7 +99,7 @@ namespace SoundMoney.Services
             {
                 Symbol = value.Symbol,
                 CompanyName = value.CompanyName,
-                Sector = SectorMapper.Map(value.Sector),
+                Sector = SectorClassifier.GetMacroSector(value.Sector),
                 CurrentPrice = value.CurrentPrice,
                 IntrinsicValue = value.IntrinsicValue,
                 DividendYieldPercent = value.DividendYieldPercent,
