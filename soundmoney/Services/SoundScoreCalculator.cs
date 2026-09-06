@@ -10,7 +10,7 @@ namespace SoundMoney.Services
         public static int CalculateSoundScore(
             decimal marginOfSafety,
             DeepFinancial data,
-            IEnumerable<HistoricalFinancial> historicals)
+            IEnumerable<Financial> historicals)
         {
             if (data == null) return 0; 
 
@@ -51,7 +51,7 @@ namespace SoundMoney.Services
 
             // Evaluate Dividend Health Rating from historical financials
             var historyList = historicals?.OrderBy(h => h.Year).ToList(); 
-            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(data, historyList ?? new List<HistoricalFinancial>()); 
+            DividendAnalysisResult dividendAnalysis = DividendEvaluator.Evaluate(data, historyList ?? new List<Financial>()); 
 
             // -------------------------------------------------------------
             // 1. MARGIN OF SAFETY (Max 25 Pts - Scaled to ROE/ROIC Quality)
@@ -181,27 +181,27 @@ namespace SoundMoney.Services
                 var newest = historyList.Last(); 
                 int periods = historyList.Count - 1; 
 
-                if (oldest.HistoricalRevenueCr > 0m && newest.HistoricalRevenueCr > 0m)
+                if (oldest.SalesCr > 0m && newest.SalesCr > 0m)
                 {
-                    double revRatio = (double)(newest.HistoricalRevenueCr / oldest.HistoricalRevenueCr); 
+                    double revRatio = (double)(newest.SalesCr / oldest.SalesCr); 
                     salesGrowth = (decimal)(Math.Pow(revRatio, 1.0 / periods) - 1.0); 
                 }
 
-                decimal peakRevenue = historyList.Max(h => h.HistoricalRevenueCr); 
-                if (newest.HistoricalRevenueCr < (peakRevenue * 0.85m))
+                decimal peakRevenue = historyList.Max(h => h.SalesCr); 
+                if (newest.SalesCr < (peakRevenue * 0.85m))
                 {
                     salesGrowth = -0.10m; 
                 }
 
-                if (oldest.HistoricalNetProfitCr > 0m && newest.HistoricalNetProfitCr > 0m)
+                if (oldest.SalesCr > 0m && newest.SalesCr > 0m)
                 {
-                    double patRatio = (double)(newest.HistoricalNetProfitCr / oldest.HistoricalNetProfitCr); 
+                    double patRatio = (double)(newest.NetProfitCr / oldest.NetProfitCr); 
                     profitGrowth = (decimal)(Math.Pow(patRatio, 1.0 / periods) - 1.0); 
                     hasValidProfitGrowth = true; 
                 }
 
-                decimal peakProfit = historyList.Max(h => h.HistoricalNetProfitCr); 
-                if (peakProfit > 0m && newest.HistoricalNetProfitCr < (peakProfit * 0.70m))
+                decimal peakProfit = historyList.Max(h => h.NetProfitCr); 
+                if (peakProfit > 0m && newest.NetProfitCr < (peakProfit * 0.70m))
                 {
                     profitGrowth = -0.10m; 
                 }
@@ -226,7 +226,7 @@ namespace SoundMoney.Services
                     }
 
                     // Pricing Power & Margin Stability (Max 3 Pts)
-                    decimal avgHistoricalOpm = historyList.Average(h => h.HistoricalOpmPercent);
+                    decimal avgHistoricalOpm = historyList.Average(h => h.OperatingProfitMargin);
                     decimal marginTrendPoints = (opmPercent >= avgHistoricalOpm) ? 3m : 0m;
 
                     score += (revPoints + patPoints + marginTrendPoints);
@@ -297,6 +297,30 @@ namespace SoundMoney.Services
 
             bool isAggressiveAccrualTrap = !data.IsFinancialSector && sloanRatio > 18.0m;
 
+            // -------------------------------------------------------------
+            // 9. ADVANCED FORENSIC SCORES
+            // -------------------------------------------------------------
+            decimal capexToDepRatio = FinancialScoresCalculator.CalculateCapexToDepreciationRatio(data);
+            decimal altmanZ = FinancialScoresCalculator.CalculateAltmanZScore(data);
+            int piotroskiF = FinancialScoresCalculator.CalculatePiotroskiFScore(data, historicals);
+            decimal beneishM = FinancialScoresCalculator.CalculateBeneishMScore(data, historicals);
+
+            // Add Piotroski F-Score Quality Boost (Max 5 Pts)
+            if (piotroskiF >= 7) score += 5m;
+            else if (piotroskiF <= 3 && !data.IsFinancialSector) score -= 5m;
+
+            // Altman Z-Score Distress Penalty
+            if (!data.IsFinancialSector)
+            {
+                if (altmanZ < 1.81m) score -= 15m; // Distress Zone
+                else if (altmanZ > 2.99m) score += 3m; // Safe Zone
+            }
+
+            // Beneish M-Score Earnings Manipulation Interceptor
+            bool isBeneishManipulator = beneishM > -1.78m && !data.IsFinancialSector;
+            if (isBeneishManipulator) score -= 20m;
+
+            // Update Value Trap Interceptor condition with Beneish M-Score
             bool isValueTrap = roePercent < 5.0m
                 || (!data.IsFinancialSector && roicPercent < 5.0m)
                 || isDeclining
@@ -306,8 +330,9 @@ namespace SoundMoney.Services
                 || isSeverePledge
                 || isPaperProfitTrap
                 || isFcfDrainTrap
-                || isAggressiveAccrualTrap;
-
+                || isAggressiveAccrualTrap
+                || isBeneishManipulator; // Intercepts financial statement manipulators
+           
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100); 
 
             // Hard Cap at 40 for Value Traps / Governance Risk / Paper Profits / Accrual Manipulation

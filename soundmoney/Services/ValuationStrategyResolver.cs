@@ -8,7 +8,7 @@ namespace SoundMoney.Services
     public class EvaluationContext
     {
         public DeepFinancial Data { get; set; }
-        public List<HistoricalFinancial> Historicals { get; set; }
+        public List<Financial> Historicals { get; set; }
         public decimal ActualNetDebtCr { get; set; }
         public decimal DebtToEbit { get; set; }
         public decimal CapexToOcf { get; set; }
@@ -70,7 +70,7 @@ namespace SoundMoney.Services
 
         public static ValuationMethodology ResolveMethodology(
             DeepFinancial data,
-            IEnumerable<HistoricalFinancial> historicals)
+            IEnumerable<Financial> historicals)
         {
             var ctx = BuildContext(data, historicals);
 
@@ -80,9 +80,9 @@ namespace SoundMoney.Services
                 .Result(ctx);
         }
 
-        private static EvaluationContext BuildContext(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static EvaluationContext BuildContext(DeepFinancial data, IEnumerable<Financial> historicals)
         {
-            var historyList = historicals?.OrderBy(h => h.Year).ToList() ?? new List<HistoricalFinancial>();
+            var historyList = historicals?.OrderBy(h => h.Year).ToList() ?? new List<Financial>();
 
             decimal actualNetDebt = data.IsCashEstimateReliable
                 ? data.TotalBorrowingsCr - data.CashAndEquivalentsCr
@@ -113,7 +113,7 @@ namespace SoundMoney.Services
                 : (data.TotalBorrowingsCr <= 0m ? 999m : 0m);
 
             decimal opmPercent = (data.SalesCr > 0m && !data.IsFinancialSector) ? data.OperatingProfitMargin : 0m;
-            decimal avgHistoricalOpm = historyList.Count >= 3 ? historyList.Average(h => h.HistoricalOpmPercent) : opmPercent;
+            decimal avgHistoricalOpm = historyList.Count >= 3 ? historyList.Average(h => h.OperatingProfitMargin) : opmPercent;
             decimal marginTrend = opmPercent - avgHistoricalOpm;
 
             // Cash predictability incorporating FCF conversion and Sloan Ratio quality
@@ -122,7 +122,7 @@ namespace SoundMoney.Services
                 && fcfToNp >= 0.50m
                 && sloanRatio <= 10.0m;
 
-            int negativeOcfYears = historyList.Count(h => h.HistoricalOcfCr <= 0);
+            int negativeOcfYears = historyList.Count(h => h.CashFromOperationsCr <= 0);
             if (negativeOcfYears > 1) cashPredictable = false;
 
             bool isInfraUtility = (debtToEbit >= 3.5m || capexToOcf >= 0.75m) && !data.IsFinancialSector;
@@ -133,8 +133,8 @@ namespace SoundMoney.Services
                 int trendReversals = 0;
                 for (int i = 1; i < historyList.Count - 1; i++)
                 {
-                    decimal prevChange = historyList[i].HistoricalNetProfitCr - historyList[i - 1].HistoricalNetProfitCr;
-                    decimal nextChange = historyList[i + 1].HistoricalNetProfitCr - historyList[i].HistoricalNetProfitCr;
+                    decimal prevChange = historyList[i].NetProfitCr - historyList[i - 1].NetProfitCr;
+                    decimal nextChange = historyList[i + 1].NetProfitCr - historyList[i].NetProfitCr;
 
                     if ((prevChange > 0m && nextChange < 0m) || (prevChange < 0m && nextChange > 0m))
                     {
@@ -142,7 +142,7 @@ namespace SoundMoney.Services
                     }
                 }
 
-                decimal minProfit = historyList.Min(h => h.HistoricalNetProfitCr);
+                decimal minProfit = historyList.Min(h => h.NetProfitCr);
                 if (minProfit <= 0m || trendReversals >= 2)
                 {
                     cyclical = true;

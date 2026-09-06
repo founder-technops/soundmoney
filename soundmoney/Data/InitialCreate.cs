@@ -47,7 +47,7 @@ namespace SoundMoney.Data
                 });
 
             builder.CreateTable(
-                name: "HistoricalFinancials",
+                name: "Financials",
                 columns: table => new
                 {
                     Symbol = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
@@ -58,7 +58,7 @@ namespace SoundMoney.Data
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_HistoricalFinancials", x => new { x.Symbol, x.Year });
+                    table.PrimaryKey("PK_Financials", x => new { x.Symbol, x.Year });
                 });
 
             builder.CreateTable(
@@ -84,13 +84,13 @@ namespace SoundMoney.Data
 
             // Indexes
             builder.CreateIndex(
-                name: "IX_HistoricalFinancials_Symbol",
-                table: "HistoricalFinancials",
+                name: "IX_Financials_Symbol",
+                table: "Financials",
                 column: "Symbol");
 
             builder.CreateIndex(
-                name: "IX_HistoricalFinancials_Year",
-                table: "HistoricalFinancials",
+                name: "IX_Financials_Year",
+                table: "Financials",
                 column: "Year");
 
             builder.CreateIndex(
@@ -108,7 +108,7 @@ namespace SoundMoney.Data
         protected override void Down(MigrationBuilder builder)
         {
             builder.DropTable(name: "DeepFinancials");
-            builder.DropTable(name: "HistoricalFinancials");
+            builder.DropTable(name: "Financials");
             builder.DropTable(name: "StockValuations");
         }
     }

@@ -37,16 +37,16 @@ namespace SoundMoney.Services
         public async Task<StockDetailsViewModel> RunScreenDetailsAsync(string symbol)
         {
             // Scrape live financial records
-            var (stockValuation, deepFinancials, historicalFinancials) =
+            var (stockValuation, deepFinancials, Financials) =
                 await _scraperService.ScrapeStockAsync(symbol.ToUpper());
 
-            if (stockValuation is null || deepFinancials is null || historicalFinancials is null)
+            if (stockValuation is null || deepFinancials is null || Financials is null)
             {
                 return null;
             }
 
             // Calculate intrinsic value & score rating
-            var valuationResult = _valuationService.EvaluateData(stockValuation, deepFinancials, historicalFinancials);
+            var valuationResult = _valuationService.EvaluateData(stockValuation, deepFinancials, Financials);
 
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel

@@ -8,7 +8,7 @@ namespace SoundMoney.Services
 {
     public interface IScraperService
     {
-        Task<(StockValuation?, DeepFinancial?, List<HistoricalFinancial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
+        Task<(StockValuation?, DeepFinancial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
     }
 
     public class ScraperService : IScraperService
@@ -33,7 +33,7 @@ namespace SoundMoney.Services
             }
         }
 
-        public async Task<(StockValuation?, DeepFinancial?, List<HistoricalFinancial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
+        public async Task<(StockValuation?, DeepFinancial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
         {
             string cleanSymbol = symbol.Trim().ToUpperInvariant();
             _logger.LogInformation("Starting scraping for symbol: {Symbol}", cleanSymbol);
@@ -89,10 +89,10 @@ namespace SoundMoney.Services
                 deepFinancial.CashHistoryYears = cashTimeSeries.Count;
                 deepFinancial.IsCashEstimateReliable = cashTimeSeries.Count >= MinReliableCashHistoryYears;
 
-                var historicalFinancials = ExtractHistoricalFinancials(doc, deepFinancial, cleanSymbol, cashTimeSeries);
+                var Financials = ExtractFinancials(doc, deepFinancial, cleanSymbol, cashTimeSeries);
 
-                _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, historicalFinancials.Count);
-                return (stockValuation, deepFinancial, historicalFinancials);
+                _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, Financials.Count);
+                return (stockValuation, deepFinancial, Financials);
             }
             catch (Exception ex)
             {
@@ -271,8 +271,7 @@ namespace SoundMoney.Services
                 df.ReservesCr = GetLastCellRowValue(bsSection, "Reserves");
                 df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowings"));
                 df.OtherLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
-
-                df.NetFixedAssetsCr = GetLastCellRowValue(bsSection, "Fixed Assets");
+                df.FixedAssetsCr = GetLastCellRowValue(bsSection, "Fixed Assets");
                 df.CwipCr = GetLastCellRowValue(bsSection, "CWIP");
                 df.InvestmentsCr = GetLastCellRowValue(bsSection, "Investments");
                 df.OtherAssetsCr = GetLastCellRowValue(bsSection, "Other Assets");
@@ -339,17 +338,19 @@ namespace SoundMoney.Services
             return 0m;
         }
 
-        private List<HistoricalFinancial> ExtractHistoricalFinancials(
+        private List<Financial> ExtractFinancials(
             HtmlDocument doc,
             DeepFinancial deepFinancial,
             string symbol,
             Dictionary<int, decimal> cashTimeSeries)
         {
-            var historyList = new List<HistoricalFinancial>();
+            var historyList = new List<Financial>();
 
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
+            var bsSection = doc.DocumentNode.SelectSingleNode("//section[@id='balance-sheet']");
             var cfSection = doc.DocumentNode.SelectSingleNode("//section[@id='cash-flow']");
-            var balanceSheetSection = doc.DocumentNode.SelectSingleNode("//section[@id='balance-sheet']");
+            var ratiosSection = doc.DocumentNode.SelectSingleNode("//section[@id='ratios']");
+
             if (pnlSection == null && cfSection == null) return historyList;
 
             var headerCells = pnlSection?.SelectNodes(".//table[contains(@class, 'ranges-table') or contains(@class, 'table')]//thead//th");
@@ -377,41 +378,87 @@ namespace SoundMoney.Services
                 }
             }
 
-            var revenueDict = GetRowValuesByColumn(pnlSection, "Sales");
-            var opDict = GetRowValuesByColumn(pnlSection, "Operating Profit");
-            var netProfitDict = GetRowValuesByColumn(pnlSection, "Net Profit");
-            var ocfDict = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
-            var fcfDict = GetRowValuesByColumn(cfSection, "Free Cash Flow");
-            var equityCapitalDict = GetRowValuesByColumn(balanceSheetSection, "Equity Capital");
-            var dividendPayoutPercentDict = GetRowValuesByColumn(pnlSection, "Dividend Payout %");
+            //profit & loss
+            var dicSalesCr = GetRowValuesByColumn(pnlSection, "Sales");
+            var dicExpenseCr = GetRowValuesByColumn(pnlSection, "Expenses");
+            var dicOperatingProfitCr = GetRowValuesByColumn(pnlSection, "Operating Profit");
+            var dicOtherIncomeCr = GetRowValuesByColumn(pnlSection, "Other Income");
+            var dicInterestExpenseCr = GetRowValuesByColumn(pnlSection, "Interest");
+            var dicDepreciationCr = GetRowValuesByColumn(pnlSection, "Depreciation");
+            var dicProfitBeforeTaxCr = GetRowValuesByColumn(pnlSection, "Profit before tax");
+            var dicTaxPercent = GetRowValuesByColumn(pnlSection, "Tax %");
+            var dicNetProfitCr = GetRowValuesByColumn(pnlSection, "Net Profit");
+            var dicEps = GetRowValuesByColumn(pnlSection, "EPS in Rs");
+            var dicDividendPayoutPercent = GetRowValuesByColumn(pnlSection, "Dividend Payout");
+
+            //balance sheet
+            var dicShareCapitalCr = GetRowValuesByColumn(bsSection, "Equity Capital");
+            var dicReservesCr = GetRowValuesByColumn(bsSection, "Reserves");
+            var dicTotalBorrowingsCr = GetRowValuesByColumn(bsSection, "Borrowings");
+            var dicOtherLiabilitiesCr = GetRowValuesByColumn(bsSection, "Other Liabilities");
+            var dicNetFixedAssetsCr = GetRowValuesByColumn(bsSection, "Fixed Assets");
+            var dicCwipCr = GetRowValuesByColumn(bsSection, "CWIP");
+            var dicInvestmentsCr = GetRowValuesByColumn(bsSection, "Investments");
+            var dicOtherAssetsCr = GetRowValuesByColumn(bsSection, "Other Assets");
+
+            //cash flow
+            var dicCashFromOperationsCr = GetRowValuesByColumn(cfSection, "Cash from Operating Activity");
+            var dicCashFromInvestmentCr = GetRowValuesByColumn(cfSection, "Cash from Investing Activity");
+            var dicCashFromFinanceCr = GetRowValuesByColumn(cfSection, "Cash from Financing Activity");
+            var dicFreeCashFlowCr = GetRowValuesByColumn(cfSection, "Free Cash Flow");
+
+            //ratios
+            var dicCashConversionCycleDays = GetRowValuesByColumn(ratiosSection, "Cash Conversion Cycle");
 
             foreach (var header in yearHeaderList)
             {
-                revenueDict.TryGetValue(header.ColumnIndex, out decimal rev);
-                opDict.TryGetValue(header.ColumnIndex, out decimal op);
-                netProfitDict.TryGetValue(header.ColumnIndex, out decimal netProfit);
-                ocfDict.TryGetValue(header.ColumnIndex, out decimal ocf);
-                fcfDict.TryGetValue(header.ColumnIndex, out decimal fcf);
-                equityCapitalDict.TryGetValue(header.ColumnIndex, out decimal equityCap);
-                dividendPayoutPercentDict.TryGetValue(header.ColumnIndex, out decimal dividendPayoutPer);
-
-                cashTimeSeries.TryGetValue(header.Year, out decimal cashAndEquiv);
-
-                historyList.Add(new HistoricalFinancial
+                historyList.Add(new Financial
                 {
                     Symbol = symbol,
                     Year = header.Year,
-                    HistoricalRevenueCr = rev,
-                    HistoricalOperatingProfitCr = op,
-                    HistoricalNetProfitCr = netProfit,
-                    HistoricalOcfCr = ocf,
-                    HistoricalFcfCr = fcf,
-                    HistoricalCapexCr = ocf - fcf,
-                    EquityCapitalCr = equityCap,
-                    DividendPayoutPercent = dividendPayoutPer,
-                    HistoricalSharesCr = deepFinancial.FaceValue > 0m ? equityCap / deepFinancial.FaceValue : 0m,
-                    HistoricalPatCr = netProfit,
-                    HistoricalCashAndEquivalentsCr = cashAndEquiv
+                    IsFinancialSector = deepFinancial.IsFinancialSector,
+                    IsCoreInvestmentCompanyExplicit = deepFinancial.IsCoreInvestmentCompanyExplicit,
+
+                    //profit & loss
+                    SalesCr = dicSalesCr.TryGetValue(header.ColumnIndex, out decimal salescr) ? salescr : 0m,
+                    ExpenseCr = dicExpenseCr.TryGetValue(header.ColumnIndex, out decimal expensecr) ? expensecr : 0m,
+                    OperatingProfitCr = dicOperatingProfitCr.TryGetValue(header.ColumnIndex, out decimal operatingprofitcr) ? operatingprofitcr : 0m,
+                    OtherIncomeCr = dicOtherIncomeCr.TryGetValue(header.ColumnIndex, out decimal otherincomecr) ? otherincomecr : 0m,
+                    InterestExpenseCr = dicInterestExpenseCr.TryGetValue(header.ColumnIndex, out decimal interestexpensecr) ? interestexpensecr : 0m,
+                    DepreciationCr = dicDepreciationCr.TryGetValue(header.ColumnIndex, out decimal depreciationcr) ? depreciationcr : 0m,
+                    ProfitBeforeTaxCr = dicProfitBeforeTaxCr.TryGetValue(header.ColumnIndex, out decimal profitbeforetaxcr) ? profitbeforetaxcr : 0m,
+                    TaxPercent = dicTaxPercent.TryGetValue(header.ColumnIndex, out decimal taxpercent) ? taxpercent : 0m,
+                    NetProfitCr = dicNetProfitCr.TryGetValue(header.ColumnIndex, out decimal netprofitcr) ? netprofitcr : 0m,
+                    Eps = dicEps.TryGetValue(header.ColumnIndex, out decimal eps) ? eps : 0m,
+                    DividendPayoutPercent = dicDividendPayoutPercent.TryGetValue(header.ColumnIndex, out decimal dividendpayoutpercent) ? dividendpayoutpercent : 0m,
+                    //balance sheet
+                    ShareCapitalCr = dicShareCapitalCr.TryGetValue(header.ColumnIndex, out decimal sharecapitalcr) ? sharecapitalcr : 0m,
+                    ReservesCr = dicReservesCr.TryGetValue(header.ColumnIndex, out decimal reservescr) ? reservescr : 0m,
+                    TotalBorrowingsCr = dicTotalBorrowingsCr.TryGetValue(header.ColumnIndex, out decimal totalborrowingscr) ? totalborrowingscr : 0m,
+                    OtherLiabilitiesCr = dicOtherLiabilitiesCr.TryGetValue(header.ColumnIndex, out decimal otherliabilitiescr) ? otherliabilitiescr : 0m,
+                    FixedAssetsCr = dicNetFixedAssetsCr.TryGetValue(header.ColumnIndex, out decimal netfixedassetscr) ? netfixedassetscr : 0m,
+                    CwipCr = dicCwipCr.TryGetValue(header.ColumnIndex, out decimal cwipcr) ? cwipcr : 0m,
+                    InvestmentsCr = dicInvestmentsCr.TryGetValue(header.ColumnIndex, out decimal investmentscr) ? investmentscr : 0m,
+                    OtherAssetsCr = dicOtherAssetsCr.TryGetValue(header.ColumnIndex, out decimal otherassetscr) ? otherassetscr : 0m,
+                    CashAndEquivalentsCr = cashTimeSeries.TryGetValue(header.Year, out decimal cashAndEquiv) ? cashAndEquiv : 0m,
+                    //cash flow
+                    CashFromOperationsCr = dicCashFromOperationsCr.TryGetValue(header.ColumnIndex, out decimal cashfromoperationscr) ? cashfromoperationscr : 0m,
+                    CashFromInvestmentCr = dicCashFromInvestmentCr.TryGetValue(header.ColumnIndex, out decimal cashfrominvestmentcr) ? cashfrominvestmentcr : 0m,
+                    CashFromFinanceCr = dicCashFromFinanceCr.TryGetValue(header.ColumnIndex, out decimal cashfromfinancecr) ? cashfromfinancecr : 0m,
+                    FreeCashFlowCr = dicFreeCashFlowCr.TryGetValue(header.ColumnIndex, out decimal freecashflowcr) ? freecashflowcr : 0m,
+                    //ratios
+                    CashConversionCycleDays = dicCashConversionCycleDays.TryGetValue(header.ColumnIndex, out decimal cashconversioncycledays) ? cashconversioncycledays : 0m,
+
+                    //OperatingProfitCr = op,
+                    //NetProfitCr = netProfit,
+                    //CashFromOperationsCr = ocf,
+                    //HistoricalFcfCr = fcf,
+                    //HistoricalCapexCr = ocf - fcf,
+                    //EquityCapitalCr = equityCap,
+                    //DividendPayoutPercent = dividendPayoutPer,
+                    //SharesCr = deepFinancial.FaceValue > 0m ? equityCap / deepFinancial.FaceValue : 0m,
+                    ////HistoricalPatCr = netProfit,
+
                 });
             }
 

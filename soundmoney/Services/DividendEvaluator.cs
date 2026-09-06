@@ -13,7 +13,7 @@ namespace SoundMoney.Services
         /// <param name="historicalData">List of historical financial records.</param>
         /// <param name="data">Current DeepFinancial metrics (for NetProfit, CapitalAdequacy, etc.).</param>
         /// <returns>DividendAnalysisResult containing consistency checks and safety rating.</returns>
-        public static DividendAnalysisResult Evaluate(DeepFinancial data, List<HistoricalFinancial> historicalData)
+        public static DividendAnalysisResult Evaluate(DeepFinancial data, List<Financial> historicalData)
         {
             if (historicalData == null || !historicalData.Any() || data == null)
                 return new DividendAnalysisResult();
@@ -71,7 +71,7 @@ namespace SoundMoney.Services
             decimal averagePayoutRatio = recentYears.Any() ? recentYears.Average(x => x.DividendPayoutPercent) : 0m;
 
             // FCF Support check for traditional non-financial sectors
-            bool isFcfSupported = recentYears.All(x => x.HistoricalFcfCr > 0m || x.HistoricalOcfCr > 0m);
+            bool isFcfSupported = recentYears.All(x => x.FreeCashFlowCr > 0m || x.CashFromOperationsCr > 0m);
 
             // -------------------------------------------------------------
             // DYNAMIC DIVIDEND SAFETY CHECK

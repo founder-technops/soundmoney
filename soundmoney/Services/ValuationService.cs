@@ -9,7 +9,7 @@ namespace SoundMoney.Services
 {
     public interface IValuationService
     {
-        StockValuation EvaluateData(StockValuation valuationData, DeepFinancial deepData, List<HistoricalFinancial> historicalData);
+        StockValuation EvaluateData(StockValuation valuationData, DeepFinancial deepData, List<Financial> historicalData);
     }
 
     public class ValuationService : IValuationService
@@ -26,9 +26,9 @@ namespace SoundMoney.Services
         public StockValuation EvaluateData(
             StockValuation valuationData,
             DeepFinancial deepData,
-            List<HistoricalFinancial> historicalData)
+            List<Financial> historicalData)
         {
-            historicalData ??= new List<HistoricalFinancial>();
+            historicalData ??= new List<Financial>();
 
             if (valuationData == null || deepData == null)
             {
@@ -111,7 +111,7 @@ namespace SoundMoney.Services
 
         #region Method Execution Router
 
-        private decimal ComputeValueByMethod(string methodName, DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private decimal ComputeValueByMethod(string methodName, DeepFinancial data, IEnumerable<Financial> historicals)
         {
             return methodName switch
             {
@@ -192,7 +192,7 @@ namespace SoundMoney.Services
             return (decimal)cagr;
         }
 
-        private static decimal ResolveDynamicGrowthRate(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals, decimal defaultFallback = 0.08m)
+        private static decimal ResolveDynamicGrowthRate(DeepFinancial data, IEnumerable<Financial> historicals, decimal defaultFallback = 0.08m)
         {
             if (data.ReportedRoePercent > 0)
             {
@@ -215,9 +215,9 @@ namespace SoundMoney.Services
                 var newest = historyList.Last();
                 int periods = historyList.Count - 1;
 
-                if (oldest.HistoricalOcfCr > 0 && newest.HistoricalOcfCr > 0)
+                if (oldest.CashFromOperationsCr > 0 && newest.CashFromOperationsCr > 0)
                 {
-                    decimal ocfCagr = CalculateCagr(oldest.HistoricalOcfCr, newest.HistoricalOcfCr, periods);
+                    decimal ocfCagr = CalculateCagr(oldest.CashFromOperationsCr, newest.CashFromOperationsCr, periods);
                     if (ocfCagr > 0)
                     {
                         return Math.Clamp(ocfCagr, 0.02m, 0.15m);
@@ -232,7 +232,7 @@ namespace SoundMoney.Services
 
         #region Valuation Algorithms
 
-        private static decimal CalculateStandardDcf(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static decimal CalculateStandardDcf(DeepFinancial data, IEnumerable<Financial> historicals)
         {
             if (data.TotalSharesCr <= 0) return 0m;
 
@@ -267,7 +267,7 @@ namespace SoundMoney.Services
             return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
         }
 
-        private static decimal CalculateTwoStageDcf(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static decimal CalculateTwoStageDcf(DeepFinancial data, IEnumerable<Financial> historicals)
         {
             if (data.TotalSharesCr <= 0) return 0m;
 
@@ -305,7 +305,7 @@ namespace SoundMoney.Services
             return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
         }
 
-        private static decimal CalculateExitMultipleDcf(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static decimal CalculateExitMultipleDcf(DeepFinancial data, IEnumerable<Financial> historicals)
         {
             if (data.TotalSharesCr <= 0m || data.EbitCr <= 0m) return 0m;
 
@@ -447,7 +447,7 @@ namespace SoundMoney.Services
             return Math.Round(d1 / denominator, 2);
         }
 
-        private static decimal CalculateOwnerEarnings(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static decimal CalculateOwnerEarnings(DeepFinancial data, IEnumerable<Financial> historicals)
         {
             if (data.TotalSharesCr <= 0) return 0m;
 
@@ -463,8 +463,8 @@ namespace SoundMoney.Services
                 for (int i = 0; i < historyList.Count; i++)
                 {
                     decimal weight = i + 1m;
-                    weightedOcfSum += historyList[i].HistoricalOcfCr * weight;
-                    weightedCapexSum += historyList[i].HistoricalCapexCr * weight;
+                    weightedOcfSum += historyList[i].CashFromOperationsCr * weight;
+                    weightedCapexSum += historyList[i].GrossCapexCr * weight;
                     weightTotal += weight;
                 }
 
@@ -485,11 +485,11 @@ namespace SoundMoney.Services
             return Math.Round((ownerEarningsCr * capMultiple) / data.TotalSharesCr, 2);
         }
 
-        private static decimal CalculateNormalizedPe(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static decimal CalculateNormalizedPe(DeepFinancial data, IEnumerable<Financial> historicals)
         {
             if (data.TotalSharesCr <= 0 || historicals == null || !historicals.Any()) return 0m;
 
-            decimal avgNetProfitCr = historicals.Average(h => h.HistoricalNetProfitCr);
+            decimal avgNetProfitCr = historicals.Average(h => h.NetProfitCr);
             if (avgNetProfitCr <= 0) return 0m;
 
             decimal normalizedEps = avgNetProfitCr / data.TotalSharesCr;
@@ -498,7 +498,7 @@ namespace SoundMoney.Services
             return Math.Round(normalizedEps * targetPe, 2);
         }
 
-        private static decimal CalculatePegRatioValue(DeepFinancial data, IEnumerable<HistoricalFinancial> historicals)
+        private static decimal CalculatePegRatioValue(DeepFinancial data, IEnumerable<Financial> historicals)
         {
             if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
 

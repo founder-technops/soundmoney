@@ -15,14 +15,14 @@ public class DataContext : DbContext
     }
     public DbSet<StockValuation> StockValuations { get; set; } = null!;
     public DbSet<DeepFinancial> DeepFinancials { get; set; } = null!;
-    public DbSet<HistoricalFinancial> HistoricalFinancials { get; set; } = null!;
+    public DbSet<Financial> Financials { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfiguration(new StockValuationConfiguration());
         modelBuilder.ApplyConfiguration(new DeepFinancialConfiguration());
-        modelBuilder.ApplyConfiguration(new HistoricalFinancialConfiguration());
+        modelBuilder.ApplyConfiguration(new FinancialConfiguration());
     }
     public class StockValuationConfiguration : IEntityTypeConfiguration<StockValuation>
     {
@@ -201,7 +201,7 @@ public class DataContext : DbContext
             builder.Property(e => e.OtherLiabilitiesCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.NetFixedAssetsCr)
+            builder.Property(e => e.FixedAssetsCr)
                 .HasPrecision(18, 4);
 
             builder.Property(e => e.CwipCr)
@@ -265,12 +265,12 @@ public class DataContext : DbContext
         }
     }
 
-    public class HistoricalFinancialConfiguration : IEntityTypeConfiguration<HistoricalFinancial>
+    public class FinancialConfiguration : IEntityTypeConfiguration<Financial>
     {
-        public void Configure(EntityTypeBuilder<HistoricalFinancial> builder)
+        public void Configure(EntityTypeBuilder<Financial> builder)
         {
             // Table Name
-            builder.ToTable("HistoricalFinancials");
+            builder.ToTable("Financials");
 
             // Composite Primary Key (Symbol + Year allows tracking multiple historical years per stock)
             builder.HasKey(e => new { e.Symbol, e.Year });
@@ -285,34 +285,31 @@ public class DataContext : DbContext
                 .IsRequired();
 
             // Precision Configuration for Monetary Figures (In Crores)
-            builder.Property(e => e.EquityCapitalCr)
+            builder.Property(e => e.ShareCapitalCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalRevenueCr)
+            builder.Property(e => e.SalesCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalOperatingProfitCr)
+            builder.Property(e => e.OperatingProfitCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalNetProfitCr)
+            builder.Property(e => e.NetProfitCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalOcfCr)
+            builder.Property(e => e.CashFromOperationsCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalCapexCr)
+            builder.Property(e => e.GrossCapexCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalCashAndEquivalentsCr)
+            builder.Property(e => e.CashAndEquivalentsCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalFcfCr)
+            builder.Property(e => e.FreeCashFlowCr)
                 .HasPrecision(18, 4);
 
-            builder.Property(e => e.HistoricalPatCr)
-                .HasPrecision(18, 4);
-
-            builder.Property(e => e.HistoricalSharesCr)
+            builder.Property(e => e.ShareCapitalCr)
                 .HasPrecision(18, 4);
 
             builder.Property(e => e.DividendPayoutPercent)
