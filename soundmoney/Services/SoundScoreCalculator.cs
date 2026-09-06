@@ -251,6 +251,12 @@ namespace SoundMoney.Services
                 && data.NetProfitCr > 0m
                 && (data.CashFromOperationsCr <= 0m || (data.CashFromOperationsCr / data.NetProfitCr) < 0.20m);
 
+            // FCF Drain Trap: Positive net profit but negative FCF due to excessive Capex
+            bool isFcfDrainTrap = !data.IsFinancialSector
+                && data.NetProfitCr > 0m
+                && data.FreeCashFlowCr < 0m
+                && data.CashFromOperationsCr / data.NetProfitCr < 0.50m;
+
             bool isValueTrap = roePercent < 5.0m
                 || (!data.IsFinancialSector && roicPercent < 5.0m)
                 || isDeclining
@@ -258,7 +264,8 @@ namespace SoundMoney.Services
                 || isCapitalDestroyer
                 || isHighDebtCommodity
                 || isSeverePledge
-                || isPaperProfitTrap;
+                || isPaperProfitTrap
+                || isFcfDrainTrap; // Hard cap score at 40 if company burns cash after Capex
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
 
