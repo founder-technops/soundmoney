@@ -8,7 +8,7 @@ namespace SoundMoney.Services
 {
     public interface IScraperService
     {
-        Task<(StockValuation?, DeepFinancial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
+        Task<(StockValuation?, Financial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
     }
 
     public class ScraperService : IScraperService
@@ -33,7 +33,7 @@ namespace SoundMoney.Services
             }
         }
 
-        public async Task<(StockValuation?, DeepFinancial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
+        public async Task<(StockValuation?, Financial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
         {
             string cleanSymbol = symbol.Trim().ToUpperInvariant();
             _logger.LogInformation("Starting scraping for symbol: {Symbol}", cleanSymbol);
@@ -61,20 +61,20 @@ namespace SoundMoney.Services
                     Sector = sector,
                 };
                 
-                var deepFinancial = ExtractDeepFinancial(doc, cleanSymbol);
+                var current = ExtractCurrentFinancials(doc, cleanSymbol);
 
-                deepFinancial.IsFinancialSector = sectorCategory == MacroSector.FinancialServices;
-                deepFinancial.IsCoreInvestmentCompanyExplicit = sectorCategory == MacroSector.FinancialServices
+                current.IsFinancialSector = sectorCategory == MacroSector.FinancialServices;
+                current.IsCoreInvestmentCompanyExplicit = sectorCategory == MacroSector.FinancialServices
                     && (sector.Equals("Holding", StringComparison.OrdinalIgnoreCase) ||
                         sector.Equals("Investment", StringComparison.OrdinalIgnoreCase));
 
                 // Extract Cash & Cash Equivalents time-series (API Schedule Primary, CF Roll-Forward Fallback)
                 var cashTimeSeries = await ExtractCashAndEquivalentsAsync(cleanSymbol, doc, ct);
 
-                // Map cash balance into DeepFinancial latest reporting period
+                // Map cash balance into Financial latest reporting period
                 if (cashTimeSeries.Count > 0)
                 {
-                    deepFinancial.CashAndEquivalentsCr = cashTimeSeries.Values.LastOrDefault();
+                    current.CashAndEquivalentsCr = cashTimeSeries.Values.LastOrDefault();
                 }
 
                 // Screener's balance sheet has no dedicated Cash & Equivalents line (it's
@@ -86,13 +86,13 @@ namespace SoundMoney.Services
                 // incorporation/IPO. Flag low-confidence years so downstream leverage and
                 // valuation logic can fall back to gross-debt-based checks instead of
                 // trusting NetCashCr outright.
-                deepFinancial.CashHistoryYears = cashTimeSeries.Count;
-                deepFinancial.IsCashEstimateReliable = cashTimeSeries.Count >= MinReliableCashHistoryYears;
+                current.CashHistoryYears = cashTimeSeries.Count;
+                current.IsCashEstimateReliable = cashTimeSeries.Count >= MinReliableCashHistoryYears;
 
-                var Financials = ExtractFinancials(doc, deepFinancial, cleanSymbol, cashTimeSeries);
+                var historical = ExtractHistoricalFinancials(doc, current, cleanSymbol, cashTimeSeries);
 
-                _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, Financials.Count);
-                return (stockValuation, deepFinancial, Financials);
+                _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, historical.Count);
+                return (stockValuation, current, historical);
             }
             catch (Exception ex)
             {
@@ -210,9 +210,9 @@ namespace SoundMoney.Services
 
         #region Financial Extraction Logic
 
-        private DeepFinancial ExtractDeepFinancial(HtmlDocument doc, string symbol)
+        private Financial ExtractCurrentFinancials(HtmlDocument doc, string symbol)
         {
-            var df = new DeepFinancial { Symbol = symbol };
+            var df = new Financial { Symbol = symbol };
 
             // A. Top Ratios
             var ratioNodes = doc.DocumentNode.SelectNodes("//ul[@id='top-ratios']/li");
@@ -338,9 +338,9 @@ namespace SoundMoney.Services
             return 0m;
         }
 
-        private List<Financial> ExtractFinancials(
+        private List<Financial> ExtractHistoricalFinancials(
             HtmlDocument doc,
-            DeepFinancial deepFinancial,
+            Financial current,
             string symbol,
             Dictionary<int, decimal> cashTimeSeries)
         {
@@ -416,8 +416,8 @@ namespace SoundMoney.Services
                 {
                     Symbol = symbol,
                     Year = header.Year,
-                    IsFinancialSector = deepFinancial.IsFinancialSector,
-                    IsCoreInvestmentCompanyExplicit = deepFinancial.IsCoreInvestmentCompanyExplicit,
+                    IsFinancialSector = current.IsFinancialSector,
+                    IsCoreInvestmentCompanyExplicit = current.IsCoreInvestmentCompanyExplicit,
 
                     //profit & loss
                     SalesCr = dicSalesCr.TryGetValue(header.ColumnIndex, out decimal salescr) ? salescr : 0m,
@@ -448,17 +448,6 @@ namespace SoundMoney.Services
                     FreeCashFlowCr = dicFreeCashFlowCr.TryGetValue(header.ColumnIndex, out decimal freecashflowcr) ? freecashflowcr : 0m,
                     //ratios
                     CashConversionCycleDays = dicCashConversionCycleDays.TryGetValue(header.ColumnIndex, out decimal cashconversioncycledays) ? cashconversioncycledays : 0m,
-
-                    //OperatingProfitCr = op,
-                    //NetProfitCr = netProfit,
-                    //CashFromOperationsCr = ocf,
-                    //HistoricalFcfCr = fcf,
-                    //HistoricalCapexCr = ocf - fcf,
-                    //EquityCapitalCr = equityCap,
-                    //DividendPayoutPercent = dividendPayoutPer,
-                    //SharesCr = deepFinancial.FaceValue > 0m ? equityCap / deepFinancial.FaceValue : 0m,
-                    ////HistoricalPatCr = netProfit,
-
                 });
             }
 

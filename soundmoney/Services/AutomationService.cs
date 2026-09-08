@@ -99,13 +99,13 @@ namespace SoundMoney.Services
 
             try
             {
-                var (stockValuation, deepFinancials, Financials) =
+                var (stockValuation, current, historical) =
                     await scraperService.ScrapeStockAsync(pendingSymbol.Symbol, cancellationToken);
 
-                if (stockValuation is not null && deepFinancials is not null && Financials is not null)
+                if (stockValuation is not null && current is not null && historical is not null)
                 {
                     pendingSymbol.Sector = stockValuation.Sector;
-                    valuation = valuationService.EvaluateData(pendingSymbol, deepFinancials, Financials);
+                    valuation = valuationService.Evaluate(pendingSymbol, current, historical);
                     valuation.ErrorMessage = $"Successfully analyzed and persisted: {pendingSymbol.Symbol}";
                     _logger.LogInformation("Successfully processed symbol: {Symbol}", pendingSymbol.Symbol);
                 }

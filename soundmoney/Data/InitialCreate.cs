@@ -12,7 +12,7 @@ namespace SoundMoney.Data
         protected override void Up(MigrationBuilder builder)
         {
             builder.CreateTable(
-                name: "DeepFinancials",
+                name: "Financials",
                 columns: table => new
                 {
                     Symbol = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
@@ -43,7 +43,7 @@ namespace SoundMoney.Data
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_DeepFinancials", x => x.Symbol);
+                    table.PrimaryKey("PK_Financials", x => x.Symbol);
                 });
 
             builder.CreateTable(
@@ -107,7 +107,7 @@ namespace SoundMoney.Data
         /// <inheritdoc />
         protected override void Down(MigrationBuilder builder)
         {
-            builder.DropTable(name: "DeepFinancials");
+            builder.DropTable(name: "Financials");
             builder.DropTable(name: "Financials");
             builder.DropTable(name: "StockValuations");
         }

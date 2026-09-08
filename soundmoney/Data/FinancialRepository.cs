@@ -7,15 +7,10 @@ namespace SoundMoney.Data
     {
         // Save / Upsert Methods
         Task SaveValuationAsync(StockValuation valuation, CancellationToken ct = default);
-        Task SaveDeepFinancialAsync(DeepFinancial financial, CancellationToken ct = default);
-        Task SaveFinancialsAsync(IEnumerable<Financial> historicalList, CancellationToken ct = default);
-        Task SaveCompleteFinancialDataAsync(DeepFinancial deepFinancial, IEnumerable<Financial> historicalList, CancellationToken ct = default);
-
+        
         // Retrieval Methods - Single Entities
         Task<StockValuation?> GetValuationBySymbolAsync(string symbol, CancellationToken ct = default);
-        Task<DeepFinancial?> GetDeepFinancialBySymbolAsync(string symbol, CancellationToken ct = default);
-        Task<List<Financial>> GetFinancialsBySymbolAsync(string symbol, CancellationToken ct = default);
-
+       
         // Retrieval Methods - Bulk / Querying
         Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default);
         Task<List<StockValuation>> GetValuationsByVerdictAsync(string verdict, CancellationToken ct = default);
@@ -23,7 +18,7 @@ namespace SoundMoney.Data
         Task<StockValuation> GetPendingValuationsAsync(CancellationToken ct = default);
         // Delete Methods
         Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
-        Task<bool> DeleteFinancialDataBySymbolAsync(string symbol, CancellationToken ct = default);
+         
     }
     public class FinancialRepository : IFinancialRepository
     {
@@ -53,88 +48,6 @@ namespace SoundMoney.Data
             await _context.SaveChangesAsync(ct);
         }
 
-        public async Task SaveDeepFinancialAsync(DeepFinancial financial, CancellationToken ct = default)
-        {
-            var existing = await _context.DeepFinancials
-                .FirstOrDefaultAsync(df => df.Symbol == financial.Symbol, ct);
-
-            if (existing == null)
-            {
-                await _context.DeepFinancials.AddAsync(financial, ct);
-            }
-            else
-            {
-                _context.Entry(existing).CurrentValues.SetValues(financial);
-            }
-
-            await _context.SaveChangesAsync(ct);
-        }
-
-        public async Task SaveFinancialsAsync(IEnumerable<Financial> historicalList, CancellationToken ct = default)
-        {
-            foreach (var item in historicalList)
-            {
-                var existing = await _context.Financials
-                    .FirstOrDefaultAsync(h => h.Symbol == item.Symbol && h.Year == item.Year, ct);
-
-                if (existing == null)
-                {
-                    await _context.Financials.AddAsync(item, ct);
-                }
-                else
-                {
-                    _context.Entry(existing).CurrentValues.SetValues(item);
-                }
-            }
-
-            await _context.SaveChangesAsync(ct);
-        }
-
-        /// <summary>
-        /// Saves valuation metrics, deep financials, and historical entries atomically inside a single transaction.
-        /// </summary>
-        public async Task SaveCompleteFinancialDataAsync(
-            DeepFinancial deepFinancial,
-            IEnumerable<Financial> historicalList,
-            CancellationToken ct = default)
-        {
-            var strategy = _context.Database.CreateExecutionStrategy();
-
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var transaction = await _context.Database.BeginTransactionAsync(ct);
-                try
-                {
-                    // 1. Upsert DeepFinancial
-                    var existingDeep = await _context.DeepFinancials
-                        .FirstOrDefaultAsync(df => df.Symbol == deepFinancial.Symbol, ct);
-                    if (existingDeep == null)
-                        await _context.DeepFinancials.AddAsync(deepFinancial, ct);
-                    else
-                        _context.Entry(existingDeep).CurrentValues.SetValues(deepFinancial);
-
-                    // 2. Upsert Financials
-                    foreach (var hItem in historicalList)
-                    {
-                        var existingHist = await _context.Financials
-                            .FirstOrDefaultAsync(h => h.Symbol == hItem.Symbol && h.Year == hItem.Year, ct);
-                        if (existingHist == null)
-                            await _context.Financials.AddAsync(hItem, ct);
-                        else
-                            _context.Entry(existingHist).CurrentValues.SetValues(hItem);
-                    }
-
-                    await _context.SaveChangesAsync(ct);
-                    await transaction.CommitAsync(ct);
-                }
-                catch
-                {
-                    await transaction.RollbackAsync(ct);
-                    throw;
-                }
-            });
-        }
-
         #endregion
 
         #region Retrieval Operations
@@ -146,21 +59,7 @@ namespace SoundMoney.Data
                 .FirstOrDefaultAsync(v => v.Symbol == symbol.ToUpperInvariant(), ct);
         }
 
-        public async Task<DeepFinancial?> GetDeepFinancialBySymbolAsync(string symbol, CancellationToken ct = default)
-        {
-            return await _context.DeepFinancials
-                .AsNoTracking()
-                .FirstOrDefaultAsync(df => df.Symbol == symbol.ToUpperInvariant(), ct);
-        }
-
-        public async Task<List<Financial>> GetFinancialsBySymbolAsync(string symbol, CancellationToken ct = default)
-        {
-            return await _context.Financials
-                .AsNoTracking()
-                .Where(h => h.Symbol == symbol.ToUpperInvariant())
-                .OrderByDescending(h => h.Year)
-                .ToListAsync(ct);
-        }
+        
 
         public async Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default)
         {
@@ -236,25 +135,6 @@ namespace SoundMoney.Data
 
         #endregion
 
-        #region Delete Operations
-
-        public async Task<bool> DeleteFinancialDataBySymbolAsync(string symbol, CancellationToken ct = default)
-        {
-            string upperSymbol = symbol.ToUpperInvariant();
-
-            var deep = await _context.DeepFinancials.FirstOrDefaultAsync(df => df.Symbol == upperSymbol, ct);
-            var historicals = await _context.Financials.Where(h => h.Symbol == upperSymbol).ToListAsync(ct);
-
-            if (deep == null && !historicals.Any())
-                return false;
-
-            if (deep != null) _context.DeepFinancials.Remove(deep);
-            if (historicals.Any()) _context.Financials.RemoveRange(historicals);
-
-            await _context.SaveChangesAsync(ct);
-            return true;
-        }
-
-        #endregion
+       
     }
 }

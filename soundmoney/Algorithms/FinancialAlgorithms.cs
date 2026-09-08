@@ -1,98 +1,103 @@
 ﻿using Microsoft.AspNetCore.Components.Forms;
 using SoundMoney.Models;
 using SoundMoney.Services;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace SoundMoney.Algorithms
 {
     public static class FinancialAlgorithms
     {
-        public static decimal CalculateOperatingProfitMargin(decimal sales, decimal operatingProfit) =>
-            sales > 0m ? Math.Round((operatingProfit / sales) * 100m, 2) : 0m;
+        public static decimal CalculateOperatingProfitMargin(Financial current) =>
+            current.SalesCr > 0m ? Math.Round((current.OperatingProfitCr / current.SalesCr) * 100m, 2) : 0m;
 
-        public static decimal CalculateEbit(decimal opProfit, decimal otherIncome, decimal depreciation) =>
-            (opProfit + otherIncome) - depreciation;
+        public static decimal CalculateEbit(Financial current) =>
+           (current.OperatingProfitCr + current.OtherIncomeCr) - current.DepreciationCr;
 
-        public static decimal CalculateEbitda(decimal opProfit, decimal otherIncome) =>
-            opProfit + otherIncome;
+        public static decimal CalculateEbitda(Financial current) =>
+            current.OperatingProfitCr + current.OtherIncomeCr;
 
-        public static decimal CalculateTotalEquity(decimal shareCapital, decimal reserves) =>
-            shareCapital + reserves;
+        public static decimal CalculateTotalEquity(Financial current) =>
+            current.ShareCapitalCr + current.ReservesCr ;
 
-        public static decimal CalculateTotalAssets(decimal fixedAssets, decimal cwip, decimal investments, decimal otherAssets) =>
-            fixedAssets + cwip + investments + otherAssets;
+        public static decimal CalculateTotalAssets(Financial current) =>
+            current.FixedAssetsCr + current.CwipCr + current.InvestmentsCr + current.OtherAssetsCr;
 
-        public static decimal CalculateTotalLiabilities(decimal shareCapital, decimal reserves, decimal totalBorrowings, decimal otherLiabilities) =>
-            shareCapital + reserves + totalBorrowings + otherLiabilities;
+        public static decimal CalculateTotalLiabilities(Financial current) =>
+            current.ShareCapitalCr + current.ReservesCr + current.TotalBorrowingsCr + current.OtherLiabilitiesCr;
 
-        public static decimal CalculateNetCash(decimal cashAndEquivalents, decimal totalBorrowings) =>
-            cashAndEquivalents - totalBorrowings;
+        public static decimal CalculateNetCash(Financial current) =>
+            current.CashAndEquivalentsCr - current.TotalBorrowingsCr;
 
-        public static decimal CalculateNonCurrentAssets(decimal fixedAssets, decimal cwip, decimal investments) =>
-            fixedAssets + cwip + investments;
+        public static decimal CalculateNonCurrentAssets(Financial current) =>
+            current.FixedAssetsCr + current.CwipCr + current.InvestmentsCr;
 
-        public static decimal CalculateCurrentAssets(decimal totalAssets, decimal nonCurrentAssets) =>
-            Math.Max(0m, totalAssets - nonCurrentAssets);
+        public static decimal CalculateCurrentAssets(Financial current) =>
+            Math.Max(0m, CalculateTotalAssets(current) - CalculateNonCurrentAssets(current));
 
-        public static decimal CalculateWorkingCapital(decimal currentAssets, decimal otherLiabilities) =>
-            currentAssets - otherLiabilities;
+        public static decimal CalculateWorkingCapital(Financial current) =>
+            CalculateCurrentAssets(current) - current.OtherLiabilitiesCr;
 
-        public static decimal CalculateCurrentLiabilities(decimal currentAssets, decimal workingCapital) =>
-            currentAssets - workingCapital;
+        public static decimal CalculateCurrentLiabilities(Financial current) =>
+            CalculateCurrentAssets(current) - CalculateWorkingCapital(current);
 
-        public static decimal CalculateGrossCapex(decimal cfo, decimal fcf) =>
-            cfo - fcf;
+        public static decimal CalculateGrossCapex(Financial current) =>
+           current.CashFromOperationsCr - current.FreeCashFlowCr;
 
-        public static decimal CalculateNetCashFlow(decimal cfo, decimal cfi, decimal cff) =>
-            cfo + cfi + cff;
+        public static decimal CalculateNetCashFlow(Financial current) =>
+            current.CashFromOperationsCr + current.CashFromInvestmentCr + current.CashFromFinanceCr;
 
-        public static decimal CalculateCfoToOpRatio(decimal cfo, decimal operatingProfit) =>
-            operatingProfit > 0m ? Math.Round(cfo / operatingProfit, 4) : 0m;
+        public static decimal CalculateCfoToOpRatio(Financial current) =>
+            current.OperatingProfitCr > 0m ? Math.Round(current.CashFromOperationsCr/ current.OperatingProfitCr, 4) : 0m;
 
-        public static decimal CalculateCashConversionRatio(decimal cfo, decimal netProfit) =>
-            netProfit > 0m ? Math.Round(cfo / netProfit, 2) : 0m;
+        public static decimal CalculateCashConversionRatio(Financial current, decimal cfo, decimal netProfit) =>
+            current.NetProfitCr > 0m ? Math.Round(current.CashFromOperationsCr / current.NetProfitCr, 2) : 0m;
 
-        public static decimal CalculateCapitalAdequacy(bool isFinancial, decimal equity, decimal totalAssets) =>
-            isFinancial && equity > 0m && totalAssets > 0m ? Math.Round((equity / totalAssets) * 100m, 2) : 0m;
+        public static decimal CalculateCapitalAdequacy(Financial current) =>
+            current.IsFinancialSector && CalculateTotalEquity(current) > 0m && CalculateTotalAssets(current) > 0m ? Math.Round((CalculateTotalEquity(current) / CalculateTotalAssets(current)) * 100m, 2) : 0m;
 
-        public static decimal CalculateRoa(decimal netProfit, decimal totalAssets, bool isFinancial) =>
-            totalAssets > 0m ? Math.Round((netProfit / totalAssets) * 100m, 2) : (isFinancial ? 1.0m : 0m);
+        public static decimal CalculateRoa(Financial current) =>
+            CalculateTotalAssets(current) > 0m ? Math.Round((current.NetProfitCr / CalculateTotalAssets(current)) * 100m, 2) : (current.IsFinancialSector ? 1.0m : 0m);
 
-        public static decimal CalculateEffectiveTaxRate(decimal taxPercent) =>
-            taxPercent > 0m ? Math.Clamp(taxPercent / 100m, 0.0m, 0.35m) : 0.25m;
+        public static decimal CalculateEffectiveTaxRate(Financial current) =>
+            current.TaxPercent > 0m ? Math.Clamp(current.TaxPercent / 100m, 0.0m, 0.35m) : 0.25m;
 
-        public static decimal CalculateCostOfDebt(decimal borrowings, decimal interestExpense) =>
-            borrowings > 0m && interestExpense > 0m ? Math.Clamp(interestExpense / borrowings, 0.03m, 0.18m) : 0.08m;
+        public static decimal CalculateCostOfDebt(Financial current) =>
+            current.TotalBorrowingsCr > 0m && current.InterestExpenseCr > 0m ? Math.Clamp(current.InterestExpenseCr / current.TotalBorrowingsCr, 0.03m, 0.18m) : 0.08m;
 
-        public static decimal CalculateInvestmentAssetsRatio(decimal investments, decimal totalAssets) =>
-            totalAssets > 0m ? Math.Clamp(investments / totalAssets, 0m, 1m) : 0m;
+        public static decimal CalculateInvestmentAssetsRatio(Financial current) =>
+            CalculateTotalAssets(current) > 0m ? Math.Clamp(current.InvestmentsCr / CalculateTotalAssets(current), 0m, 1m) : 0m;
 
-        public static decimal CalculateInterestIncomeRatio(decimal interestIncome, decimal sales) =>
-            sales > 0m ? Math.Clamp(interestIncome / sales, 0m, 1m) : 0m;
+        public static decimal CalculateInterestIncomeRatio(Financial current) =>
+            current.SalesCr > 0m ? Math.Clamp(current.IntrestIncomeCr / current.SalesCr, 0m, 1m) : 0m;
 
-        public static bool CheckCoreInvestmentCompany(bool explicitFlag, decimal investmentRatio, decimal interestRatio) =>
-            explicitFlag || (investmentRatio >= 0.70m && interestRatio < 0.30m);
+        public static bool CheckCoreInvestmentCompany(Financial current) =>
+            current.IsCoreInvestmentCompanyExplicit || (CalculateInvestmentAssetsRatio(current) >= 0.70m && CalculateInterestIncomeRatio(current) < 0.30m);
 
-        public static decimal CalculateRoic(DeepFinancial data)
+        public static decimal CalculateRoic(Financial current)
         {
-            decimal investedCapital = data.TotalEquityCapitalCr + data.TotalBorrowingsCr - data.CashAndEquivalentsCr;
+            decimal investedCapital = CalculateTotalEquity(current) + current.TotalBorrowingsCr - current.CashAndEquivalentsCr;
             if (investedCapital <= 0m) return 0m;
-            decimal nopat = data.EbitCr * (1m - data.EffectiveTaxRate);
+            decimal nopat = CalculateEbit(current)  * (1m - CalculateEffectiveTaxRate(current));
             return Math.Round((nopat / investedCapital) * 100m, 2);
         }
 
-        public static decimal CalculateTotalShares(decimal currentPrice, decimal marketCap) =>
-            currentPrice > 0m && marketCap > 0m ? Math.Round(marketCap / currentPrice, 4) : 0m;
+        public static decimal CalculateTotalShares(Financial current) =>
+            current.CurrentPrice > 0m && current.MarketCapCr > 0m ? Math.Round(current.MarketCapCr / current.CurrentPrice, 4) : 0m;
 
-        public static decimal CalculateCroic(DeepFinancial data) =>
-            (data.InvestmentsCr > 0m && !data.IsFinancialSector) ? (data.FreeCashFlowCr / data.InvestmentsCr) * 100m : 0m;
+        public static decimal CalculateCroic(Financial current) =>
+            (current.InvestmentsCr > 0m && !current.IsFinancialSector) ? (current.FreeCashFlowCr / current.InvestmentsCr) * 100m : 0m;
 
-        public static decimal CalculateSloanRatio(DeepFinancial data) => (data.TotalAssetsCr > 0m && !data.IsFinancialSector)
-                ? ((data.NetProfitCr - data.CashFromOperationsCr) / data.TotalAssetsCr) * 100m
+        public static decimal CalculateSloanRatio(Financial current) => (CalculateTotalAssets(current) > 0m && !current.IsFinancialSector)
+                ? ((current.NetProfitCr - current.CashFromOperationsCr) / CalculateTotalAssets(current)) * 100m
                 : 0m;
 
-        public static decimal CalculateInterestCoverage(DeepFinancial data) => (data.TotalBorrowingsCr > 0m && data.InterestExpenseCr > 0m && !data.IsFinancialSector)
-                ? (data.EbitCr / data.InterestExpenseCr)
-                : (data.TotalBorrowingsCr <= 0m ? 999m : 0m);
+        public static bool CheckCashPredictable(Financial current) => 
+            CalculateFreeCashFlow(current) > 0m && CalculateOcfToNetProfit(current) >= 0.8m && CalculateFcfToNetProfit(current) >= 0.50m
+                && CalculateSloanRatio(current) <= 10.0m;
+
+        public static decimal CalculateInterestCoverage(Financial current) => (current.TotalBorrowingsCr > 0m && current.InterestExpenseCr > 0m && !current.IsFinancialSector)
+                ? (CalculateEbit(current) / current.InterestExpenseCr)
+                : (current.TotalBorrowingsCr <= 0m ? 999m : 0m);
 
         // =========================================================================
         // 1. CAPEX-TO-DEPRECIATION RATIO
@@ -102,12 +107,12 @@ namespace SoundMoney.Algorithms
         /// Ratio > 1.0 indicates capital expansion/growth reinvestment.
         /// Ratio < 1.0 indicates potential under-investment or asset harvesting.
         /// </summary>
-        public static decimal CalculateCapexToDepreciationRatio(DeepFinancial data)
+        public static decimal CalculateCapexToDepreciationRatio(Financial current)
         {
-            if (data == null || data.DepreciationCr <= 0m) return 0m;
+            if (current == null || current.DepreciationCr <= 0m) return 0m;
 
-            decimal capex = Math.Abs(data.GrossCapexCr);
-            return Math.Round(capex / data.DepreciationCr, 2);
+            decimal capex = Math.Abs(CalculateGrossCapex(current));
+            return Math.Round(capex / current.DepreciationCr, 2);
         }
 
         // =========================================================================
@@ -117,27 +122,27 @@ namespace SoundMoney.Algorithms
         /// Calculates standard Altman Z-Score for Non-Manufacturing / General Companies.
         /// Z > 2.99 = Safe Zone | 1.81 <= Z <= 2.99 = Grey Zone | Z < 1.81 = Distress Zone
         /// </summary>
-        public static decimal CalculateAltmanZScore(DeepFinancial data)
+        public static decimal CalculateAltmanZScore(Financial current)
         {
-            if (data == null || data.TotalAssetsCr <= 0m || data.IsFinancialSector) return 0m;
+            if (current == null || CalculateTotalAssets(current) <= 0m || current.IsFinancialSector) return 0m;
 
-            decimal totalAssets = data.TotalAssetsCr;
+            decimal totalAssets = CalculateTotalAssets(current);
 
             // X1: Working Capital / Total Assets
-            decimal x1 = data.WorkingCapitalCr / totalAssets;
+            decimal x1 = CalculateWorkingCapital(current) / totalAssets;
 
             // X2: Retained Earnings / Total Assets
-            decimal x2 = data.ReservesCr / totalAssets;
+            decimal x2 = current.ReservesCr / totalAssets;
 
             // X3: EBIT / Total Assets
-            decimal x3 = data.EbitCr / totalAssets;
+            decimal x3 = CalculateEbit(current) / totalAssets;
 
             // X4: Market Value of Equity / Total Liabilities
-            decimal totalLiabilities = data.TotalBorrowingsCr + data.OtherLiabilitiesCr;
-            decimal x4 = totalLiabilities > 0m ? data.MarketCapCr / totalLiabilities : 10m;
+            decimal totalLiabilities = current.TotalBorrowingsCr + current.OtherLiabilitiesCr;
+            decimal x4 = totalLiabilities > 0m ? current.MarketCapCr / totalLiabilities : 10m;
 
             // X5: Sales / Total Assets
-            decimal x5 = data.SalesCr / totalAssets;
+            decimal x5 = current.SalesCr / totalAssets;
 
             // Z = 1.2*X1 + 1.4*X2 + 3.3*X3 + 0.6*X4 + 0.999*X5
             decimal zScore = (1.2m * x1) + (1.4m * x2) + (3.3m * x3) + (0.6m * x4) + (0.999m * x5);
@@ -152,7 +157,7 @@ namespace SoundMoney.Algorithms
         /// Calculates Piotroski F-Score across 9 fundamental criteria across Profitability, Leverage, and Operating Efficiency.
         /// Requires at least 2 historical periods (T and T-1).
         /// </summary>
-        public static int CalculatePiotroskiFScore(DeepFinancial current, IEnumerable<Financial> historicals)
+        public static int CalculatePiotroskiFScore(Financial current, IEnumerable<Financial> historicals)
         {
             if (current == null || historicals == null || current.IsFinancialSector) return 0;
 
@@ -167,8 +172,8 @@ namespace SoundMoney.Algorithms
             // --- Profitability Criteria (Max 4 Points) ---
 
             // 1. Positive Return on Assets (ROA > 0)
-            decimal roaT = t.TotalAssetsCr > 0m ? t.NetProfitCr / t.TotalAssetsCr : 0m;
-            decimal roaPrev = tPrev.TotalAssetsCr > 0m ? tPrev.NetProfitCr / tPrev.TotalAssetsCr : 0m;
+            decimal roaT = CalculateTotalAssets(t) > 0m ? t.NetProfitCr / CalculateTotalAssets(t) : 0m;
+            decimal roaPrev = CalculateTotalAssets(tPrev) > 0m ? tPrev.NetProfitCr / CalculateTotalAssets(tPrev) : 0m;
             if (roaT > 0m) fScore++;
 
             // 2. Positive Operating Cash Flow (CFO > 0)
@@ -183,13 +188,13 @@ namespace SoundMoney.Algorithms
             // --- Leverage, Liquidity & Source of Funds (Max 3 Points) ---
 
             // 5. Debt Decrease (Long-Term Debt Ratio Decrease)
-            decimal leverageT = t.TotalAssetsCr > 0m ? t.TotalBorrowingsCr / t.TotalAssetsCr : 0m;
-            decimal leveragePrev = tPrev.TotalAssetsCr > 0m ? tPrev.TotalBorrowingsCr / tPrev.TotalAssetsCr : 0m;
+            decimal leverageT = CalculateTotalAssets(t) > 0m ? t.TotalBorrowingsCr / CalculateTotalAssets(t) : 0m;
+            decimal leveragePrev = CalculateTotalAssets(tPrev) > 0m ? tPrev.TotalBorrowingsCr / CalculateTotalAssets(tPrev) : 0m;
             if (leverageT < leveragePrev) fScore++;
 
             // 6. Current Ratio Increase
-            decimal currentRatioT = t.TotalLiabilitiesCr > 0m ? t.CurrentAssetsCr / t.CurrentLiabilitiesCr : 0m;
-            decimal currentRatioPrev = tPrev.CurrentLiabilitiesCr > 0m ? tPrev.CurrentAssetsCr / tPrev.CurrentLiabilitiesCr : 0m;
+            decimal currentRatioT =  CalculateCurrentLiabilities(t) > 0m ? CalculateCurrentAssets(t)  / CalculateCurrentLiabilities(t) : 0m;
+            decimal currentRatioPrev = CalculateCurrentLiabilities(tPrev) > 0m ?  CalculateCurrentAssets(tPrev)  / CalculateCurrentLiabilities(tPrev) : 0m;
             if (currentRatioT > currentRatioPrev) fScore++;
 
             // 7. No Equity Dilution (Shares outstanding in T <= T-1)
@@ -203,8 +208,8 @@ namespace SoundMoney.Algorithms
             if (grossMarginT > grossMarginPrev) fScore++;
 
             // 9. Asset Turnover Improvement (Sales / Total Assets)
-            decimal assetTurnoverT = t.TotalAssetsCr > 0m ? t.SalesCr / t.TotalAssetsCr : 0m;
-            decimal assetTurnoverPrev = tPrev.TotalAssetsCr > 0m ? tPrev.SalesCr / tPrev.TotalAssetsCr : 0m;
+            decimal assetTurnoverT = CalculateTotalAssets(t) > 0m ? t.SalesCr / CalculateTotalAssets(t) : 0m;
+            decimal assetTurnoverPrev = CalculateTotalAssets(tPrev) > 0m ? tPrev.SalesCr / CalculateTotalAssets(tPrev) : 0m;
             if (assetTurnoverT > assetTurnoverPrev) fScore++;
 
             return fScore;
@@ -218,7 +223,7 @@ namespace SoundMoney.Algorithms
         /// M-Score > -1.78 suggests high probability of earnings manipulation.
         /// Requires at least 2 historical periods (T and T-1).
         /// </summary>
-        public static decimal CalculateBeneishMScore(DeepFinancial current, IEnumerable<Financial> historicals)
+        public static decimal CalculateBeneishMScore(Financial current, IEnumerable<Financial> historicals)
         {
             if (current == null || historicals == null || current.IsFinancialSector) return 0m;
 
@@ -229,13 +234,13 @@ namespace SoundMoney.Algorithms
             var tPrev = historyList[1]; // Period T-1
 
             if (tPrev.SalesCr <= 0m || t.SalesCr <= 0m ||
-                tPrev.TotalAssetsCr <= 0m || t.TotalAssetsCr <= 0m)
+                CalculateTotalAssets(tPrev) <= 0m || CalculateTotalAssets(t) <= 0m)
                 return 0m;
 
             // 1. DSRI: Days Sales in Receivables Index
             // Formula approximation assuming working capital receivables proxy
-            decimal recT = Math.Max(0m, t.WorkingCapitalCr);
-            decimal recPrev = Math.Max(0m, tPrev.WorkingCapitalCr);
+            decimal recT = Math.Max(0m, CalculateWorkingCapital(t));
+            decimal recPrev = Math.Max(0m, CalculateWorkingCapital(tPrev));
             decimal dsri = (t.SalesCr > 0m && tPrev.SalesCr > 0m && recPrev > 0m)
                 ? (recT / t.SalesCr) / (recPrev / tPrev.SalesCr)
                 : 1.0m;
@@ -246,10 +251,10 @@ namespace SoundMoney.Algorithms
             decimal gmi = gmT > 0m ? gmPrev / gmT : 1.0m;
 
             // 3. AQI: Asset Quality Index
-            decimal nonCurrentAssetsT = t.TotalAssetsCr - t.CurrentAssetsCr - t.FixedAssetsCr;
-            decimal nonCurrentAssetsPrev = tPrev.TotalAssetsCr - tPrev.CurrentAssetsCr - tPrev.FixedAssetsCr;
-            decimal aqiT = t.TotalAssetsCr > 0m ? 1m - (nonCurrentAssetsT / t.TotalAssetsCr) : 1m;
-            decimal aqiPrev = tPrev.TotalAssetsCr > 0m ? 1m - (nonCurrentAssetsPrev / tPrev.TotalAssetsCr) : 1m;
+            decimal nonCurrentAssetsT = CalculateTotalAssets(t) -  CalculateCurrentAssets(t)  - t.FixedAssetsCr;
+            decimal nonCurrentAssetsPrev = CalculateTotalAssets(tPrev) -  CalculateCurrentAssets(tPrev)  - tPrev.FixedAssetsCr;
+            decimal aqiT = CalculateTotalAssets(t) > 0m ? 1m - (nonCurrentAssetsT / CalculateTotalAssets(t)) : 1m;
+            decimal aqiPrev = CalculateTotalAssets(tPrev) > 0m ? 1m - (nonCurrentAssetsPrev / CalculateTotalAssets(tPrev)) : 1m;
             decimal aqi = aqiPrev > 0m ? aqiT / aqiPrev : 1.0m;
 
             // 4. SGI: Sales Growth Index
@@ -266,13 +271,13 @@ namespace SoundMoney.Algorithms
             decimal sgai = sgaiPrev > 0m ? sgaiT / sgaiPrev : 1.0m;
 
             // 7. LVGI: Leverage Index
-            decimal levT = t.TotalAssetsCr > 0m ? t.TotalBorrowingsCr / t.TotalAssetsCr : 1.0m;
-            decimal levPrev = tPrev.TotalAssetsCr > 0m ? tPrev.TotalBorrowingsCr / tPrev.TotalAssetsCr : 1.0m;
+            decimal levT = CalculateTotalAssets(t) > 0m ? t.TotalBorrowingsCr / CalculateTotalAssets(t) : 1.0m;
+            decimal levPrev = CalculateTotalAssets(tPrev) > 0m ? tPrev.TotalBorrowingsCr / CalculateTotalAssets(tPrev) : 1.0m;
             decimal lvgi = levPrev > 0m ? levT / levPrev : 1.0m;
 
             // 8. TATA: Total Accruals to Total Assets
             decimal totalAccruals = t.NetProfitCr - t.CashFromOperationsCr;
-            decimal tata = t.TotalAssetsCr > 0m ? totalAccruals / t.TotalAssetsCr : 0m;
+            decimal tata = CalculateTotalAssets(t) > 0m ? totalAccruals / CalculateTotalAssets(t) : 0m;
 
             // Beneish M-Score Formula (8-variable model):
             double mScore = -4.84
@@ -291,28 +296,28 @@ namespace SoundMoney.Algorithms
         /// <summary>
         /// Evaluates historical dividend performance and safety metrics.
         /// </summary>
-        /// <param name="historicalData">List of historical financial records.</param>
-        /// <param name="data">Current DeepFinancial metrics (for NetProfit, CapitalAdequacy, etc.).</param>
+        /// <param name="historical">List of historical financial records.</param>
+        /// <param name="current">Current Financial metrics (for NetProfit, CapitalAdequacy, etc.).</param>
         /// <returns>DividendAnalysisResult containing consistency checks and safety rating.</returns>
-        public static DividendAnalysisResult CalculateDividend(DeepFinancial data, List<Financial> historicalData)
+        public static DividendAnalysisResult CalculateDividend(Financial current, List<Financial> historical)
         {
-            if (historicalData == null || !historicalData.Any() || data == null)
+            if (historical == null || !historical.Any() || current == null)
                 return new DividendAnalysisResult();
 
-            bool isFinancialSector = data.IsFinancialSector;
+            bool isFinancialSector = current.IsFinancialSector;
 
             // Sort historical records by year descending (newest first)
-            var sortedHistory = historicalData.OrderByDescending(h => h.Year).ToList();
+            var sortedHistory = historical.OrderByDescending(h => h.Year).ToList();
 
             int paidStreak = 0;
             int growthStreak = 0;
 
             for (int i = 0; i < sortedHistory.Count; i++)
             {
-                var current = sortedHistory[i];
+                var currentH = sortedHistory[i];
 
                 // 1. Uninterrupted Payment Streak Check
-                if (current.DividendPayoutPercent > 0m)
+                if (currentH.DividendPayoutPercent > 0m)
                 {
                     paidStreak++;
                 }
@@ -324,10 +329,10 @@ namespace SoundMoney.Algorithms
                 // 2. Growth / Consistency Streak
                 if (i < sortedHistory.Count - 1)
                 {
-                    var previous = sortedHistory[i + 1];
+                    var previousH = sortedHistory[i + 1];
 
                     // Maintain growth/stability streak if payout ratio stays within 10% tolerance
-                    if (current.DividendPayoutPercent >= previous.DividendPayoutPercent * 0.9m)
+                    if (currentH.DividendPayoutPercent >= previousH.DividendPayoutPercent * 0.9m)
                     {
                         growthStreak++;
                     }
@@ -359,7 +364,7 @@ namespace SoundMoney.Algorithms
             // Uses CAR & Profitability for Financials; FCF & Payout for Non-Financials
             // -------------------------------------------------------------
             bool isDividendSafe = isFinancialSector
-                ? (data.NetProfitCr > 0m && averagePayoutRatio <= 60m && data.CapitalAdequacyPercent >= 13m)
+                ? (current.NetProfitCr > 0m && averagePayoutRatio <= 60m && CalculateCapitalAdequacy(current) >= 13m)
                 : (averagePayoutRatio <= 75m && isFcfSupported);
 
             // 5. Final Consistency & Classification Logic
@@ -385,9 +390,9 @@ namespace SoundMoney.Algorithms
             };
         }
 
-        public static int CalculateSoundScore(decimal marginOfSafety, DeepFinancial data, IEnumerable<Financial> historicals)
+        public static int CalculateSoundScore(decimal marginOfSafety, Financial current, IEnumerable<Financial> historicals)
         {
-            if (data == null) return 0;
+            if (current == null) return 0;
 
             decimal score = 0m;
 
@@ -395,43 +400,37 @@ namespace SoundMoney.Algorithms
             // 0. UNIT NORMALIZATION & DERIVED ADVANCED METRICS
             // Standardizes percentages so 15% is represented as 15.0m
             // -------------------------------------------------------------
-            decimal roePercent = (data.ReportedRoePercent <= 1.0m && data.ReportedRoePercent > -1.0m)
-                ? data.ReportedRoePercent * 100m
-                : data.ReportedRoePercent;
+            decimal roePercent = (current.ReportedRoePercent <= 1.0m && current.ReportedRoePercent > -1.0m)
+                ? current.ReportedRoePercent * 100m
+                : current.ReportedRoePercent;
 
-            decimal roaPercent = (data.ReportedRoaPercent <= 1.0m && data.ReportedRoaPercent > -1.0m)
-                ? data.ReportedRoaPercent * 100m
-                : data.ReportedRoaPercent;
+            decimal roaPercent = (CalculateRoa(current)   <= 1.0m && CalculateRoa(current) > -1.0m)
+                ? CalculateRoa(current) * 100m
+                : CalculateRoa(current);
 
-            decimal roicPercent = FinancialAlgorithms.CalculateRoic(data);
+            decimal roicPercent = CalculateRoic(current);
 
-            decimal opmPercent = (data.SalesCr > 0m && !data.IsFinancialSector)
-                ? data.OperatingProfitMargin
+            decimal opmPercent = (current.SalesCr > 0m && !current.IsFinancialSector)
+                ? CalculateOperatingProfitMargin(current)
                 : 0m;
 
             // Derived Free Cash Flow (FCF = CFO - Capex)
-            decimal fcfCr = data.FreeCashFlowCr != 0m
-                ? data.FreeCashFlowCr
-                : data.CashFromOperationsCr - Math.Abs(data.GrossCapexCr);
+            decimal fcfCr = CalculateFreeCashFlow(current);
 
             // Derived CROIC (Cash Return on Invested Capital = FCF / Invested Capital)
-            decimal croicPercent = (data.InvestmentsCr > 0m && !data.IsFinancialSector)
-                ? (fcfCr / data.InvestmentsCr) * 100m
-                : 0m;
+            decimal croicPercent = CalculateCroic(current);
 
             // Derived Sloan Ratio (Accrual & Earnings Quality Index)
-            decimal sloanRatio = (data.TotalAssetsCr > 0m && !data.IsFinancialSector)
-                ? ((data.NetProfitCr - data.CashFromOperationsCr) / data.TotalAssetsCr) * 100m
-                : 0m;
+            decimal sloanRatio = CalculateSloanRatio(current);  
 
             // Evaluate Dividend Health Rating from historical financials
             var historyList = historicals?.OrderBy(h => h.Year).ToList();
-            DividendAnalysisResult dividendAnalysis = CalculateDividend(data, historyList ?? new List<Financial>());
+            DividendAnalysisResult dividendAnalysis = CalculateDividend(current, historyList ?? new List<Financial>());
 
             // -------------------------------------------------------------
             // 1. MARGIN OF SAFETY (Max 25 Pts - Scaled to ROE/ROIC Quality)
             // -------------------------------------------------------------
-            decimal maxMosContribution = ((roePercent < 12.0m || roicPercent < 10.0m) && !data.IsFinancialSector) ? 12m : 25m;
+            decimal maxMosContribution = ((roePercent < 12.0m || roicPercent < 10.0m) && !current.IsFinancialSector) ? 12m : 25m;
 
             if (marginOfSafety >= 30m)
             {
@@ -449,7 +448,7 @@ namespace SoundMoney.Algorithms
             // -------------------------------------------------------------
             // 2. CAPITAL EFFICIENCY: ROE, ROIC & CROIC BLEND (Max 25 Pts)
             // -------------------------------------------------------------
-            if (data.IsFinancialSector)
+            if (current.IsFinancialSector)
             {
                 if (roaPercent >= 2.0m) score += 25m;
                 else if (roaPercent >= 1.5m) score += 18m;
@@ -479,17 +478,17 @@ namespace SoundMoney.Algorithms
             // -------------------------------------------------------------
             // 3. SOLVENCY, LEVERAGE & INTEREST COVERAGE (Max 20 Pts)
             // -------------------------------------------------------------
-            if (!data.IsFinancialSector)
+            if (!current.IsFinancialSector)
             {
-                decimal leverageCr = data.IsCashEstimateReliable ? -data.NetCashCr : data.TotalBorrowingsCr;
+                decimal leverageCr = current.IsCashEstimateReliable ? -  CalculateNetCash(current) : current.TotalBorrowingsCr;
 
                 if (leverageCr <= 0m)
                 {
                     score += (roePercent >= 12.0m || roicPercent >= 10.0m) ? 15m : 8m;
                 }
-                else if (data.EbitCr > 0m)
+                else if (CalculateEbit(current) > 0m)
                 {
-                    decimal debtToEbit = leverageCr / data.EbitCr;
+                    decimal debtToEbit = leverageCr / CalculateEbit(current);
 
                     if (debtToEbit <= 1.5m) score += 12m;
                     else if (debtToEbit <= 3.0m) score += 6m;
@@ -497,34 +496,34 @@ namespace SoundMoney.Algorithms
                 }
 
                 // Interest Coverage Buffer (Max 5 Pts)
-                if (data.TotalBorrowingsCr > 0m && data.InterestExpenseCr > 0m)
+                if (current.TotalBorrowingsCr > 0m && current.InterestExpenseCr > 0m)
                 {
-                    decimal interestCoverage = data.EbitCr / data.InterestExpenseCr;
+                    decimal interestCoverage = CalculateEbit(current) / current.InterestExpenseCr;
                     if (interestCoverage >= 8.0m) score += 5m;
                     else if (interestCoverage >= 4.0m) score += 3m;
                     else if (interestCoverage < 2.0m) score -= 5m; // Debt servicing strain penalty
                 }
-                else if (data.TotalBorrowingsCr <= 0m)
+                else if (current.TotalBorrowingsCr <= 0m)
                 {
                     score += 5m; // Net debt free bonus
                 }
             }
             else
             {
-                if (data.CapitalAdequacyPercent >= 16m) score += 20m;
-                else if (data.CapitalAdequacyPercent >= 13m) score += 12m;
-                else if (data.CapitalAdequacyPercent >= 11m) score += 5m;
+                if ( CalculateCapitalAdequacy(current) >= 16m) score += 20m;
+                else if (CalculateCapitalAdequacy(current) >= 13m) score += 12m;
+                else if (CalculateCapitalAdequacy(current) >= 11m) score += 5m;
             }
 
             // -------------------------------------------------------------
             // 4. CASH FLOW QUALITY & FCF CONVERSION (Max 15 Pts)
             // -------------------------------------------------------------
-            if (!data.IsFinancialSector)
+            if (!current.IsFinancialSector)
             {
-                if (data.NetProfitCr > 0m)
+                if (current.NetProfitCr > 0m)
                 {
-                    decimal cfoConversion = data.CashFromOperationsCr / data.NetProfitCr;
-                    decimal fcfConversion = fcfCr / data.NetProfitCr;
+                    decimal cfoConversion = current.CashFromOperationsCr / current.NetProfitCr;
+                    decimal fcfConversion = fcfCr / current.NetProfitCr;
 
                     // FCF Conversion Component (Max 10 Pts)
                     if (fcfConversion >= 0.80m) score += 10m;
@@ -581,7 +580,7 @@ namespace SoundMoney.Algorithms
                     profitGrowth = -0.10m;
                 }
 
-                if (data.IsFinancialSector)
+                if (current.IsFinancialSector)
                 {
                     decimal patPoints = (hasValidProfitGrowth && profitGrowth > 0m) ? Math.Min(10m, (profitGrowth / 0.15m) * 10m) : 0m;
                     decimal revPoints = (salesGrowth > 0m) ? Math.Min(5m, (salesGrowth / 0.15m) * 5m) : 0m;
@@ -593,15 +592,15 @@ namespace SoundMoney.Algorithms
                     decimal patPoints = 0m;
                     if (hasValidProfitGrowth && profitGrowth > 0m)
                     {
-                        decimal cfoPatRatio = (data.NetProfitCr > 0m && data.CashFromOperationsCr > 0m)
-                            ? (data.CashFromOperationsCr / data.NetProfitCr)
+                        decimal cfoPatRatio = (current.NetProfitCr > 0m && current.CashFromOperationsCr > 0m)
+                            ? (current.CashFromOperationsCr / current.NetProfitCr)
                             : 0m;
                         decimal maxPatPts = (cfoPatRatio < 0.50m) ? 3m : 6m;
                         patPoints = Math.Min(maxPatPts, (profitGrowth / 0.15m) * maxPatPts);
                     }
 
                     // Pricing Power & Margin Stability (Max 3 Pts)
-                    decimal avgHistoricalOpm = historyList.Average(h => h.OperatingProfitMargin);
+                    decimal avgHistoricalOpm = historyList.Average(h => CalculateOperatingProfitMargin(h));
                     decimal marginTrendPoints = (opmPercent >= avgHistoricalOpm) ? 3m : 0m;
 
                     score += (revPoints + patPoints + marginTrendPoints);
@@ -624,19 +623,19 @@ namespace SoundMoney.Algorithms
             // -------------------------------------------------------------
             // 7. GOVERNANCE, ACCRUAL & WORKING CAPITAL DEDUCTIONS
             // -------------------------------------------------------------
-            decimal pledgePercent = (data.PromoterPledgePercent <= 1.0m && data.PromoterPledgePercent > 0m)
-                ? data.PromoterPledgePercent * 100m
-                : data.PromoterPledgePercent;
+            decimal pledgePercent = (current.PromoterPledgePercent <= 1.0m && current.PromoterPledgePercent > 0m)
+                ? current.PromoterPledgePercent * 100m
+                : current.PromoterPledgePercent;
 
             if (pledgePercent >= 25.0m) score -= 15m;
             else if (pledgePercent >= 10.0m) score -= 8m;
 
-            if (!data.IsFinancialSector)
+            if (!current.IsFinancialSector)
             {
                 if (opmPercent > 0m && opmPercent < 8.0m) score -= 10m;
 
-                bool hasNetDebt = data.IsCashEstimateReliable ? data.NetCashCr < 0m : data.TotalBorrowingsCr > 0m;
-                if (data.WorkingCapitalCr < 0m && hasNetDebt) score -= 8m;
+                bool hasNetDebt = current.IsCashEstimateReliable ? CalculateNetCash(current) < 0m : current.TotalBorrowingsCr > 0m;
+                if (CalculateWorkingCapital(current) < 0m && hasNetDebt) score -= 8m;
 
                 if (roePercent < 10.0m) score -= 12m;
                 if (roicPercent < 8.0m) score -= 8m;
@@ -645,8 +644,8 @@ namespace SoundMoney.Algorithms
                 if (sloanRatio > 10.0m) score -= 8m;
 
                 // Cash Conversion Cycle Efficiency Adjustments
-                if (data.CashConversionCycleDays < 0m) score += 3m; // Negative CCC bargaining power
-                else if (data.CashConversionCycleDays > 120m) score -= 5m; // Excessively tied up capital
+                if (current.CashConversionCycleDays < 0m) score += 3m; // Negative CCC bargaining power
+                else if (current.CashConversionCycleDays > 120m) score -= 5m; // Excessively tied up capital
             }
 
             if (salesGrowth < 0m && hasValidHistory) score -= 5m;
@@ -655,51 +654,51 @@ namespace SoundMoney.Algorithms
             // -------------------------------------------------------------
             // 8. VALUE TRAP INTERCEPTOR & HARD SCORE CAP
             // -------------------------------------------------------------
-            bool hasHeavyNetDebt = data.IsCashEstimateReliable ? data.NetCashCr < -300m : data.TotalBorrowingsCr > 300m;
-            bool isCapitalDestroyer = !data.IsFinancialSector && (roePercent < 8.0m || roicPercent < 5.0m) && salesGrowth < 0.05m;
-            bool isHighDebtCommodity = !data.IsFinancialSector && opmPercent < 8.0m && hasHeavyNetDebt;
+            bool hasHeavyNetDebt = current.IsCashEstimateReliable ? CalculateNetCash(current) < -300m : current.TotalBorrowingsCr > 300m;
+            bool isCapitalDestroyer = !current.IsFinancialSector && (roePercent < 8.0m || roicPercent < 5.0m) && salesGrowth < 0.05m;
+            bool isHighDebtCommodity = !current.IsFinancialSector && opmPercent < 8.0m && hasHeavyNetDebt;
             bool isDeclining = (salesGrowth < 0m || (hasValidProfitGrowth && profitGrowth < 0m)) && hasValidHistory;
             bool isSeverePledge = pledgePercent >= 35.0m;
 
-            bool isPaperProfitTrap = !data.IsFinancialSector
-                && data.NetProfitCr > 0m
-                && (data.CashFromOperationsCr <= 0m || (data.CashFromOperationsCr / data.NetProfitCr) < 0.20m);
+            bool isPaperProfitTrap = !current.IsFinancialSector
+                && current.NetProfitCr > 0m
+                && (current.CashFromOperationsCr <= 0m || (current.CashFromOperationsCr / current.NetProfitCr) < 0.20m);
 
-            bool isFcfDrainTrap = !data.IsFinancialSector
-                && data.NetProfitCr > 0m
+            bool isFcfDrainTrap = !current.IsFinancialSector
+                && current.NetProfitCr > 0m
                 && fcfCr < 0m
-                && (data.CashFromOperationsCr / data.NetProfitCr) < 0.50m;
+                && (current.CashFromOperationsCr / current.NetProfitCr) < 0.50m;
 
-            bool isAggressiveAccrualTrap = !data.IsFinancialSector && sloanRatio > 18.0m;
+            bool isAggressiveAccrualTrap = !current.IsFinancialSector && sloanRatio > 18.0m;
 
             // -------------------------------------------------------------
             // 9. ADVANCED FORENSIC SCORES
             // -------------------------------------------------------------
-            decimal capexToDepRatio = CalculateCapexToDepreciationRatio(data);
-            decimal altmanZ = CalculateAltmanZScore(data);
-            int piotroskiF = CalculatePiotroskiFScore(data, historicals);
-            decimal beneishM = CalculateBeneishMScore(data, historicals);
+            decimal capexToDepRatio = CalculateCapexToDepreciationRatio(current);
+            decimal altmanZ = CalculateAltmanZScore(current);
+            int piotroskiF = CalculatePiotroskiFScore(current, historicals);
+            decimal beneishM = CalculateBeneishMScore(current, historicals);
 
             // Add Piotroski F-Score Quality Boost (Max 5 Pts)
             if (piotroskiF >= 7) score += 5m;
-            else if (piotroskiF <= 3 && !data.IsFinancialSector) score -= 5m;
+            else if (piotroskiF <= 3 && !current.IsFinancialSector) score -= 5m;
 
             // Altman Z-Score Distress Penalty
-            if (!data.IsFinancialSector)
+            if (!current.IsFinancialSector)
             {
                 if (altmanZ < 1.81m) score -= 15m; // Distress Zone
                 else if (altmanZ > 2.99m) score += 3m; // Safe Zone
             }
 
             // Beneish M-Score Earnings Manipulation Interceptor
-            bool isBeneishManipulator = beneishM > -1.78m && !data.IsFinancialSector;
+            bool isBeneishManipulator = beneishM > -1.78m && !current.IsFinancialSector;
             if (isBeneishManipulator) score -= 20m;
 
             // Update Value Trap Interceptor condition with Beneish M-Score
             bool isValueTrap = roePercent < 5.0m
-                || (!data.IsFinancialSector && roicPercent < 5.0m)
+                || (!current.IsFinancialSector && roicPercent < 5.0m)
                 || isDeclining
-                || data.NetProfitCr <= 0m
+                || current.NetProfitCr <= 0m
                 || isCapitalDestroyer
                 || isHighDebtCommodity
                 || isSeverePledge
@@ -714,18 +713,18 @@ namespace SoundMoney.Algorithms
             return isValueTrap ? Math.Min(finalScore, 40) : finalScore;
         }
 
-        public static decimal CalculateStandardDcf(DeepFinancial data, IEnumerable<Financial> historicals)
+        public static decimal CalculateStandardDcf(Financial current, IEnumerable<Financial> historicals)
         {
-            if (data.TotalSharesCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0) return 0m;
 
-            decimal fcfCr = data.FreeCashFlowCr != 0
-                ? data.FreeCashFlowCr
-                : (data.CashFromOperationsCr - data.GrossCapexCr);
+            decimal fcfCr = current.FreeCashFlowCr != 0
+                ? current.FreeCashFlowCr
+                : (current.CashFromOperationsCr -  CalculateGrossCapex(current));
 
             if (fcfCr <= 0) return 0m;
 
-            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.08m);
-            decimal discountRate = CalculateWacc(data);
+            decimal growthRate = ResolveDynamicGrowthRate(current, historicals, defaultFallback: 0.08m);
+            decimal discountRate = CalculateWacc(current);
 
             decimal terminalRate = 0.03m;
 
@@ -743,25 +742,25 @@ namespace SoundMoney.Algorithms
             decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 5);
 
             decimal enterpriseValueCr = cumulativePv + pvTerminal;
-            decimal netDebtCr = CalculateNetDebt(data);
+            decimal netDebtCr = CalculateNetDebt(current);
             decimal equityValueCr = enterpriseValueCr - netDebtCr;
 
-            return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
+            return Math.Max(0m, Math.Round(equityValueCr / CalculateTotalShares(current), 2));
         }
 
-        public static decimal CalculateTwoStageDcf(DeepFinancial data, IEnumerable<Financial> historicals)
+        public static decimal CalculateTwoStageDcf(Financial current, IEnumerable<Financial> historicals)
         {
-            if (data.TotalSharesCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0) return 0m;
 
-            decimal fcfCr = data.FreeCashFlowCr != 0
-                ? data.FreeCashFlowCr
-                : (data.CashFromOperationsCr - data.GrossCapexCr);
+            decimal fcfCr = current.FreeCashFlowCr != 0
+                ? current.FreeCashFlowCr
+                : (current.CashFromOperationsCr - CalculateGrossCapex(current));
 
             if (fcfCr <= 0) return 0m;
 
-            decimal stage1Growth = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.10m);
+            decimal stage1Growth = ResolveDynamicGrowthRate(current, historicals, defaultFallback: 0.10m);
             decimal stage2Growth = stage1Growth * 0.5m;
-            decimal discountRate = CalculateWacc(data);
+            decimal discountRate = CalculateWacc(current);
             decimal terminalRate = Math.Min(0.03m, stage2Growth);
 
             decimal cumulativePv = 0m;
@@ -784,27 +783,27 @@ namespace SoundMoney.Algorithms
             decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 10);
 
             decimal equityValueCr = cumulativePv + pvTerminal;
-            return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
+            return Math.Max(0m, Math.Round(equityValueCr / CalculateTotalShares(current), 2));
         }
 
-        public static decimal CalculateExitMultipleDcf(DeepFinancial data, IEnumerable<Financial> historicals)
+        public static decimal CalculateExitMultipleDcf(Financial current, IEnumerable<Financial> historicals)
         {
-            if (data.TotalSharesCr <= 0m || data.EbitCr <= 0m) return 0m;
+            if (CalculateTotalShares(current) <= 0m || CalculateEbit(current) <= 0m) return 0m;
 
-            decimal taxRate = data.EffectiveTaxRate;
+            decimal taxRate = CalculateEffectiveTaxRate(current);
             // Unlevered Operating Cash Flow (FCFF approximation)
-            decimal ebitAfterTax = data.EbitCr * (1m - taxRate);
-            decimal fcffCr = ebitAfterTax + data.DepreciationCr - data.GrossCapexCr;
+            decimal ebitAfterTax = CalculateEbit(current) * (1m - taxRate);
+            decimal fcffCr = ebitAfterTax + current.DepreciationCr - CalculateGrossCapex(current);
 
             if (fcffCr <= 0m) return 0m;
 
-            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, defaultFallback: 0.08m);
-            decimal wacc = CalculateWacc(data);
-            decimal evEbitdaMultiple = data.ReportedRoePercent >= 18.0m ? 14.0m : 10.0m;
+            decimal growthRate = ResolveDynamicGrowthRate(current, historicals, defaultFallback: 0.08m);
+            decimal wacc = CalculateWacc(current);
+            decimal evEbitdaMultiple = current.ReportedRoePercent >= 18.0m ? 14.0m : 10.0m;
 
             decimal cumulativePv = 0m;
             decimal projectedFcff = fcffCr;
-            decimal projectedEbitda = data.EbitdaCr;
+            decimal projectedEbitda = CalculateEbitda(current);
 
             for (int yr = 1; yr <= 5; yr++)
             {
@@ -817,25 +816,25 @@ namespace SoundMoney.Algorithms
             decimal pvTerminal = terminalEv / (decimal)Math.Pow((double)(1m + wacc), 5);
 
             decimal enterpriseValueCr = cumulativePv + pvTerminal;
-            decimal netDebtCr = CalculateNetDebt(data);
+            decimal netDebtCr = CalculateNetDebt(current);
             decimal equityValueCr = enterpriseValueCr - netDebtCr;
 
-            return Math.Max(0m, Math.Round(equityValueCr / data.TotalSharesCr, 2));
+            return Math.Max(0m, Math.Round(equityValueCr / CalculateTotalShares(current), 2));
         }
 
-        public static decimal CalculateExcessReturns(DeepFinancial data)
+        public static decimal CalculateExcessReturns(Financial current)
         {
-            if (data.BookValuePerShare <= 0m || data.ReportedRoePercent <= 0m) return 0m;
+            if (current.BookValuePerShare <= 0m || current.ReportedRoePercent <= 0m) return 0m;
 
-            decimal costOfEquity = CalculateWacc(data);
-            decimal roe = data.ReportedRoePercent / 100m;
+            decimal costOfEquity = CalculateWacc(current);
+            decimal roe = current.ReportedRoePercent / 100m;
 
-            if (roe <= costOfEquity) return Math.Round(data.BookValuePerShare, 2);
+            if (roe <= costOfEquity) return Math.Round(current.BookValuePerShare, 2);
 
-            decimal payoutRatio = Math.Clamp(data.DividendPayoutPercent / 100m, 0m, 0.80m);
+            decimal payoutRatio = Math.Clamp(current.DividendPayoutPercent / 100m, 0m, 0.80m);
             decimal retentionRatio = 1m - payoutRatio;
 
-            decimal currentBookValue = data.BookValuePerShare;
+            decimal currentBookValue = current.BookValuePerShare;
             decimal pvExcessReturns = 0m;
 
             // 5-Year Explicit Forecast Horizon with Compounding Book Value
@@ -852,19 +851,19 @@ namespace SoundMoney.Algorithms
             decimal terminalExcessReturn = ((roe - costOfEquity) * currentBookValue) / denominator;
             decimal pvTerminalExcess = terminalExcessReturn / (decimal)Math.Pow((double)(1m + costOfEquity), 5);
 
-            decimal totalIntrinsicValue = data.BookValuePerShare + pvExcessReturns + pvTerminalExcess;
+            decimal totalIntrinsicValue = current.BookValuePerShare + pvExcessReturns + pvTerminalExcess;
             return Math.Round(totalIntrinsicValue, 2);
         }
 
-        public static decimal CalculateDdm(DeepFinancial data)
+        public static decimal CalculateDdm(Financial current)
         {
-            if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
+            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
-            decimal costOfEquity = CalculateWacc(data);
+            decimal costOfEquity = CalculateWacc(current);
             const decimal dividendGrowth = 0.05m;
 
-            decimal payoutRatio = data.DividendPayoutPercent > 0 ? data.DividendPayoutPercent / 100m : 0.40m;
-            decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
+            decimal payoutRatio = current.DividendPayoutPercent > 0 ? current.DividendPayoutPercent / 100m : 0.40m;
+            decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
             decimal d0 = eps * payoutRatio;
 
             if (d0 <= 0) return 0m;
@@ -874,20 +873,20 @@ namespace SoundMoney.Algorithms
             return Math.Round(d1 / denominator, 2);
         }
 
-        public static decimal CalculateDdmPassThroughYield(DeepFinancial data)
+        public static decimal CalculateDdmPassThroughYield(Financial current)
         {
-            if (data.TotalSharesCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0) return 0m;
 
             // Compute realized dividend per share (d0) received by parent shareholders
             decimal d0 = 0m;
-            if (data.CurrentPrice > 0 && data.DividendYieldPercent > 0)
+            if (current.CurrentPrice > 0 && current.DividendYieldPercent > 0)
             {
-                d0 = data.CurrentPrice * (data.DividendYieldPercent / 100m);
+                d0 = current.CurrentPrice * (current.DividendYieldPercent / 100m);
             }
-            else if (data.BookValuePerShare > 0 && data.ReportedRoePercent > 0 && data.DividendPayoutPercent > 0)
+            else if (current.BookValuePerShare > 0 && current.ReportedRoePercent > 0 && current.DividendPayoutPercent > 0)
             {
-                decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
-                decimal rawDividend = eps * (data.DividendPayoutPercent / 100m);
+                decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
+                decimal rawDividend = eps * (current.DividendPayoutPercent / 100m);
 
                 // Apply a 50% pass-through friction haircut for investment/holding entities
                 d0 = rawDividend * 0.50m;
@@ -895,7 +894,7 @@ namespace SoundMoney.Algorithms
 
             if (d0 <= 0m) return 0m;
 
-            decimal costOfEquity = CalculateWacc(data);
+            decimal costOfEquity = CalculateWacc(current);
             // Conservative growth cap for holding entity pass-through cash flow
             const decimal dividendGrowth = 0.035m;
 
@@ -910,18 +909,18 @@ namespace SoundMoney.Algorithms
             return Math.Round(d1 / denominator, 2);
         }
 
-        public static decimal CalculateGordonGrowthDdm(DeepFinancial data)
+        public static decimal CalculateGordonGrowthDdm(Financial current)
         {
-            if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
+            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
-            decimal costOfEquity = CalculateWacc(data);
-            decimal payoutRatio = data.DividendPayoutPercent > 0 ? data.DividendPayoutPercent / 100m : 0.40m;
-            decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
+            decimal costOfEquity = CalculateWacc(current);
+            decimal payoutRatio = current.DividendPayoutPercent > 0 ? current.DividendPayoutPercent / 100m : 0.40m;
+            decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
             decimal d0 = eps * payoutRatio;
 
             if (d0 <= 0) return 0m;
 
-            decimal payoutGrowth = Math.Min((data.ReportedRoePercent / 100m) * (1m - payoutRatio), 0.06m);
+            decimal payoutGrowth = Math.Min((current.ReportedRoePercent / 100m) * (1m - payoutRatio), 0.06m);
             if (payoutGrowth >= costOfEquity) payoutGrowth = costOfEquity - 0.01m;
 
             decimal denominator = Math.Max(0.005m, costOfEquity - payoutGrowth);
@@ -929,9 +928,9 @@ namespace SoundMoney.Algorithms
             return Math.Round(d1 / denominator, 2);
         }
 
-        public static decimal CalculateOwnerEarnings(DeepFinancial data, IEnumerable<Financial> historicals)
+        public static decimal CalculateOwnerEarnings(Financial current, IEnumerable<Financial> historicals)
         {
-            if (data.TotalSharesCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0) return 0m;
 
             var historyList = historicals?.OrderBy(h => h.Year).ToList();
             decimal ownerEarningsCr;
@@ -946,7 +945,7 @@ namespace SoundMoney.Algorithms
                 {
                     decimal weight = i + 1m;
                     weightedOcfSum += historyList[i].CashFromOperationsCr * weight;
-                    weightedCapexSum += historyList[i].GrossCapexCr * weight;
+                    weightedCapexSum += CalculateGrossCapex(historyList[i]) * weight;
                     weightTotal += weight;
                 }
 
@@ -954,38 +953,38 @@ namespace SoundMoney.Algorithms
             }
             else
             {
-                ownerEarningsCr = data.CashFromOperationsCr - data.GrossCapexCr;
+                ownerEarningsCr = current.CashFromOperationsCr - CalculateGrossCapex(current);
             }
 
             if (ownerEarningsCr <= 0) return 0m;
 
-            decimal costOfEquity = CalculateWacc(data);
+            decimal costOfEquity = CalculateWacc(current);
             decimal terminalGrowth = Math.Min(0.04m, costOfEquity - 0.02m);
             decimal capRateDenominator = Math.Max(0.02m, costOfEquity - terminalGrowth);
             decimal capMultiple = 1m / capRateDenominator;
 
-            return Math.Round((ownerEarningsCr * capMultiple) / data.TotalSharesCr, 2);
+            return Math.Round((ownerEarningsCr * capMultiple) / CalculateTotalShares(current), 2);
         }
 
-        public static decimal CalculateNormalizedPe(DeepFinancial data, IEnumerable<Financial> historicals)
+        public static decimal CalculateNormalizedPe(Financial current, IEnumerable<Financial> historicals)
         {
-            if (data.TotalSharesCr <= 0 || historicals == null || !historicals.Any()) return 0m;
+            if (CalculateTotalShares(current) <= 0 || historicals == null || !historicals.Any()) return 0m;
 
             decimal avgNetProfitCr = historicals.Average(h => h.NetProfitCr);
             if (avgNetProfitCr <= 0) return 0m;
 
-            decimal normalizedEps = avgNetProfitCr / data.TotalSharesCr;
-            decimal targetPe = ResolveDynamicTargetPe(data);
+            decimal normalizedEps = avgNetProfitCr / CalculateTotalShares(current);
+            decimal targetPe = ResolveDynamicTargetPe(current);
 
             return Math.Round(normalizedEps * targetPe, 2);
         }
 
-        public static decimal CalculatePegRatioValue(DeepFinancial data, IEnumerable<Financial> historicals)
+        public static decimal CalculatePegRatioValue(Financial current, IEnumerable<Financial> historicals)
         {
-            if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
+            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
-            decimal eps = data.BookValuePerShare * (data.ReportedRoePercent / 100m);
-            decimal growthRate = ResolveDynamicGrowthRate(data, historicals, 0.10m) * 100m;
+            decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
+            decimal growthRate = ResolveDynamicGrowthRate(current, historicals, 0.10m) * 100m;
 
             if (eps <= 0 || growthRate <= 0) return 0m;
 
@@ -993,50 +992,50 @@ namespace SoundMoney.Algorithms
             return Math.Round(eps * fairPe, 2);
         }
 
-        public static decimal CalculateEvSalesMultiple(DeepFinancial data)
+        public static decimal CalculateEvSalesMultiple(Financial current)
         {
-            if (data.TotalSharesCr <= 0 || data.SalesCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0 || current.SalesCr <= 0) return 0m;
 
             decimal targetEvSales = 2.5m;
-            decimal revenueCr = data.SalesCr;
-            decimal netDebtCr = CalculateNetDebt(data);
+            decimal revenueCr = current.SalesCr;
+            decimal netDebtCr = CalculateNetDebt(current);
 
             decimal targetEquityValueCr = (revenueCr * targetEvSales) - netDebtCr;
-            return Math.Max(0m, Math.Round(targetEquityValueCr / data.TotalSharesCr, 2));
+            return Math.Max(0m, Math.Round(targetEquityValueCr / CalculateTotalShares(current), 2));
         }
 
-        public static decimal CalculatePriceToSales(DeepFinancial data)
+        public static decimal CalculatePriceToSales(Financial current)
         {
-            if (data.TotalSharesCr <= 0 || data.SalesCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0 || current.SalesCr <= 0) return 0m;
 
-            decimal salesPerShare = data.SalesCr / data.TotalSharesCr;
+            decimal salesPerShare = current.SalesCr / CalculateTotalShares(current);
             const decimal targetPs = 1.5m;
             return Math.Round(salesPerShare * targetPs, 2);
         }
 
-        public static decimal CalculateEvEbitdaMultiple(DeepFinancial data)
+        public static decimal CalculateEvEbitdaMultiple(Financial current)
         {
-            if (data.TotalSharesCr <= 0 || data.EbitCr <= 0) return 0m;
+            if (CalculateTotalShares(current) <= 0 || CalculateEbit(current) <= 0) return 0m;
 
-            decimal estimatedEbitdaCr = data.EbitCr * 1.2m;
-            decimal targetEvEbitda = data.ReportedRoePercent >= 18.0m ? 12.0m : 8.5m;
-            decimal netDebtCr = CalculateNetDebt(data);
+            decimal estimatedEbitdaCr = CalculateEbit(current) * 1.2m;
+            decimal targetEvEbitda = current.ReportedRoePercent >= 18.0m ? 12.0m : 8.5m;
+            decimal netDebtCr = CalculateNetDebt(current);
 
             decimal targetEquityValueCr = (estimatedEbitdaCr * targetEvEbitda) - netDebtCr;
-            return Math.Max(0m, Math.Round(targetEquityValueCr / data.TotalSharesCr, 2));
+            return Math.Max(0m, Math.Round(targetEquityValueCr / CalculateTotalShares(current), 2));
         }
 
-        public static decimal CalculatePriceToEarnings(DeepFinancial data)
+        public static decimal CalculatePriceToEarnings(Financial current)
         {
-            if (data.NetProfitCr <= 0 || data.TotalSharesCr <= 0) return 0m;
+            if (current.NetProfitCr <= 0 || CalculateTotalShares(current) <= 0) return 0m;
 
-            decimal eps = data.NetProfitCr / data.TotalSharesCr;
-            decimal fairPe = ResolveDynamicTargetPe(data);
+            decimal eps = current.NetProfitCr / CalculateTotalShares(current);
+            decimal fairPe = ResolveDynamicTargetPe(current);
 
-            if (!data.IsFinancialSector)
+            if (!current.IsFinancialSector)
             {
-                decimal cashConversion = data.NetProfitCr > 0
-                    ? Math.Clamp(data.CashFromOperationsCr / data.NetProfitCr, 0m, 1m)
+                decimal cashConversion = current.NetProfitCr > 0
+                    ? Math.Clamp(current.CashFromOperationsCr / current.NetProfitCr, 0m, 1m)
                     : 0m;
 
                 if (cashConversion < 0.50m)
@@ -1048,34 +1047,34 @@ namespace SoundMoney.Algorithms
             return Math.Round(eps * fairPe, 2);
         }
 
-        public static decimal CalculateNavPerShare(DeepFinancial data)
+        public static decimal CalculateNavPerShare(Financial current)
         {
-            return data.BookValuePerShare <= 0 ? 0m : Math.Round(data.BookValuePerShare, 2);
+            return current.BookValuePerShare <= 0 ? 0m : Math.Round(current.BookValuePerShare, 2);
         }
 
-        public static decimal CalculatePbIntrinsicValue(DeepFinancial data)
+        public static decimal CalculatePbIntrinsicValue(Financial current)
         {
-            if (data.BookValuePerShare <= 0 || data.ReportedRoePercent <= 0) return 0m;
+            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
-            decimal costOfEquity = CalculateWacc(data);
+            decimal costOfEquity = CalculateWacc(current);
             const decimal growth = 0.05m;
-            decimal roe = data.ReportedRoePercent / 100m;
+            decimal roe = current.ReportedRoePercent / 100m;
 
             decimal denominator = Math.Max(0.005m, costOfEquity - growth);
             decimal justifiedPb = (roe - growth) / denominator;
             justifiedPb = Math.Clamp(justifiedPb, 0.5m, 12.0m);
 
-            return Math.Round(data.BookValuePerShare * justifiedPb, 2);
+            return Math.Round(current.BookValuePerShare * justifiedPb, 2);
         }
 
-        public static decimal CalculateHoldingCompanyValue(DeepFinancial data)
+        public static decimal CalculateHoldingCompanyValue(Financial current)
         {
-            if (data.BookValuePerShare <= 0) return 0m;
+            if (current.BookValuePerShare <= 0) return 0m;
 
-            decimal rawNavPerShare = data.BookValuePerShare;
+            decimal rawNavPerShare = current.BookValuePerShare;
             decimal holdCoDiscount = 0.50m;
 
-            if (data.DividendYieldPercent < 1.0m)
+            if (current.DividendYieldPercent < 1.0m)
             {
                 holdCoDiscount += 0.10m;
             }
@@ -1084,12 +1083,12 @@ namespace SoundMoney.Algorithms
             return Math.Round(adjustedNav, 2);
         }
 
-        public static decimal ResolveDynamicGrowthRate(DeepFinancial data, IEnumerable<Financial> historicals, decimal defaultFallback = 0.08m)
+        public static decimal ResolveDynamicGrowthRate(Financial current, IEnumerable<Financial> historicals, decimal defaultFallback = 0.08m)
         {
-            if (data.ReportedRoePercent > 0)
+            if (current.ReportedRoePercent > 0)
             {
-                decimal roe = data.ReportedRoePercent / 100m;
-                decimal payoutRatio = Math.Max(0m, Math.Min(data.DividendPayoutPercent / 100m, 1m));
+                decimal roe = current.ReportedRoePercent / 100m;
+                decimal payoutRatio = Math.Max(0m, Math.Min(current.DividendPayoutPercent / 100m, 1m));
                 decimal retentionRatio = 1m - payoutRatio;
 
                 decimal fundamentalGrowth = roe * retentionRatio;
@@ -1120,33 +1119,33 @@ namespace SoundMoney.Algorithms
             return defaultFallback;
         }
 
-        public static decimal CalculateNetDebt(DeepFinancial data) 
-                => data.IsCashEstimateReliable ? data.TotalBorrowingsCr - data.CashAndEquivalentsCr
-                : data.TotalBorrowingsCr;
-        public static decimal CalculateDebtToEbit(DeepFinancial data) 
-                => CalculateNetDebt(data) > 0 && data.EbitCr > 0 ? Math.Max(0m, CalculateNetDebt(data) / data.EbitCr) : 0m;
-        public static decimal CalculateCapexToOcf(DeepFinancial data) 
-                => data.CashFromOperationsCr > 0 ? Math.Max(0m, data.GrossCapexCr / data.CashFromOperationsCr) : 0m;
-        public static decimal CalculateFreeCashFlow(DeepFinancial data) 
-                => data.FreeCashFlowCr != 0 ? data.FreeCashFlowCr : data.CashFromOperationsCr - data.GrossCapexCr;
-        public static decimal CalculateOcfToNetProfit(DeepFinancial data) 
-                => data.NetProfitCr > 0 ? Math.Max(0m, data.CashFromOperationsCr / data.NetProfitCr) : 0m;
-        public static decimal CalculateFcfToNetProfit(DeepFinancial data) 
-                => data.NetProfitCr > 0 ? Math.Max(0m, CalculateFreeCashFlow(data) / data.NetProfitCr) : 0m;
+        public static decimal CalculateNetDebt(Financial current) 
+                => current.IsCashEstimateReliable ? current.TotalBorrowingsCr - current.CashAndEquivalentsCr
+                : current.TotalBorrowingsCr;
+        public static decimal CalculateDebtToEbit(Financial current) 
+                => CalculateNetDebt(current) > 0 && CalculateEbit(current) > 0 ? Math.Max(0m, CalculateNetDebt(current) / CalculateEbit(current)) : 0m;
+        public static decimal CalculateCapexToOcf(Financial current) 
+                => current.CashFromOperationsCr > 0 ? Math.Max(0m, CalculateGrossCapex(current) / current.CashFromOperationsCr) : 0m;
+        public static decimal CalculateFreeCashFlow(Financial current) 
+                => current.FreeCashFlowCr != 0 ? current.FreeCashFlowCr : current.CashFromOperationsCr - CalculateGrossCapex(current);
+        public static decimal CalculateOcfToNetProfit(Financial current) 
+                => current.NetProfitCr > 0 ? Math.Max(0m, current.CashFromOperationsCr / current.NetProfitCr) : 0m;
+        public static decimal CalculateFcfToNetProfit(Financial current) 
+                => current.NetProfitCr > 0 ? Math.Max(0m, CalculateFreeCashFlow(current) / current.NetProfitCr) : 0m;
 
-        public static decimal CalculateWacc(DeepFinancial data, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m)
+        public static decimal CalculateWacc(Financial current, decimal riskFreeRate = 0.07m, decimal equityRiskPremium = 0.055m)
         {
-            decimal equityValueCr = data.MarketCapCr;
-            decimal debtValueCr = Math.Max(0m, data.TotalBorrowingsCr);
+            decimal equityValueCr = current.MarketCapCr;
+            decimal debtValueCr = Math.Max(0m, current.TotalBorrowingsCr);
             decimal totalCapitalCr = equityValueCr + debtValueCr;
 
             if (totalCapitalCr <= 0m) return 0.11m;
 
-            decimal beta = data.Beta > 0 ? Math.Clamp(data.Beta, 0.5m, 2.5m) : 1.0m;
+            decimal beta = current.Beta > 0 ? Math.Clamp(current.Beta, 0.5m, 2.5m) : 1.0m;
             decimal costOfEquity = riskFreeRate + (beta * equityRiskPremium);
 
-            decimal costOfDebt = data.CostOfDebt;
-            decimal taxRate = data.EffectiveTaxRate;
+            decimal costOfDebt = CalculateCostOfDebt(current);
+            decimal taxRate = CalculateEffectiveTaxRate(current);
 
             decimal weightEquity = equityValueCr / totalCapitalCr;
             decimal weightDebt = debtValueCr / totalCapitalCr;
@@ -1155,12 +1154,12 @@ namespace SoundMoney.Algorithms
             return Math.Clamp(wacc, 0.085m, 0.18m);
         }
 
-        public static decimal ResolveDynamicTargetPe(DeepFinancial data)
+        public static decimal ResolveDynamicTargetPe(Financial current)
         {
             decimal basePe = 15.0m;
-            if (data.ReportedRoePercent >= 25.0m) return 25.0m;
-            if (data.ReportedRoePercent >= 18.0m) return 20.0m;
-            if (data.ReportedRoePercent <= 8.0m) return 10.0m;
+            if (current.ReportedRoePercent >= 25.0m) return 25.0m;
+            if (current.ReportedRoePercent >= 18.0m) return 20.0m;
+            if (current.ReportedRoePercent <= 8.0m) return 10.0m;
             return basePe;
         }
 

@@ -24,6 +24,20 @@ namespace SoundMoney.Models
         public string Symbol { get; set; } = string.Empty;
         public bool IsFinancialSector { get; set; }
         public bool IsCoreInvestmentCompanyExplicit { get; set; }
+
+        // --- Header & Market Metrics ---
+        public decimal CurrentPrice { get; set; }
+        public decimal MarketCapCr { get; set; }
+        public decimal ReportedPePercent { get; set; }
+        public decimal BookValuePerShare { get; set; }
+        public decimal DividendYieldPercent { get; set; }
+        public decimal ReportedRocePercent { get; set; }
+        public decimal ReportedRoePercent { get; set; }
+        public decimal FaceValue { get; set; }
+
+        // --- Shareholding Metrics ---
+        public decimal Beta { get; set; } = 1.0m;
+        public decimal PromoterPledgePercent { get; set; }
         public int Year { get; set; }
 
         // --- P&L Metrics (Cr) ---
@@ -61,51 +75,6 @@ namespace SoundMoney.Models
 
         // --- Ratios & Operational Metrics ---
         public decimal CashConversionCycleDays { get; set; }
-
-        // =========================================================================
-        // CONSOLIDATED CALCULATED RATIOS & DERIVED METRICS
-        // =========================================================================
-        public decimal OperatingProfitMargin => FinancialAlgorithms.CalculateOperatingProfitMargin(SalesCr, OperatingProfitCr);
-        public decimal EbitCr => FinancialAlgorithms.CalculateEbit(OperatingProfitCr, OtherIncomeCr, DepreciationCr);
-        public decimal EbitdaCr => FinancialAlgorithms.CalculateEbitda(OperatingProfitCr, OtherIncomeCr);
-        public decimal TotalEquityCapitalCr => FinancialAlgorithms.CalculateTotalEquity(ShareCapitalCr, ReservesCr);
-        public decimal TotalAssetsCr => FinancialAlgorithms.CalculateTotalAssets(FixedAssetsCr, CwipCr, InvestmentsCr, OtherAssetsCr);
-        public decimal TotalLiabilitiesCr => FinancialAlgorithms.CalculateTotalLiabilities(ShareCapitalCr, ReservesCr, TotalBorrowingsCr, OtherLiabilitiesCr);
-        public decimal NetCashCr => FinancialAlgorithms.CalculateNetCash(CashAndEquivalentsCr, TotalBorrowingsCr);
-        public decimal NonCurrentAssetsCr => FinancialAlgorithms.CalculateNonCurrentAssets(FixedAssetsCr, CwipCr, InvestmentsCr);
-        public decimal CurrentAssetsCr => FinancialAlgorithms.CalculateCurrentAssets(TotalAssetsCr, NonCurrentAssetsCr);
-        public decimal WorkingCapitalCr => FinancialAlgorithms.CalculateWorkingCapital(CurrentAssetsCr, OtherLiabilitiesCr);
-        public decimal CurrentLiabilitiesCr => FinancialAlgorithms.CalculateCurrentLiabilities(CurrentAssetsCr, WorkingCapitalCr);
-        public decimal GrossCapexCr => FinancialAlgorithms.CalculateGrossCapex(CashFromOperationsCr, FreeCashFlowCr);
-        public decimal NetCashFlowCr => FinancialAlgorithms.CalculateNetCashFlow(CashFromOperationsCr, CashFromInvestmentCr, CashFromFinanceCr);
-        public decimal CfoToOpRatio => FinancialAlgorithms.CalculateCfoToOpRatio(CashFromOperationsCr, OperatingProfitCr);
-        public decimal CashConversionRatio => FinancialAlgorithms.CalculateCashConversionRatio(CashFromOperationsCr, NetProfitCr);
-        public decimal CapitalAdequacyPercent => FinancialAlgorithms.CalculateCapitalAdequacy(IsFinancialSector, TotalEquityCapitalCr, TotalAssetsCr);
-        public decimal ReportedRoaPercent => FinancialAlgorithms.CalculateRoa(NetProfitCr, TotalAssetsCr, IsFinancialSector);
-        public decimal EffectiveTaxRate => FinancialAlgorithms.CalculateEffectiveTaxRate(TaxPercent);
-        public decimal CostOfDebt => FinancialAlgorithms.CalculateCostOfDebt(TotalBorrowingsCr, InterestExpenseCr);
-        public decimal InvestmentAssetsToTotalAssetsRatio => FinancialAlgorithms.CalculateInvestmentAssetsRatio(InvestmentsCr, TotalAssetsCr);
-        public decimal InterestIncomeToTotalRevenueRatio => FinancialAlgorithms.CalculateInterestIncomeRatio(IntrestIncomeCr, SalesCr);
-        public bool IsCoreInvestmentCompany => FinancialAlgorithms.CheckCoreInvestmentCompany(
-            IsCoreInvestmentCompanyExplicit, InvestmentAssetsToTotalAssetsRatio, InterestIncomeToTotalRevenueRatio);
-    }
-
-    public class DeepFinancial : Financial
-    {
-        // --- Header & Market Metrics ---
-        public decimal CurrentPrice { get; set; }
-        public decimal MarketCapCr { get; set; }
-        public decimal ReportedPePercent { get; set; }
-        public decimal BookValuePerShare { get; set; }
-        public decimal DividendYieldPercent { get; set; }
-        public decimal ReportedRocePercent { get; set; }
-        public decimal ReportedRoePercent { get; set; }
-        public decimal FaceValue { get; set; }
-
-        // --- Shareholding Metrics ---
-        public decimal TotalSharesCr => FinancialAlgorithms.CalculateTotalShares(CurrentPrice, MarketCapCr);
-        public decimal Beta { get; set; } = 1.0m;
-        public decimal PromoterPledgePercent { get; set; }
     }
 
     public record ValuationMethodology
@@ -345,7 +314,7 @@ namespace SoundMoney.Models
 
     public class EvaluationContext
     {
-        public DeepFinancial Data { get; set; }
+        public Financial Current { get; set; }
         public List<Financial> Historicals { get; set; }
         public decimal ActualNetDebtCr { get; set; }
         public decimal DebtToEbit { get; set; }
@@ -366,7 +335,7 @@ namespace SoundMoney.Models
         public bool IsCyclical { get; set; }
         public bool IsInfrastructureUtility { get; set; }
 
-        public bool CanComputeCashFlowDcf => FcfCr > 0m && Data.EbitCr > 0m && SloanRatio <= 12m;
+        public bool CanComputeCashFlowDcf => FcfCr > 0m && FinancialAlgorithms.CalculateEbit(Current) > 0m && SloanRatio <= 12m;
     }
 
     internal static class RulePriority
@@ -395,7 +364,7 @@ namespace SoundMoney.Models
     public class FinancialSectorRule : IValuationRule
     {
         public int Priority => RulePriority.FinancialSector;
-        public bool IsMatch(EvaluationContext ctx) => ctx.Data.IsFinancialSector;
+        public bool IsMatch(EvaluationContext ctx) => ctx.Current.IsFinancialSector;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "Excess Returns Model",
@@ -407,7 +376,7 @@ namespace SoundMoney.Models
     public class ReinvestingGrowthRule : IValuationRule
     {
         public int Priority => RulePriority.ReinvestingGrowth;
-        public bool IsMatch(EvaluationContext ctx) => ctx.Data.NetProfitCr <= 0 && ctx.Data.CashFromOperationsCr > 0;
+        public bool IsMatch(EvaluationContext ctx) => ctx.Current.NetProfitCr <= 0 && ctx.Current.CashFromOperationsCr > 0;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "EV/Sales Relative Multiple",
@@ -420,7 +389,7 @@ namespace SoundMoney.Models
     {
         public int Priority => RulePriority.DistressTurnaround;
         public bool IsMatch(EvaluationContext ctx) =>
-            ctx.Data.NetProfitCr <= 0 || (ctx.InterestCoverage < 1.8m && !ctx.Data.IsFinancialSector);
+            ctx.Current.NetProfitCr <= 0 || (ctx.InterestCoverage < 1.8m && !ctx.Current.IsFinancialSector);
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
@@ -458,7 +427,7 @@ namespace SoundMoney.Models
                 };
             }
 
-            if (ctx.Data.EbitCr > 0m)
+            if (FinancialAlgorithms.CalculateEbitda(ctx.Current)> 0m)
             {
                 return new ValuationMethodology
                 {
@@ -480,7 +449,7 @@ namespace SoundMoney.Models
     public class MatureHighPayoutRule : IValuationRule
     {
         public int Priority => RulePriority.MatureHighPayout;
-        public bool IsMatch(EvaluationContext ctx) => ctx.Data.DividendPayoutPercent >= 40m && ctx.IsCashPredictable;
+        public bool IsMatch(EvaluationContext ctx) => ctx.Current.DividendPayoutPercent >= 40m && ctx.IsCashPredictable;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "Dividend Discount Model (DDM)",
@@ -497,7 +466,7 @@ namespace SoundMoney.Models
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = (ctx.Data.ReportedRoePercent >= 20m && ctx.MarginTrend >= 0m)
+            PrimaryMethod = (ctx.Current.ReportedRoePercent >= 20m && ctx.MarginTrend >= 0m)
                 ? "Buffett Owner Earnings Model"
                 : "2-Stage FCFE DCF",
             SecondaryMethod = "Price-to-Earnings-to-Growth (PEG)",
@@ -509,8 +478,8 @@ namespace SoundMoney.Models
     {
         public int Priority => RulePriority.PoorCashConversionOrAccrual;
         public bool IsMatch(EvaluationContext ctx) =>
-            !ctx.Data.IsFinancialSector
-            && ctx.Data.NetProfitCr > 0m
+            !ctx.Current.IsFinancialSector
+            && ctx.Current.NetProfitCr > 0m
             && (ctx.OcfToNetProfit < 0.30m || ctx.FcfToNetProfit < 0.20m || ctx.SloanRatio > 12.0m);
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
@@ -524,7 +493,7 @@ namespace SoundMoney.Models
     public class CoreInvestmentCompanyRule : IValuationRule
     {
         public int Priority => RulePriority.CoreInvestmentCompany;
-        public bool IsMatch(EvaluationContext ctx) => ctx.Data.IsFinancialSector && ctx.Data.IsCoreInvestmentCompany;
+        public bool IsMatch(EvaluationContext ctx) => ctx.Current.IsFinancialSector && FinancialAlgorithms.CheckCoreInvestmentCompany(ctx.Current);
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "Adjusted Net Asset Value (SOTP with HoldCo Discount)",

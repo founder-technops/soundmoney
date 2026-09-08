@@ -1,4 +1,5 @@
-﻿using SoundMoney.Data;
+﻿using SoundMoney.Algorithms;
+using SoundMoney.Data;
 using SoundMoney.Models;
 using System.Net.Http;
 using System.Threading;
@@ -37,16 +38,16 @@ namespace SoundMoney.Services
         public async Task<StockDetailsViewModel> RunScreenDetailsAsync(string symbol)
         {
             // Scrape live financial records
-            var (stockValuation, deepFinancials, Financials) =
+            var (stockValuation, current, historical) =
                 await _scraperService.ScrapeStockAsync(symbol.ToUpper());
 
-            if (stockValuation is null || deepFinancials is null || Financials is null)
+            if (stockValuation is null || current is null || historical is null)
             {
                 return null;
             }
 
             // Calculate intrinsic value & score rating
-            var valuationResult = _valuationService.EvaluateData(stockValuation, deepFinancials, Financials);
+            var valuationResult = _valuationService.Evaluate(stockValuation, current, historical);
 
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
@@ -66,16 +67,16 @@ namespace SoundMoney.Services
 
                 // 3. Deep Financial Indicators
                 PE = 0m,
-                PB = deepFinancials.BookValuePerShare,
-                EvToEbitda = deepFinancials.EbitCr,
-                ROEPercent = deepFinancials.ReportedRoePercent,
+                PB = current.BookValuePerShare,
+                EvToEbitda = FinancialAlgorithms.CalculateEbit(current),
+                ROEPercent = current.ReportedRoePercent,
                 ROCEPercent = 0m,
                 NetProfitMarginPercent = 0m,
                 DebtToEquity = 0m,
                 InterestCoverageRatio = 0m,
                 CurrentRatio = 0m,
-                FreeCashFlowCr = deepFinancials.FreeCashFlowCr,
-                DividendYieldPercent = deepFinancials.DividendYieldPercent,
+                FreeCashFlowCr = current.FreeCashFlowCr,
+                DividendYieldPercent = current.DividendYieldPercent,
                 IsDividendConsistent = true,
 
                 // 4. Historical Trends
