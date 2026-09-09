@@ -11,7 +11,7 @@ namespace SoundMoney.Services
         Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
         Task<StockDetailsViewModel> RunScreenDetailsAsync(string symbol);
     }
-    public class ScreenerService :IScreenerService
+    public class ScreenerService : IScreenerService
     {
         private readonly ILogger<ScreenerService> _logger;
         private readonly IScraperService _scraperService;
@@ -49,6 +49,8 @@ namespace SoundMoney.Services
             // Calculate intrinsic value & score rating
             var valuationResult = _valuationService.Evaluate(stockValuation, current, historical);
 
+            DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
+
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
             {
@@ -57,39 +59,43 @@ namespace SoundMoney.Services
                 CompanyName = stockValuation.CompanyName,
                 Sector = stockValuation.Sector,
                 CurrentPrice = stockValuation.CurrentPrice,
-                LastAnalyzed = DateTime.UtcNow,
+                LastAnalyzed = DateTime.Now,
 
                 // 2. Core Valuation Output
                 IntrinsicValue = valuationResult.IntrinsicValue,
-                MarginOfSafetyPercent = 0m,
+                MarginOfSafetyPercent = valuationResult.MarginOfSafety,
                 Verdict = valuationResult.Verdict,
                 SoundScoreRating = valuationResult.SoundScoreRating,
 
                 // 3. Deep Financial Indicators
-                PE = 0m,
-                PB = FinancialAlgorithms.CalculateBookValuePerShare(current),
-                EvToEbitda = FinancialAlgorithms.CalculateEbit(current),
+                // Screener's own trailing P/E when it scraped one; otherwise derive it
+                // from price / EPS rather than leaving it at a hardcoded 0.
+                PE = FinancialAlgorithms.CalculatePeRatio(current),
+                PB = FinancialAlgorithms.CalculatePbRatio(current),
+                EvToEbitda = FinancialAlgorithms.CalculateEvToEbitda(current),
                 ROEPercent = current.ReportedRoePercent,
-                ROCEPercent = 0m,
-                NetProfitMarginPercent = 0m,
-                DebtToEquity = 0m,
-                InterestCoverageRatio = 0m,
-                CurrentRatio = 0m,
+                ROCEPercent = current.ReportedRocePercent,
+                NetProfitMarginPercent = FinancialAlgorithms.CalculateNetProfitMarginPercent(current),
+                DebtToEquity = FinancialAlgorithms.CalculateDebtToEquity(current),
+                InterestCoverageRatio = FinancialAlgorithms.CalculateInterestCoverage(current),
+                CurrentRatio = FinancialAlgorithms.CalculateCurrentRatio(current),
                 FreeCashFlowCr = current.FreeCashFlowCr,
                 DividendYieldPercent = current.DividendYieldPercent,
-                IsDividendConsistent = true,
+                IsDividendConsistent = dividendAnalysis.IsConsistent,
 
                 // 4. Historical Trends
-                RevenueCagr3Yr = 0m,
-                RevenueCagr5Yr = 0m,
-                ProfitCagr3Yr = 0m,
-                ProfitCagr5Yr = 0m,
-                AverageRoe3Yr = 0m,
-                AverageRoe5Yr = 0m,
-                ConsecutiveDividendYears = 0
+                RevenueCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 3, f => f.SalesCr),
+                RevenueCagr5Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 5, f => f.SalesCr),
+                ProfitCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 3, f => f.NetProfitCr),
+                ProfitCagr5Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 5, f => f.NetProfitCr),
+                AverageRoe3Yr = FinancialAlgorithms.CalculateAverageRoePercent(current, historical, 3),
+                AverageRoe5Yr = FinancialAlgorithms.CalculateAverageRoePercent(current, historical, 5),
+                ConsecutiveDividendYears = dividendAnalysis.ConsecutiveYearsPaid
             };
             return model;
         }
+
+        
 
         /// <summary>
         /// Convert ScreenerResultRow to StockValuation for database storage.

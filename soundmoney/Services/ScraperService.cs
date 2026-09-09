@@ -60,7 +60,7 @@ namespace SoundMoney.Services
                     CompanyName = companyName,
                     Sector = sector,
                 };
-                
+
                 var current = ExtractCurrentFinancials(doc, cleanSymbol);
 
                 current.IsFinancialSector = sectorCategory == MacroSector.FinancialServices;
@@ -87,9 +87,21 @@ namespace SoundMoney.Services
                 // valuation logic can fall back to gross-debt-based checks instead of
                 // trusting NetCashCr outright.
                 current.CashHistoryYears = cashTimeSeries.Count;
-                current.IsCashEstimateReliable = cashTimeSeries.Count >= MinReliableCashHistoryYears;
 
                 var historical = ExtractHistoricalFinancials(doc, current, cleanSymbol, cashTimeSeries);
+
+                // A flat "needs 10 years" bar punishes recently-listed/young companies
+                // (e.g. an IPO from the last 2-3 years) just as hard as it (correctly)
+                // punishes decades-old companies whose pre-scrape-window history is
+                // genuinely missing. Those are different failure modes: if the cash
+                // roll-forward already spans every year of financial history Screener has
+                // for this company - i.e. there's no earlier, unscraped period the
+                // roll-forward could be missing - a shorter window is still trustworthy.
+                int totalReportedYears = historical.Count + 1; // +1 for the current period
+                bool cashHistoryCoversFullReportedWindow = cashTimeSeries.Count >= totalReportedYears;
+                current.IsCashEstimateReliable =
+                    cashTimeSeries.Count >= MinReliableCashHistoryYears
+                    || cashHistoryCoversFullReportedWindow;
 
                 _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, historical.Count);
                 return (stockValuation, current, historical);
@@ -291,7 +303,7 @@ namespace SoundMoney.Services
             var ratiosSection = doc.DocumentNode.SelectSingleNode("//section[@id='ratios']");
             if (ratiosSection != null)
             {
-               df.CashConversionCycleDays = GetLastCellRowValue(ratiosSection, "Cash Conversion Cycle");
+                df.CashConversionCycleDays = GetLastCellRowValue(ratiosSection, "Cash Conversion Cycle");
             }
 
             return df;

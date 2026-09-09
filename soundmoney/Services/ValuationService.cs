@@ -65,7 +65,7 @@ namespace SoundMoney.Services
 
             if (blendedIntrinsicValue <= 0 || cmp <= 0)
             {
-                verdict = "INSUFFICIENT current";
+                verdict = "INSUFFICIENT DATA";
             }
             else
             {

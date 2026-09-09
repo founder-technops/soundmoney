@@ -38,13 +38,26 @@ namespace SoundMoney.Algorithms
             CalculateCurrentAssets(current) - CalculateWorkingCapital(current);
 
         public static decimal CalculateSharesOutStanding(Financial current) =>
-            current.ShareCapitalCr / current.FaceValue;
+            current.FaceValue != 0m ? current.ShareCapitalCr / current.FaceValue : 0m;
 
         public static decimal CalculateTotalShareholderEquity(Financial current) =>
             (current.ShareCapitalCr + current.ReservesCr);
 
-        public static decimal CalculateBookValuePerShare(Financial current) =>
-            current.BookValuePerShare != 0 ? current.BookValuePerShare : (CalculateTotalShareholderEquity(current) / CalculateSharesOutStanding(current));
+        public static decimal CalculateBookValuePerShare(Financial current)
+        {
+            // Prefer the book value Screener already reports (scraped straight off the
+            // ratios table) and only derive it from equity / shares outstanding as a
+            // fallback when that field wasn't populated. The previous version called
+            // itself here instead of reading current.BookValuePerShare - an unconditional
+            // self-call with no base case, which stack-overflows on every single stock the
+            // instant any method needs a book value (P/B, DDM, NAV, HoldCo, etc.).
+            if (current.BookValuePerShare != 0m) return current.BookValuePerShare;
+
+            decimal sharesOutstanding = CalculateSharesOutStanding(current);
+            return sharesOutstanding != 0m
+                ? CalculateTotalShareholderEquity(current) / sharesOutstanding
+                : 0m;
+        }
 
         public static decimal CalculateGrossCapex(Financial current) =>
            current.CashFromOperationsCr - current.FreeCashFlowCr;
@@ -278,11 +291,15 @@ namespace SoundMoney.Algorithms
             }
 
             decimal cagr = 0m;
-            if (sortedHistory.Count >= 5 && sortedHistory[4].DividendPayoutPercent > 0m)
+            if (sortedHistory.Count >= 5 && sortedHistory[4].DividendPayoutPercent > 0m && sortedHistory[0].DividendPayoutPercent > 0m)
             {
-                double startVal = (double)sortedHistory[4].DividendPayoutPercent;
-                double endVal = (double)sortedHistory[0].DividendPayoutPercent;
-                cagr = (decimal)(Math.Pow(endVal / startVal, 1.0 / 5.0) - 1.0) * 100m;
+                // Same class of bug as CalculateSoundScore's profit-CAGR: DividendPayoutPercent
+                // (dividend / net profit) can go negative if a company keeps paying a dividend
+                // through a loss-making year. The old guard only checked the oldest year, so a
+                // negative most-recent value slipped through into Math.Pow(negative, 0.2) = NaN,
+                // and casting NaN to decimal throws. Guard both ends and reuse CalculateCagr,
+                // which already does this safely.
+                cagr = CalculateCagr(sortedHistory[4].DividendPayoutPercent, sortedHistory[0].DividendPayoutPercent, 5) * 100m;
             }
 
             var recentYears = sortedHistory.Take(5).ToList();
@@ -452,8 +469,7 @@ namespace SoundMoney.Algorithms
 
                 if (oldest.SalesCr > 0m && newest.SalesCr > 0m)
                 {
-                    double revRatio = (double)(newest.SalesCr / oldest.SalesCr);
-                    salesGrowth = (decimal)(Math.Pow(revRatio, 1.0 / periods) - 1.0);
+                    salesGrowth = CalculateCagr(oldest.SalesCr, newest.SalesCr, periods);
                 }
 
                 decimal peakRevenue = historyList.Max(h => h.SalesCr);
@@ -462,10 +478,20 @@ namespace SoundMoney.Algorithms
                     salesGrowth = -0.10m;
                 }
 
-                if (oldest.SalesCr > 0m && newest.SalesCr > 0m)
+                // Bug: this used to gate on oldest/newest SalesCr (copy-pasted from the
+                // revenue-growth block above) while actually dividing NetProfitCr below.
+                // Any company with positive sales but a net LOSS in either the oldest or
+                // newest year - a turnaround, a one-off write-off, an ordinary cyclical
+                // dip - slipped past that guard with a negative profit ratio.
+                // Math.Pow(negative, 1/periods) is NaN for a non-integer exponent, and
+                // casting NaN to decimal throws OverflowException (decimal has no
+                // representation for NaN/Infinity) - crashing the whole valuation run.
+                // CalculateCagr already guards initialValue/finalValue <= 0 before ever
+                // calling Math.Pow, so reuse it here instead of re-deriving the same math
+                // with the wrong guard.
+                if (oldest.NetProfitCr > 0m && newest.NetProfitCr > 0m)
                 {
-                    double patRatio = (double)(newest.NetProfitCr / oldest.NetProfitCr);
-                    profitGrowth = (decimal)(Math.Pow(patRatio, 1.0 / periods) - 1.0);
+                    profitGrowth = CalculateCagr(oldest.NetProfitCr, newest.NetProfitCr, periods);
                     hasValidProfitGrowth = true;
                 }
 
@@ -698,7 +724,7 @@ namespace SoundMoney.Algorithms
         public static decimal CalculateExcessReturns(Financial current)
         {
             decimal currentBookValue = CalculateBookValuePerShare(current); ;
-             
+
             if (currentBookValue <= 0m || current.ReportedRoePercent <= 0m) return 0m;
 
             decimal costOfEquity = CalculateWacc(current);
@@ -709,7 +735,7 @@ namespace SoundMoney.Algorithms
             decimal payoutRatio = Math.Clamp(current.DividendPayoutPercent / 100m, 0m, 0.80m);
             decimal retentionRatio = 1m - payoutRatio;
 
-            
+
             decimal pvExcessReturns = 0m;
 
             for (int yr = 1; yr <= 5; yr++)
@@ -730,13 +756,13 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculateDdm(Financial current)
         {
-            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
+            if (CalculateBookValuePerShare(current) <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
             decimal costOfEquity = CalculateWacc(current);
             const decimal dividendGrowth = 0.05m;
 
             decimal payoutRatio = current.DividendPayoutPercent > 0 ? current.DividendPayoutPercent / 100m : 0.40m;
-            decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
+            decimal eps = CalculateBookValuePerShare(current) * (current.ReportedRoePercent / 100m);
             decimal d0 = eps * payoutRatio;
 
             if (d0 <= 0) return 0m;
@@ -755,9 +781,9 @@ namespace SoundMoney.Algorithms
             {
                 d0 = current.CurrentPrice * (current.DividendYieldPercent / 100m);
             }
-            else if (current.BookValuePerShare > 0 && current.ReportedRoePercent > 0 && current.DividendPayoutPercent > 0)
+            else if (CalculateBookValuePerShare(current) > 0 && current.ReportedRoePercent > 0 && current.DividendPayoutPercent > 0)
             {
-                decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
+                decimal eps = CalculateBookValuePerShare(current) * (current.ReportedRoePercent / 100m);
                 decimal rawDividend = eps * (current.DividendPayoutPercent / 100m);
                 d0 = rawDividend * 0.50m;
             }
@@ -780,11 +806,11 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculateGordonGrowthDdm(Financial current)
         {
-            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
+            if (CalculateBookValuePerShare(current) <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
             decimal costOfEquity = CalculateWacc(current);
             decimal payoutRatio = current.DividendPayoutPercent > 0 ? current.DividendPayoutPercent / 100m : 0.40m;
-            decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
+            decimal eps = CalculateBookValuePerShare(current) * (current.ReportedRoePercent / 100m);
             decimal d0 = eps * payoutRatio;
 
             if (d0 <= 0) return 0m;
@@ -850,9 +876,9 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculatePegRatioValue(Financial current, IEnumerable<Financial> historicals)
         {
-            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
+            if (CalculateBookValuePerShare(current) <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
-            decimal eps = current.BookValuePerShare * (current.ReportedRoePercent / 100m);
+            decimal eps = CalculateBookValuePerShare(current) * (current.ReportedRoePercent / 100m);
             decimal growthRate = ResolveDynamicGrowthRate(current, historicals, 0.10m) * 100m;
 
             if (eps <= 0 || growthRate <= 0) return 0m;
@@ -884,13 +910,22 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculateEvEbitdaMultiple(Financial current)
         {
-            if (CalculateTotalShares(current) <= 0 || CalculateEbit(current) <= 0) return 0m;
+            // Use the actual EBITDA (OperatingProfit + OtherIncome, already computed
+            // elsewhere in this file) rather than approximating it as EBIT * 1.2. That
+            // fixed 1.2x multiplier implicitly assumes D&A is a constant ~20% of EBIT,
+            // which badly understates EBITDA for capital-intensive, expansion-stage
+            // businesses where D&A can be well over half of EBIT (and badly overstates it
+            // for asset-light businesses with negligible D&A). It also forced this method
+            // to bail out (return 0) whenever EBIT was non-positive, even though a
+            // heavy-D&A young business can be solidly EBITDA-positive while EBIT is still
+            // negative - exactly the case EV/EBITDA exists to handle.
+            decimal ebitdaCr = CalculateEbitda(current);
+            if (CalculateTotalShares(current) <= 0 || ebitdaCr <= 0) return 0m;
 
-            decimal estimatedEbitdaCr = CalculateEbit(current) * 1.2m;
             decimal targetEvEbitda = current.ReportedRoePercent >= 18.0m ? 12.0m : 8.5m;
             decimal netDebtCr = CalculateNetDebt(current);
 
-            decimal targetEquityValueCr = (estimatedEbitdaCr * targetEvEbitda) - netDebtCr;
+            decimal targetEquityValueCr = (ebitdaCr * targetEvEbitda) - netDebtCr;
             return Math.Max(0m, Math.Round(targetEquityValueCr / CalculateTotalShares(current), 2));
         }
 
@@ -918,12 +953,14 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculateNavPerShare(Financial current)
         {
-            return current.BookValuePerShare <= 0 ? 0m : Math.Round(current.BookValuePerShare, 2);
+            return CalculateBookValuePerShare(current) <= 0 ? 0m : Math.Round(CalculateBookValuePerShare(current), 2);
         }
 
         public static decimal CalculatePbIntrinsicValue(Financial current)
         {
-            if (current.BookValuePerShare <= 0 || current.ReportedRoePercent <= 0) return 0m;
+            var bookvalue = CalculateBookValuePerShare(current);
+
+            if (bookvalue <= 0 || current.ReportedRoePercent <= 0) return 0m;
 
             decimal costOfEquity = CalculateWacc(current);
             const decimal growth = 0.05m;
@@ -933,14 +970,14 @@ namespace SoundMoney.Algorithms
             decimal justifiedPb = (roe - growth) / denominator;
             justifiedPb = Math.Clamp(justifiedPb, 0.5m, 12.0m);
 
-            return Math.Round(current.BookValuePerShare * justifiedPb, 2);
+            return Math.Round(bookvalue * justifiedPb, 2);
         }
 
         public static decimal CalculateHoldingCompanyValue(Financial current)
         {
-            if (current.BookValuePerShare <= 0) return 0m;
+            if (CalculateBookValuePerShare(current) <= 0) return 0m;
 
-            decimal rawNavPerShare = current.BookValuePerShare;
+            decimal rawNavPerShare = CalculateBookValuePerShare(current);
             decimal holdCoDiscount = 0.50m;
 
             if (current.DividendYieldPercent < 1.0m)
@@ -1046,6 +1083,80 @@ namespace SoundMoney.Algorithms
             double cagr = Math.Pow(ratio, 1.0 / periods) - 1.0;
 
             return (decimal)cagr;
+        }
+
+        /// <summary>
+        /// CAGR of a P&amp;L line item over the trailing N years, anchored on whichever
+        /// scraped historical year sits exactly N years before the current period.
+        /// Returns 0 (matching Screener's own blank display) when that year isn't in the
+        /// scraped window rather than approximating over whatever years happen to exist -
+        /// a "3 year" figure should mean 3 years, not "however much history we found".
+        /// </summary>
+        public static decimal CalculateCagrPercent(Financial current, List<Financial> historical, int years, Func<Financial, decimal> selector)
+        {
+            var baseYear = historical.FirstOrDefault(h => h.Year == current.Year - years);
+            if (baseYear == null) return 0m;
+
+            decimal initial = selector(baseYear);
+            decimal final = selector(current);
+            decimal cagr = FinancialAlgorithms.CalculateCagr(initial, final, years);
+            return Math.Round(cagr * 100m, 2);
+        }
+
+        /// <summary>
+        /// Average ROE (NetProfit / ShareholderEquity for that year) across the trailing N
+        /// years. Historical rows don't carry Screener's own reported ROE per year, only
+        /// the raw P&amp;L/balance-sheet figures, so this is computed the same way rather
+        /// than mixing a "reported" current-year ROE with a differently-derived history.
+        /// </summary>
+        public static decimal CalculateAverageRoePercent(Financial current, List<Financial> historical, int years)
+        {
+            var window = historical
+                .Where(h => h.Year > current.Year - years && h.Year <= current.Year && h.Year != current.Year)
+                .Append(current)
+                .Where(h => FinancialAlgorithms.CalculateTotalEquity(h) > 0m)
+                .ToList();
+
+            if (window.Count == 0) return 0m;
+
+            decimal avgRoe = window.Average(h => (h.NetProfitCr / FinancialAlgorithms.CalculateTotalEquity(h)) * 100m);
+            return Math.Round(avgRoe, 2);
+        }
+
+        public static decimal CalculatePeRatio(Financial current)
+        {
+            return current.ReportedPePercent != 0m
+                    ? current.ReportedPePercent
+                    : (current.Eps > 0m ? Math.Round(current.CurrentPrice / current.Eps, 2) : 0m);
+        }
+
+        public static decimal CalculatePbRatio(Financial current)
+        {
+            return CalculateBookValuePerShare(current) > 0m ? Math.Round(current.CurrentPrice / CalculateBookValuePerShare(current), 2) : 0m;
+        }
+
+        public static decimal CalculateEvToEbitda(Financial current)
+        {
+            decimal ebitdaCr = CalculateEbitda(current);
+            if (ebitdaCr <= 0m) return 0m;
+            decimal enterpriseValueCr = current.MarketCapCr + CalculateNetDebt(current);
+            return Math.Round(enterpriseValueCr / ebitdaCr, 2);
+        }
+
+        public static decimal CalculateNetProfitMarginPercent(Financial current)
+        {
+            return current.SalesCr > 0m ? Math.Round((current.NetProfitCr / current.SalesCr) * 100m, 2) : 0m;
+        }
+
+        public static decimal CalculateDebtToEquity(Financial current)
+        {
+            decimal totalEquity = CalculateTotalEquity(current);
+            return totalEquity > 0m ? Math.Round(current.TotalBorrowingsCr / totalEquity, 2) : 0m;
+        }
+
+        public static decimal CalculateCurrentRatio(Financial current)
+        {
+            return CalculateCurrentLiabilities(current) > 0m ? Math.Round(CalculateCurrentAssets(current) / CalculateCurrentLiabilities(current), 2) : 0m;
         }
     }
 }

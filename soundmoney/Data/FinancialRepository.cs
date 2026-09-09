@@ -91,8 +91,8 @@ namespace SoundMoney.Data
         {
             return await _context.StockValuations
                 .AsNoTracking()
-                .Where(v => v.Symbol == "MILKYMIST").FirstOrDefaultAsync(cancellationToken: ct);
-                //.FirstOrDefaultAsync(v => (v.UpdatedAt == null || v.UpdatedAt < DateTime.Today), cancellationToken: ct);
+                //.Where(v => v.Symbol == "MILKYMIST").FirstOrDefaultAsync(cancellationToken: ct);
+                .FirstOrDefaultAsync(v => (v.UpdatedAt == null || v.UpdatedAt < DateTime.Today), cancellationToken: ct);
         }
 
         /// <summary>
