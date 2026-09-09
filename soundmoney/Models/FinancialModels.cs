@@ -359,7 +359,7 @@ namespace SoundMoney.Models
         ValuationMethodology Result(EvaluationContext ctx);
     }
 
-   
+
 
     public class FinancialSectorRule : IValuationRule
     {
@@ -376,7 +376,18 @@ namespace SoundMoney.Models
     public class ReinvestingGrowthRule : IValuationRule
     {
         public int Priority => RulePriority.ReinvestingGrowth;
-        public bool IsMatch(EvaluationContext ctx) => ctx.Current.NetProfitCr <= 0 && ctx.Current.CashFromOperationsCr > 0;
+
+        // NetProfitCr <= 0 with positive operating cash flow usually means non-cash
+        // reinvestment drag (D&A, ESOP, growth capex accounting) rather than distress.
+        // But that pattern also shows up in a genuinely over-levered company that is
+        // temporarily cash-flow-positive off working-capital swings while it can no
+        // longer service its debt - InterestCoverage catches that case and routes it to
+        // DistressTurnaroundRule instead.
+        public bool IsMatch(EvaluationContext ctx) =>
+            ctx.Current.NetProfitCr <= 0
+            && ctx.Current.CashFromOperationsCr > 0
+            && ctx.InterestCoverage >= 1.8m;
+
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = "EV/Sales Relative Multiple",
@@ -417,7 +428,13 @@ namespace SoundMoney.Models
         public bool IsMatch(EvaluationContext ctx) => ctx.DebtToEbit >= 2.5m || ctx.CapexToOcf >= 0.60m || ctx.IsInfrastructureUtility;
         public ValuationMethodology Result(EvaluationContext ctx)
         {
-            if (ctx.CanComputeCashFlowDcf && ctx.CroicPercent >= 8.0m)
+            // Leverage is checked ahead of CyclicalEarningsRule in priority order, so a
+            // levered + cyclical business (steel, cement, sugar, shipping - a very common
+            // combination) would otherwise never reach the cyclical rule and would get
+            // valued off a single point-in-time EBITDA/FCF figure that may sit at a
+            // cycle peak or trough. Fold the cyclicality signal in here instead of
+            // ignoring it.
+            if (ctx.CanComputeCashFlowDcf && ctx.CroicPercent >= 8.0m && !ctx.IsCyclical)
             {
                 return new ValuationMethodology
                 {
@@ -427,13 +444,15 @@ namespace SoundMoney.Models
                 };
             }
 
-            if (FinancialAlgorithms.CalculateEbitda(ctx.Current)> 0m)
+            if (FinancialAlgorithms.CalculateEbitda(ctx.Current) > 0m)
             {
                 return new ValuationMethodology
                 {
                     PrimaryMethod = "EV/EBITDA Relative Multiple",
-                    SecondaryMethod = "Price-to-Book (P/B)",
-                    Rationale = "Capital-intensive/high-leverage profile with low cash return efficiency; using EV/EBITDA multiple."
+                    SecondaryMethod = ctx.IsCyclical ? "Normalized Mid-Cycle P/E" : "Price-to-Book (P/B)",
+                    Rationale = ctx.IsCyclical
+                        ? "Capital-intensive, highly levered, and cyclical; blending current EV/EBITDA with a mid-cycle normalized earnings check to avoid peak-cycle overvaluation."
+                        : "Capital-intensive/high-leverage profile with low cash return efficiency; using EV/EBITDA multiple."
                 };
             }
 

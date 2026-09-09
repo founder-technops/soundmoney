@@ -48,9 +48,16 @@ namespace SoundMoney.Services
             decimal secondaryValue = ComputeValueByMethod(methodology.SecondaryMethod, current, historical);
 
             // 3. Blend intrinsic values
-            decimal blendedIntrinsicValue = (primaryValue > 0 && secondaryValue > 0)
-                ? Math.Round((primaryValue * 0.6m) + (secondaryValue * 0.4m), 2)
-                : Math.Max(primaryValue, secondaryValue);
+            List<decimal> validValues = new List<decimal> { primaryValue, secondaryValue }
+                                        .Where(v => v > 0)
+                                        .ToList();
+
+            decimal blendedIntrinsicValue = validValues.Count switch
+            {
+                2 => Math.Round((primaryValue * 0.6m) + (secondaryValue * 0.4m), 2),
+                1 => validValues[0],
+                _ => 0m
+            };
 
             decimal cmp = current.CurrentPrice;
             decimal marginOfSafety = 0m;
@@ -74,7 +81,7 @@ namespace SoundMoney.Services
 
             int soundScore = FinancialAlgorithms.CalculateSoundScore(marginOfSafety, current, historical);
 
-            if (verdict == "INSUFFICIENT current")
+            if (verdict == "INSUFFICIENT DATA")
             {
                 soundScore = 0;
             }
@@ -94,6 +101,7 @@ namespace SoundMoney.Services
                 Symbol = valuationdata.Symbol,
                 Sector = valuationdata.Sector,
                 CompanyName = valuationdata.CompanyName,
+                FetchedAt = valuationdata.FetchedAt,
                 PrimaryMethod = methodology.PrimaryMethod,
                 SecondaryMethod = methodology.SecondaryMethod,
                 CurrentPrice = cmp,
@@ -118,29 +126,29 @@ namespace SoundMoney.Services
             {
                 "Excess Returns Model" => FinancialAlgorithms.CalculateExcessReturns(current),
                 "Price-to-TBV (Tangible Book Value)" or "Price-to-Book (P/B)" or "Price-to-Book (P/B) Intrinsic Multiples" => FinancialAlgorithms.CalculatePbIntrinsicValue(current),
-
                 "EV/Sales Relative Multiple" => FinancialAlgorithms.CalculateEvSalesMultiple(current),
                 "Price-to-Sales (P/S)" => FinancialAlgorithms.CalculatePriceToSales(current),
-
                 "Net Asset Value (NAV)" => FinancialAlgorithms.CalculateNavPerShare(current),
                 "Normalized Mid-Cycle P/E" => FinancialAlgorithms.CalculateNormalizedPe(current, historicals),
-
                 "Exit Multiple DCF (FCFF)" or "Exit Multiple DCF" => FinancialAlgorithms.CalculateExitMultipleDcf(current, historicals),
                 "EV/EBITDA Relative Multiple" => FinancialAlgorithms.CalculateEvEbitdaMultiple(current),
-
                 "Dividend Discount Model (DDM)" => FinancialAlgorithms.CalculateDdm(current),
                 "Dividend Discount Model (Pass-Through Yield)" => FinancialAlgorithms.CalculateDdmPassThroughYield(current),
                 "Gordon Growth Model" or "Gordon Growth DDM" => FinancialAlgorithms.CalculateGordonGrowthDdm(current),
-
                 "Buffett Owner Earnings Model" => FinancialAlgorithms.CalculateOwnerEarnings(current, historicals),
                 "2-Stage FCFE DCF" or "2-Stage Discounted Cash Flow (DCF)" => FinancialAlgorithms.CalculateTwoStageDcf(current, historicals),
                 "Price-to-Earnings-to-Growth (PEG)" => FinancialAlgorithms.CalculatePegRatioValue(current, historicals),
-
                 "Price-to-Earnings (P/E) Multiple" => FinancialAlgorithms.CalculatePriceToEarnings(current),
                 "Discounted Cash Flow (DCF)" or "Standard DCF" => FinancialAlgorithms.CalculateStandardDcf(current, historicals),
                 "Adjusted Net Asset Value (SOTP with HoldCo Discount)" => FinancialAlgorithms.CalculateHoldingCompanyValue(current),
-                _ => FinancialAlgorithms.CalculateStandardDcf(current, historicals)
+                _ => FallbackExecution(methodName, current, historicals)
             };
+        }
+
+        private static decimal FallbackExecution(string methodName, Financial current, IEnumerable<Financial> historicals)
+        {
+            System.Diagnostics.Trace.WriteLine($"[Warning] Unrecognized method name '{methodName}'. Falling back to Standard DCF.");
+            return FinancialAlgorithms.CalculateStandardDcf(current, historicals);
         }
 
         #endregion
@@ -149,7 +157,9 @@ namespace SoundMoney.Services
 
     public static class ValuationStrategyResolver
     {
-        private static readonly List<IValuationRule> Rules = new()
+        // Sorted once, at startup, instead of on every call. The list order below is
+        // documentation-only; Priority is the single source of truth for evaluation order.
+        private static readonly List<IValuationRule> Rules = new List<IValuationRule>
         {
             new CoreInvestmentCompanyRule(),
             new FinancialSectorRule(),
@@ -161,18 +171,48 @@ namespace SoundMoney.Services
             new AssetLightMoatRule(),
             new PoorCashConversionOrAccrualRule(),
             new DefaultFallbackRule()
-        };
+        }.OrderBy(r => r.Priority).ToList();
 
         public static ValuationMethodology ResolveMethodology(
             Financial current,
             IEnumerable<Financial> historicals)
         {
+            if (current == null)
+                throw new ArgumentNullException(nameof(current));
+
             var ctx = BuildContext(current, historicals);
 
-            return Rules
-                .OrderBy(r => r.Priority)
-                .First(r => r.IsMatch(ctx))
-                .Result(ctx);
+            // Rules are evaluated in Priority order (most specific first). A rule whose
+            // IsMatch/Result throws (e.g. on an unexpected data shape) is skipped rather
+            // than allowed to fail the whole valuation - this runs over large scraped
+            // batches, so one bad row of financial data shouldn't take down the run.
+            foreach (var rule in Rules)
+            {
+                bool isMatch;
+                try
+                {
+                    isMatch = rule.IsMatch(ctx);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (!isMatch) continue;
+
+                try
+                {
+                    return rule.Result(ctx);
+                }
+                catch
+                {
+                    // Fall through to the next matching rule (DefaultFallbackRule always
+                    // matches and never throws, so this loop is guaranteed to terminate).
+                    continue;
+                }
+            }
+
+            return new DefaultFallbackRule().Result(ctx);
         }
 
         private static EvaluationContext BuildContext(Financial current, IEnumerable<Financial> historicals)
@@ -197,8 +237,10 @@ namespace SoundMoney.Services
             decimal actualNetDebt = FinancialAlgorithms.CalculateNetDebt(current);
 
             decimal opmPercent = (current.SalesCr > 0m && !current.IsFinancialSector) ? FinancialAlgorithms.CalculateOperatingProfitMargin(current) : 0m;
-            decimal avgHistoricalOpm = historyList.Count >= 3 ? historyList.Average(h => FinancialAlgorithms.CalculateOperatingProfitMargin(h)): opmPercent;
-            decimal marginTrend = opmPercent - avgHistoricalOpm;
+            decimal avgHistoricalOpm = historyList.Count >= 3 ? historyList.Average(h => FinancialAlgorithms.CalculateOperatingProfitMargin(h)) : opmPercent;
+            decimal marginTrend = (current.SalesCr > 0m && !current.IsFinancialSector)
+                    ? opmPercent - avgHistoricalOpm
+                    : 0m;
 
             // Cash predictability incorporating FCF conversion and Sloan Ratio quality
             bool cashPredictable = FinancialAlgorithms.CheckCashPredictable(current);
@@ -223,8 +265,12 @@ namespace SoundMoney.Services
                     }
                 }
 
-                decimal minProfit = historyList.Min(h => h.NetProfitCr);
-                if (minProfit <= 0m || trendReversals >= 2)
+                // A single historical loss year (e.g. a one-off write-off, or a COVID-style
+                // shock) is not itself evidence of a cyclical earnings pattern - it will
+                // permanently mislabel an otherwise steady grower. Require either a
+                // recurring pattern of losses or genuine back-and-forth reversals.
+                int lossYears = historyList.Count(h => h.NetProfitCr <= 0m);
+                if (lossYears >= 2 || trendReversals >= 2)
                 {
                     cyclical = true;
                 }

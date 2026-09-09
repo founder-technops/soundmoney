@@ -67,7 +67,7 @@ namespace SoundMoney.Services
 
                 // 3. Deep Financial Indicators
                 PE = 0m,
-                PB = current.BookValuePerShare,
+                PB = FinancialAlgorithms.CalculateBookValuePerShare(current),
                 EvToEbitda = FinancialAlgorithms.CalculateEbit(current),
                 ROEPercent = current.ReportedRoePercent,
                 ROCEPercent = 0m,
