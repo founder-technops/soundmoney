@@ -269,8 +269,23 @@ namespace SoundMoney.Services
                 // shock) is not itself evidence of a cyclical earnings pattern - it will
                 // permanently mislabel an otherwise steady grower. Require either a
                 // recurring pattern of losses or genuine back-and-forth reversals.
+                //
+                // Raw reversal COUNT is itself biased toward long-lived, steady compounders:
+                // a company with 10-12 years of scraped history has far more interior
+                // comparison points than one with 4-5 years, so it only takes a single
+                // shared macro shock (e.g. two flat/dip years around FY2020-21) to rack up
+                // 2 reversals purely by chance - even when every other year in its history
+                // moves steadily upward. A genuinely cyclical earner (steel, cement, sugar,
+                // shipping) reverses direction repeatedly throughout its history, not just
+                // around one shared event. Normalize by the number of comparison points
+                // available so longer histories need proportionally more reversals, while
+                // short histories still trip on the same 2-reversal floor as before.
+                int comparisonPoints = historyList.Count - 2;
+                decimal reversalRate = comparisonPoints > 0 ? (decimal)trendReversals / comparisonPoints : 0m;
+                bool hasRecurringReversals = trendReversals >= 2 && reversalRate >= 0.35m;
+
                 int lossYears = historyList.Count(h => h.NetProfitCr <= 0m);
-                if (lossYears >= 2 || trendReversals >= 2)
+                if (lossYears >= 2 || hasRecurringReversals)
                 {
                     cyclical = true;
                 }
@@ -298,5 +313,4 @@ namespace SoundMoney.Services
             };
         }
     }
-
 }
