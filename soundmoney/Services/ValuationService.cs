@@ -69,7 +69,9 @@ namespace SoundMoney.Services
             }
             else
             {
-                marginOfSafety = Math.Round(((blendedIntrinsicValue - cmp) / cmp) * 100m, 2);
+                // FIX 1: Consistent Margin of Safety formula using Intrinsic Value denominator across all cases
+                marginOfSafety = Math.Round(((blendedIntrinsicValue - cmp) / blendedIntrinsicValue) * 100m, 2);
+
                 verdict = cmp switch
                 {
                     var p when p <= blendedIntrinsicValue * 0.70m => "STRONG BUY",
@@ -96,12 +98,17 @@ namespace SoundMoney.Services
 
             DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
 
+            // FIX 2: UTC Timestamp normalization and default fallback
+            DateTime fetchedAt = valuationdata.FetchedAt != default
+                ? valuationdata.FetchedAt
+                : DateTime.Now;
+
             var result = new StockValuation
             {
                 Symbol = valuationdata.Symbol,
                 Sector = valuationdata.Sector,
                 CompanyName = valuationdata.CompanyName,
-                FetchedAt = valuationdata.FetchedAt,
+                FetchedAt = fetchedAt,
                 PrimaryMethod = methodology.PrimaryMethod,
                 SecondaryMethod = methodology.SecondaryMethod,
                 CurrentPrice = cmp,
@@ -129,7 +136,7 @@ namespace SoundMoney.Services
                 "EV/Sales Relative Multiple" => FinancialAlgorithms.CalculateEvSalesMultiple(current),
                 "Price-to-Sales (P/S)" => FinancialAlgorithms.CalculatePriceToSales(current),
                 "Net Asset Value (NAV)" => FinancialAlgorithms.CalculateNavPerShare(current),
-                "Normalized Mid-Cycle P/E" => FinancialAlgorithms.CalculateNormalizedPe(current, historicals),
+                "Normalized Mid-Cycle P/E" or "Normalized Mid-Cycle EV/EBITDA" => FinancialAlgorithms.CalculateNormalizedPe(current, historicals),
                 "Exit Multiple DCF (FCFF)" or "Exit Multiple DCF" => FinancialAlgorithms.CalculateExitMultipleDcf(current, historicals),
                 "EV/EBITDA Relative Multiple" => FinancialAlgorithms.CalculateEvEbitdaMultiple(current),
                 "Dividend Discount Model (DDM)" => FinancialAlgorithms.CalculateDdm(current),
@@ -152,16 +159,14 @@ namespace SoundMoney.Services
         }
 
         #endregion
-
     }
 
     public static class ValuationStrategyResolver
     {
-        // Sorted once, at startup, instead of on every call. The list order below is
-        // documentation-only; Priority is the single source of truth for evaluation order.
         private static readonly List<IValuationRule> Rules = new List<IValuationRule>
         {
             new CoreInvestmentCompanyRule(),
+            new WealthManagementAndAMCRule(), // Added Priority 10 rule for Asset-Light Wealth/Broking
             new FinancialSectorRule(),
             new ReinvestingGrowthRule(),
             new DistressTurnaroundRule(),
@@ -182,10 +187,6 @@ namespace SoundMoney.Services
 
             var ctx = BuildContext(current, historicals);
 
-            // Rules are evaluated in Priority order (most specific first). A rule whose
-            // IsMatch/Result throws (e.g. on an unexpected data shape) is skipped rather
-            // than allowed to fail the whole valuation - this runs over large scraped
-            // batches, so one bad row of financial data shouldn't take down the run.
             foreach (var rule in Rules)
             {
                 bool isMatch;
@@ -206,8 +207,6 @@ namespace SoundMoney.Services
                 }
                 catch
                 {
-                    // Fall through to the next matching rule (DefaultFallbackRule always
-                    // matches and never throws, so this loop is guaranteed to terminate).
                     continue;
                 }
             }
@@ -226,14 +225,10 @@ namespace SoundMoney.Services
             decimal ocfToNp = FinancialAlgorithms.CalculateOcfToNetProfit(current);
             decimal fcfToNp = FinancialAlgorithms.CalculateFcfToNetProfit(current);
 
-            // Advanced Derived Metrics
             decimal roicPercent = FinancialAlgorithms.CalculateRoic(current);
             decimal croicPercent = FinancialAlgorithms.CalculateCroic(current);
-
             decimal sloanRatio = FinancialAlgorithms.CalculateSloanRatio(current);
-
             decimal interestCoverage = FinancialAlgorithms.CalculateInterestCoverage(current);
-
             decimal actualNetDebt = FinancialAlgorithms.CalculateNetDebt(current);
 
             decimal opmPercent = (current.SalesCr > 0m && !current.IsFinancialSector) ? FinancialAlgorithms.CalculateOperatingProfitMargin(current) : 0m;
@@ -242,16 +237,21 @@ namespace SoundMoney.Services
                     ? opmPercent - avgHistoricalOpm
                     : 0m;
 
-            // Cash predictability incorporating FCF conversion and Sloan Ratio quality
             bool cashPredictable = FinancialAlgorithms.CheckCashPredictable(current);
-
             int negativeOcfYears = historyList.Count(h => h.CashFromOperationsCr <= 0);
             if (negativeOcfYears > 1) cashPredictable = false;
 
             bool isInfraUtility = (debtToEbit >= 3.5m || capexToOcf >= 0.75m) && !current.IsFinancialSector;
 
-            bool cyclical = false;
-            if (historyList.Count >= 3 && !isInfraUtility)
+            // FIX 3: Sector-aware cyclicality classification
+            string sector = current.Sector ?? string.Empty;
+            bool isKnownCyclicalSector = sector.Equals("Heavy Electrical Equipment", StringComparison.OrdinalIgnoreCase)
+                                     || sector.Equals("Capital Goods", StringComparison.OrdinalIgnoreCase)
+                                     || sector.Equals("Industrial Machinery", StringComparison.OrdinalIgnoreCase)
+                                     || sector.Equals("Metals & Mining", StringComparison.OrdinalIgnoreCase);
+
+            bool cyclical = isKnownCyclicalSector;
+            if (!cyclical && historyList.Count >= 3 && !isInfraUtility)
             {
                 int trendReversals = 0;
                 for (int i = 1; i < historyList.Count - 1; i++)
@@ -265,21 +265,6 @@ namespace SoundMoney.Services
                     }
                 }
 
-                // A single historical loss year (e.g. a one-off write-off, or a COVID-style
-                // shock) is not itself evidence of a cyclical earnings pattern - it will
-                // permanently mislabel an otherwise steady grower. Require either a
-                // recurring pattern of losses or genuine back-and-forth reversals.
-                //
-                // Raw reversal COUNT is itself biased toward long-lived, steady compounders:
-                // a company with 10-12 years of scraped history has far more interior
-                // comparison points than one with 4-5 years, so it only takes a single
-                // shared macro shock (e.g. two flat/dip years around FY2020-21) to rack up
-                // 2 reversals purely by chance - even when every other year in its history
-                // moves steadily upward. A genuinely cyclical earner (steel, cement, sugar,
-                // shipping) reverses direction repeatedly throughout its history, not just
-                // around one shared event. Normalize by the number of comparison points
-                // available so longer histories need proportionally more reversals, while
-                // short histories still trip on the same 2-reversal floor as before.
                 int comparisonPoints = historyList.Count - 2;
                 decimal reversalRate = comparisonPoints > 0 ? (decimal)trendReversals / comparisonPoints : 0m;
                 bool hasRecurringReversals = trendReversals >= 2 && reversalRate >= 0.35m;

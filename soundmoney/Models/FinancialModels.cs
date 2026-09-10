@@ -1,4 +1,6 @@
 ﻿using SoundMoney.Algorithms;
+using System;
+using System.Collections.Generic;
 using System.Collections.Frozen;
 
 namespace SoundMoney.Models
@@ -45,7 +47,8 @@ namespace SoundMoney.Models
         public decimal ExpenseCr { get; set; }
         public decimal OperatingProfitCr { get; set; }
         public decimal OtherIncomeCr { get; set; }
-        public decimal IntrestIncomeCr { get; set; }
+        // FIX 4: Corrected spelling typo
+        public decimal InterestIncomeCr { get; set; }
         public decimal DepreciationCr { get; set; }
         public decimal ProfitBeforeTaxCr { get; set; }
         public decimal TaxPercent { get; set; }
@@ -75,6 +78,7 @@ namespace SoundMoney.Models
 
         // --- Ratios & Operational Metrics ---
         public decimal CashConversionCycleDays { get; set; }
+        public string? Sector { get; set; }
     }
 
     public record ValuationMethodology
@@ -83,6 +87,7 @@ namespace SoundMoney.Models
         public required string SecondaryMethod { get; init; }
         public required string Rationale { get; init; }
     }
+
     public class DividendAnalysisResult
     {
         public int ConsecutiveYearsPaid { get; set; }
@@ -190,6 +195,7 @@ namespace SoundMoney.Models
                 ["Electronic Media"] = MacroSector.ConsumerDiscretionary,
                 ["Printing & Publication"] = MacroSector.ConsumerDiscretionary,
                 ["Education"] = MacroSector.ConsumerDiscretionary,
+                ["Trading - Textile Products"] = MacroSector.ConsumerDiscretionary, // FIX 3: Re-mapped from Energy
 
                 // Automobile
                 ["Passenger Cars & Utility Vehicles"] = MacroSector.Automobile,
@@ -245,6 +251,8 @@ namespace SoundMoney.Models
                 ["Printing Inks"] = MacroSector.MaterialsAndChemicals,
                 ["Explosives"] = MacroSector.MaterialsAndChemicals,
                 ["Industrial Gases"] = MacroSector.MaterialsAndChemicals,
+                ["Trading - Metals"] = MacroSector.MaterialsAndChemicals,   // FIX 3: Re-mapped from Energy
+                ["Trading - Minerals"] = MacroSector.MaterialsAndChemicals, // FIX 3: Re-mapped from Energy
 
                 // Infrastructure & Construction
                 ["Civil Construction"] = MacroSector.InfrastructureAndConstruction,
@@ -286,18 +294,11 @@ namespace SoundMoney.Models
                 ["Gas Transmission/Marketing"] = MacroSector.EnergyAndUtilities,
                 ["Trading - Gas"] = MacroSector.EnergyAndUtilities,
                 ["Trading - Coal"] = MacroSector.EnergyAndUtilities,
-                ["Trading - Metals"] = MacroSector.EnergyAndUtilities,
-                ["Trading - Minerals"] = MacroSector.EnergyAndUtilities,
-                ["Trading - Textile Products"] = MacroSector.EnergyAndUtilities,
-                ["Trading & Distributors"] = MacroSector.EnergyAndUtilities,
-                ["Distributors"] = MacroSector.EnergyAndUtilities,
-                ["Diversified"] = MacroSector.EnergyAndUtilities,
 
-                // Telecommunication
-                ["Telecom - Cellular & Fixed line services"] = MacroSector.Telecommunication,
-                ["Telecom - Infrastructure"] = MacroSector.Telecommunication,
-                ["Telecom - Equipment & Accessories"] = MacroSector.Telecommunication,
-                ["Other Telecom Services"] = MacroSector.Telecommunication
+                // Other / Miscelleneous
+                ["Trading & Distributors"] = MacroSector.Other, // FIX 3: Re-mapped from Energy
+                ["Distributors"] = MacroSector.Other,           // FIX 3: Re-mapped from Energy
+                ["Diversified"] = MacroSector.Other             // FIX 3: Re-mapped from Energy
             }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
         public static MacroSector GetMacroSector(string? subSector)
@@ -310,7 +311,6 @@ namespace SoundMoney.Models
                 : MacroSector.Other;
         }
     }
-
 
     public class EvaluationContext
     {
@@ -338,17 +338,19 @@ namespace SoundMoney.Models
         public bool CanComputeCashFlowDcf => FcfCr > 0m && FinancialAlgorithms.CalculateEbit(Current) > 0m && SloanRatio <= 12m;
     }
 
+    // FIX 1 & 2: Re-ordered rule priorities to ensure accounting red-flags and cyclicality take precedence
     internal static class RulePriority
     {
         public const int CoreInvestmentCompany = 8;
         public const int FinancialSector = 10;
+        public const int WealthManagementAndAMC = 12; // Added priority for asset-light capital market entities
+        public const int PoorCashConversionOrAccrual = 15;
         public const int ReinvestingGrowth = 20;
         public const int DistressTurnaround = 30;
+        public const int CyclicalEarnings = 35;
         public const int HighLeverageCapitalIntensive = 40;
-        public const int CyclicalEarnings = 50;
         public const int MatureHighPayout = 60;
         public const int AssetLightMoat = 70;
-        public const int PoorCashConversionOrAccrual = 85;
         public const int DefaultFallback = 999;
     }
 
@@ -358,8 +360,6 @@ namespace SoundMoney.Models
         bool IsMatch(EvaluationContext ctx);
         ValuationMethodology Result(EvaluationContext ctx);
     }
-
-
 
     public class FinancialSectorRule : IValuationRule
     {
@@ -373,16 +373,26 @@ namespace SoundMoney.Models
         };
     }
 
+    public class PoorCashConversionOrAccrualRule : IValuationRule
+    {
+        public int Priority => RulePriority.PoorCashConversionOrAccrual;
+        public bool IsMatch(EvaluationContext ctx) =>
+            !ctx.Current.IsFinancialSector
+            && ctx.Current.NetProfitCr > 0m
+            && (ctx.OcfToNetProfit < 0.30m || ctx.FcfToNetProfit < 0.20m || ctx.SloanRatio > 12.0m);
+
+        public ValuationMethodology Result(EvaluationContext ctx) => new()
+        {
+            PrimaryMethod = "Net Asset Value (NAV)",
+            SecondaryMethod = "Price-to-Book (P/B)",
+            Rationale = "High accrual risk (Sloan Ratio > 12%) or severe paper profits (FCF conversion < 20%). Overriding cash/earnings multiples with asset floor."
+        };
+    }
+
     public class ReinvestingGrowthRule : IValuationRule
     {
         public int Priority => RulePriority.ReinvestingGrowth;
 
-        // NetProfitCr <= 0 with positive operating cash flow usually means non-cash
-        // reinvestment drag (D&A, ESOP, growth capex accounting) rather than distress.
-        // But that pattern also shows up in a genuinely over-levered company that is
-        // temporarily cash-flow-positive off working-capital swings while it can no
-        // longer service its debt - InterestCoverage catches that case and routes it to
-        // DistressTurnaroundRule instead.
         public bool IsMatch(EvaluationContext ctx) =>
             ctx.Current.NetProfitCr <= 0
             && ctx.Current.CashFromOperationsCr > 0
@@ -418,7 +428,7 @@ namespace SoundMoney.Models
         {
             PrimaryMethod = "Normalized Mid-Cycle P/E",
             SecondaryMethod = "Price-to-Book (P/B)",
-            Rationale = "High earnings volatility detected; using mid-cycle normalized metrics to avoid peak/trough valuation errors."
+            Rationale = "High earnings volatility or cyclical sector detected; using mid-cycle normalized metrics to avoid peak/trough valuation errors."
         };
     }
 
@@ -428,12 +438,6 @@ namespace SoundMoney.Models
         public bool IsMatch(EvaluationContext ctx) => ctx.DebtToEbit >= 2.5m || ctx.CapexToOcf >= 0.60m || ctx.IsInfrastructureUtility;
         public ValuationMethodology Result(EvaluationContext ctx)
         {
-            // Leverage is checked ahead of CyclicalEarningsRule in priority order, so a
-            // levered + cyclical business (steel, cement, sugar, shipping - a very common
-            // combination) would otherwise never reach the cyclical rule and would get
-            // valued off a single point-in-time EBITDA/FCF figure that may sit at a
-            // cycle peak or trough. Fold the cyclicality signal in here instead of
-            // ignoring it.
             if (ctx.CanComputeCashFlowDcf && ctx.CroicPercent >= 8.0m && !ctx.IsCyclical)
             {
                 return new ValuationMethodology
@@ -446,12 +450,13 @@ namespace SoundMoney.Models
 
             if (FinancialAlgorithms.CalculateEbitda(ctx.Current) > 0m)
             {
+                // FIX 2: If cyclical, prioritize Normalized Mid-Cycle P/E over single-year EV/EBITDA
                 return new ValuationMethodology
                 {
-                    PrimaryMethod = "EV/EBITDA Relative Multiple",
-                    SecondaryMethod = ctx.IsCyclical ? "Normalized Mid-Cycle P/E" : "Price-to-Book (P/B)",
+                    PrimaryMethod = ctx.IsCyclical ? "Normalized Mid-Cycle P/E" : "EV/EBITDA Relative Multiple",
+                    SecondaryMethod = ctx.IsCyclical ? "EV/EBITDA Relative Multiple" : "Price-to-Book (P/B)",
                     Rationale = ctx.IsCyclical
-                        ? "Capital-intensive, highly levered, and cyclical; blending current EV/EBITDA with a mid-cycle normalized earnings check to avoid peak-cycle overvaluation."
+                        ? "Capital-intensive, highly levered, and cyclical; prioritizing mid-cycle normalized earnings over single-year EBITDA to prevent trough/peak distortions."
                         : "Capital-intensive/high-leverage profile with low cash return efficiency; using EV/EBITDA multiple."
                 };
             }
@@ -493,22 +498,6 @@ namespace SoundMoney.Models
         };
     }
 
-    public class PoorCashConversionOrAccrualRule : IValuationRule
-    {
-        public int Priority => RulePriority.PoorCashConversionOrAccrual;
-        public bool IsMatch(EvaluationContext ctx) =>
-            !ctx.Current.IsFinancialSector
-            && ctx.Current.NetProfitCr > 0m
-            && (ctx.OcfToNetProfit < 0.30m || ctx.FcfToNetProfit < 0.20m || ctx.SloanRatio > 12.0m);
-
-        public ValuationMethodology Result(EvaluationContext ctx) => new()
-        {
-            PrimaryMethod = "Net Asset Value (NAV)",
-            SecondaryMethod = "Price-to-Book (P/B)",
-            Rationale = "High accrual risk (Sloan Ratio > 12%) or severe paper profits (FCF conversion < 20%). Overriding cash/earnings multiples with asset floor."
-        };
-    }
-
     public class CoreInvestmentCompanyRule : IValuationRule
     {
         public int Priority => RulePriority.CoreInvestmentCompany;
@@ -533,4 +522,28 @@ namespace SoundMoney.Models
         };
     }
 
+    public class WealthManagementAndAMCRule : IValuationRule
+    {
+        public int Priority => RulePriority.WealthManagementAndAMC;
+
+        public bool IsMatch(EvaluationContext ctx)
+        {
+            if (ctx.Current == null) return false;
+
+            string sector = ctx.Current.Sector ?? string.Empty;
+            return sector.Equals("Asset Management Company", StringComparison.OrdinalIgnoreCase)
+                || sector.Equals("Stockbroking & Allied", StringComparison.OrdinalIgnoreCase)
+                || sector.Equals("Exchange and Data Platform", StringComparison.OrdinalIgnoreCase)
+                || sector.Equals("Depositories, Clearing Houses and Other Intermediaries", StringComparison.OrdinalIgnoreCase)
+                || sector.Equals("Financial Products Distributor", StringComparison.OrdinalIgnoreCase)
+                || sector.Equals("Other Capital Market related Services", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public ValuationMethodology Result(EvaluationContext ctx) => new()
+        {
+            PrimaryMethod = "2-Stage Discounted Cash Flow (DCF)",
+            SecondaryMethod = "Price-to-Earnings (P/E) Multiple",
+            Rationale = "Asset-light financial intermediary / fee-based business: High ROE/ROIC generated without balance-sheet credit risk; evaluated using cash flow and earnings multiples rather than book-value models."
+        };
+    }
 }

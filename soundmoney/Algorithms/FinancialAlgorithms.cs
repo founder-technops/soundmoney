@@ -117,7 +117,7 @@ namespace SoundMoney.Algorithms
             CalculateTotalAssets(current) > 0m ? Math.Clamp(current.InvestmentsCr / CalculateTotalAssets(current), 0m, 1m) : 0m;
 
         public static decimal CalculateInterestIncomeRatio(Financial current) =>
-            current.SalesCr > 0m ? Math.Clamp(current.IntrestIncomeCr / current.SalesCr, 0m, 1m) : 0m;
+            current.SalesCr > 0m ? Math.Clamp(current.InterestIncomeCr / current.SalesCr, 0m, 1m) : 0m;
 
         public static bool CheckCoreInvestmentCompany(Financial current) =>
             current.IsCoreInvestmentCompanyExplicit || (CalculateInvestmentAssetsRatio(current) >= 0.70m && CalculateInterestIncomeRatio(current) < 0.30m);

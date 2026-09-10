@@ -228,6 +228,8 @@ namespace SoundMoney.Services
         {
             var df = new Financial { Symbol = symbol, Year = DateTime.Now.Year };
 
+            df.Sector = ExtractSector(doc);
+
             // A. Top Ratios
             var ratioNodes = doc.DocumentNode.SelectNodes("//ul[@id='top-ratios']/li");
             if (ratioNodes != null)
