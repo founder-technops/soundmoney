@@ -133,8 +133,15 @@ namespace SoundMoney.Algorithms
         public static decimal CalculateTotalShares(Financial current) =>
             current.CurrentPrice > 0m && current.MarketCapCr > 0m ? Math.Round(current.MarketCapCr / current.CurrentPrice, 4) : 0m;
 
-        public static decimal CalculateCroic(Financial current) =>
-            (current.InvestmentsCr > 0m && !current.IsFinancialSector) ? (current.FreeCashFlowCr / current.InvestmentsCr) * 100m : 0m;
+        public static decimal CalculateCroic(Financial current)
+        {
+            if (current.IsFinancialSector) return 0m;
+
+            decimal investedCapital = CalculateTotalEquity(current) + current.TotalBorrowingsCr - current.CashAndEquivalentsCr;
+            if (investedCapital <= 0m) return 0m;
+
+            return Math.Round((current.FreeCashFlowCr / investedCapital) * 100m, 2);
+        }
 
         public static decimal CalculateSloanRatio(Financial current) => (CalculateTotalAssets(current) > 0m && !current.IsFinancialSector)
                 ? ((current.NetProfitCr - current.CashFromOperationsCr) / CalculateTotalAssets(current)) * 100m
