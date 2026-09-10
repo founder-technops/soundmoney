@@ -55,10 +55,10 @@ namespace SoundMoney.Services
             var model = new StockDetailsViewModel
             {
                 // 1. Basic Stock Information
-                Symbol = valuationResult.Symbol,
-                CompanyName = valuationResult.CompanyName,
-                Sector = valuationResult.Sector,
-                CurrentPrice = valuationResult.CurrentPrice,
+                Symbol = stockValuation.Symbol,
+                CompanyName = stockValuation.CompanyName,
+                Sector = stockValuation.Sector,
+                CurrentPrice = stockValuation.CurrentPrice,
                 LastAnalyzed = DateTime.Now,
 
                 // 2. Core Valuation Output
@@ -73,8 +73,8 @@ namespace SoundMoney.Services
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
                 PB = FinancialAlgorithms.CalculatePbRatio(current),
                 EvToEbitda = FinancialAlgorithms.CalculateEvToEbitda(current),
-                ROEPercent = current.ReportedRoePercent,
-                ROCEPercent = current.ReportedRocePercent,
+                ROEPercent = FinancialAlgorithms.CalculateRoe(current),
+                ROCEPercent = FinancialAlgorithms.CalculateRoce(current),
                 NetProfitMarginPercent = FinancialAlgorithms.CalculateNetProfitMarginPercent(current),
                 DebtToEquity = FinancialAlgorithms.CalculateDebtToEquity(current),
                 InterestCoverageRatio = FinancialAlgorithms.CalculateInterestCoverage(current),
@@ -95,7 +95,7 @@ namespace SoundMoney.Services
             return model;
         }
 
-        
+
 
         /// <summary>
         /// Convert ScreenerResultRow to StockValuation for database storage.

@@ -485,7 +485,7 @@ namespace SoundMoney.Models
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = (ctx.Current.ReportedRoePercent >= 20m && ctx.MarginTrend >= 0m)
+            PrimaryMethod = (FinancialAlgorithms.CalculateRoe(ctx.Current) >= 20m && ctx.MarginTrend >= 0m)
                 ? "Buffett Owner Earnings Model"
                 : "2-Stage FCFE DCF",
             SecondaryMethod = "Price-to-Earnings-to-Growth (PEG)",
