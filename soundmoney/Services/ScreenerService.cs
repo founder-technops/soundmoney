@@ -55,10 +55,10 @@ namespace SoundMoney.Services
             var model = new StockDetailsViewModel
             {
                 // 1. Basic Stock Information
-                Symbol = stockValuation.Symbol,
-                CompanyName = stockValuation.CompanyName,
-                Sector = stockValuation.Sector,
-                CurrentPrice = stockValuation.CurrentPrice,
+                Symbol = valuationResult.Symbol,
+                CompanyName = valuationResult.CompanyName,
+                Sector = valuationResult.Sector,
+                CurrentPrice = valuationResult.CurrentPrice,
                 LastAnalyzed = DateTime.Now,
 
                 // 2. Core Valuation Output

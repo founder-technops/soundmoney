@@ -63,6 +63,8 @@ namespace SoundMoney.Services
 
                 var current = ExtractCurrentFinancials(doc, cleanSymbol);
 
+                stockValuation.CurrentPrice = current.CurrentPrice;
+
                 current.IsFinancialSector = sectorCategory == MacroSector.FinancialServices;
                 current.IsCoreInvestmentCompanyExplicit = sectorCategory == MacroSector.FinancialServices
                     && (sector.Equals("Holding", StringComparison.OrdinalIgnoreCase) ||
@@ -224,7 +226,7 @@ namespace SoundMoney.Services
 
         private Financial ExtractCurrentFinancials(HtmlDocument doc, string symbol)
         {
-            var df = new Financial { Symbol = symbol };
+            var df = new Financial { Symbol = symbol, Year = DateTime.Now.Year };
 
             // A. Top Ratios
             var ratioNodes = doc.DocumentNode.SelectNodes("//ul[@id='top-ratios']/li");

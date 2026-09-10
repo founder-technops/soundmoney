@@ -1076,13 +1076,29 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculateCagr(decimal initialValue, decimal finalValue, int periods)
         {
-            if (initialValue <= 0 || finalValue <= 0 || periods <= 0)
+            try
+            {
+                double ratio = (double)(finalValue / initialValue);
+                double cagr = Math.Pow(ratio, 1.0 / periods) - 1.0;
+
+                // 2. Prevent explicit cast overflow on NaN or Infinity values
+                if (double.IsNaN(cagr) || double.IsInfinity(cagr))
+                {
+                    return 0m;
+                }
+
+                // 3. Ensure the value falls within valid decimal bounds
+                if (cagr > (double)decimal.MaxValue || cagr < (double)decimal.MinValue)
+                {
+                    return 0m;
+                }
+
+                return Math.Round((decimal)cagr, 4);
+            }
+            catch (Exception)
+            {
                 return 0m;
-
-            double ratio = (double)(finalValue / initialValue);
-            double cagr = Math.Pow(ratio, 1.0 / periods) - 1.0;
-
-            return (decimal)cagr;
+            }
         }
 
         /// <summary>
@@ -1099,7 +1115,7 @@ namespace SoundMoney.Algorithms
 
             decimal initial = selector(baseYear);
             decimal final = selector(current);
-            decimal cagr = FinancialAlgorithms.CalculateCagr(initial, final, years);
+            decimal cagr = CalculateCagr(initial, final, years);
             return Math.Round(cagr * 100m, 2);
         }
 
@@ -1114,12 +1130,12 @@ namespace SoundMoney.Algorithms
             var window = historical
                 .Where(h => h.Year > current.Year - years && h.Year <= current.Year && h.Year != current.Year)
                 .Append(current)
-                .Where(h => FinancialAlgorithms.CalculateTotalEquity(h) > 0m)
+                .Where(h => CalculateTotalEquity(h) > 0m)
                 .ToList();
 
             if (window.Count == 0) return 0m;
 
-            decimal avgRoe = window.Average(h => (h.NetProfitCr / FinancialAlgorithms.CalculateTotalEquity(h)) * 100m);
+            decimal avgRoe = window.Average(h => (h.NetProfitCr / CalculateTotalEquity(h)) * 100m);
             return Math.Round(avgRoe, 2);
         }
 
