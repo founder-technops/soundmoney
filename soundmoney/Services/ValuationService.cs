@@ -241,6 +241,36 @@ namespace SoundMoney.Services
             int negativeOcfYears = historyList.Count(h => h.CashFromOperationsCr <= 0);
             if (negativeOcfYears > 1) cashPredictable = false;
 
+            // A single unusually heavy capex/investment year (e.g. building a new
+            // facility) can depress the CURRENT year's FCF/NetProfit and OCF/NetProfit
+            // ratios well below CheckCashPredictable's bar even for a company with an
+            // excellent, consistent multi-year cash-conversion record - the single-year
+            // check has no way to distinguish "one big capex year" from "this business's
+            // cash quality is genuinely deteriorating". When the trailing multi-year
+            // average clears a stronger bar than the single-year check requires, trust
+            // the track record over the one-off year rather than penalizing quality
+            // businesses for investing in growth. This only ever turns cashPredictable ON
+            // when the single-year check turned it off - it never weakens the check for a
+            // company that's genuinely losing cash-conversion quality.
+            if (!cashPredictable && historyList.Count >= 3)
+            {
+                var recentProfitableYears = historyList
+                    .TakeLast(5)
+                    .Where(h => h.NetProfitCr > 0m)
+                    .ToList();
+
+                if (recentProfitableYears.Count >= 3)
+                {
+                    decimal avgFcfToNp = recentProfitableYears.Average(h => h.FreeCashFlowCr / h.NetProfitCr);
+                    decimal avgOcfToNp = recentProfitableYears.Average(h => h.CashFromOperationsCr / h.NetProfitCr);
+
+                    if (avgFcfToNp >= 0.60m && avgOcfToNp >= 0.80m)
+                    {
+                        cashPredictable = true;
+                    }
+                }
+            }
+
             bool isInfraUtility = (debtToEbit >= 3.5m || capexToOcf >= 0.75m) && !current.IsFinancialSector;
 
             // FIX 3: Sector-aware cyclicality classification
@@ -269,7 +299,16 @@ namespace SoundMoney.Services
                 decimal reversalRate = comparisonPoints > 0 ? (decimal)trendReversals / comparisonPoints : 0m;
                 bool hasRecurringReversals = trendReversals >= 2 && reversalRate >= 0.35m;
 
-                int lossYears = historyList.Count(h => h.NetProfitCr <= 0m);
+                // Strict "< 0" rather than "<= 0": Screener's whole-Crore display rounds
+                // a small, young company's tiny-but-genuinely-positive early-year profits
+                // down to "0" in the P&L table (e.g. 3B Blackbio's FY2015/16 EPS of 0.36
+                // and 0.51 - real profit, just small). If the scraper stores that rounded
+                // "0" literally, using <= 0 here means a company that was NEVER actually
+                // loss-making gets counted as having 2+ "loss years" purely from display
+                // rounding, which is enough to misfire this exact check and flag it
+                // cyclical. A true loss (strictly negative) is a real signal; a profit
+                // that merely rounds to zero on a whole-Crore display is not.
+                int lossYears = historyList.Count(h => h.NetProfitCr < 0m);
                 if (lossYears >= 2 || hasRecurringReversals)
                 {
                     cyclical = true;

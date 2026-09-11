@@ -153,9 +153,31 @@ namespace SoundMoney.Algorithms
             && CalculateFcfToNetProfit(current) >= 0.50m
             && CalculateSloanRatio(current) <= 10.0m;
 
-        public static decimal CalculateInterestCoverage(Financial current) => (current.TotalBorrowingsCr > 0m && current.InterestExpenseCr > 0m && !current.IsFinancialSector)
-                ? (CalculateEbit(current) / current.InterestExpenseCr)
-                : (current.TotalBorrowingsCr <= 0m ? 999m : 0m);
+        public static decimal CalculateInterestCoverage(Financial current)
+        {
+            // Not a meaningful ratio for banks/NBFCs (their "interest expense" is a cost
+            // of funds, not debt-service risk) - callers already gate on !IsFinancialSector
+            // before using this, so 0m here is just an "N/A" sentinel, unchanged.
+            if (current.IsFinancialSector) return 0m;
+
+            if (current.InterestExpenseCr <= 0m)
+            {
+                // No interest expense to cover - whether that's because there's no debt at
+                // all, or because there IS some balance-sheet borrowing (e.g. a small
+                // lease liability under Ind-AS 116) that costs essentially nothing to
+                // service, either way this is a strong signal, not a weak one. The
+                // previous version returned 0m - the worst possible reading - whenever
+                // TotalBorrowingsCr was positive but InterestExpenseCr was ~0, which reads
+                // identically to "can't cover any interest at all". That's exactly what
+                // misfired DistressTurnaroundRule's `InterestCoverage < 1.8` check on an
+                // otherwise excellent, nearly debt-free company (e.g. borrowings ~₹3 Cr,
+                // interest expense ~₹0 Cr, ROCE 25%+) and routed it into a "severe
+                // earnings distress" NAV/Price-to-Book valuation it had no business being in.
+                return 999m;
+            }
+
+            return Math.Round(CalculateEbit(current) / current.InterestExpenseCr, 2);
+        }
 
         public static decimal CalculateCapexToDepreciationRatio(Financial current)
         {
