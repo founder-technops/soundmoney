@@ -1,0 +1,10 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://go.microsoft.com/fwlink/?LinkID=208121. -->
+<Project>
+  <PropertyGroup>
+    <_PublishTargetUrl>D:\git\soundmoney\soundmoney\bin\Release\net8.0\publish\</_PublishTargetUrl>
+    <History>True|2026-09-12T09:14:11.7774611Z||;True|2026-09-09T21:09:59.1870623-11:00||;True|2026-09-08T21:52:12.7357487-11:00||;True|2026-09-05T13:22:31.5347396-11:00||;True|2026-08-30T03:37:50.6198899-11:00||;True|2026-08-29T20:16:17.1894841-11:00||;True|2026-08-29T19:30:34.6066770-11:00||;True|2026-08-29T03:52:10.0406559-11:00||;True|2026-08-29T03:25:30.1909681-11:00||;True|2026-08-26T03:06:33.1502279-11:00||;True|2026-08-26T02:45:18.3884643-11:00||;True|2026-08-26T02:03:42.0672619-11:00||;False|2026-08-26T02:01:35.4263760-11:00||;True|2026-08-26T01:52:36.2916159-11:00||;True|2026-08-26T01:52:12.7046087-11:00||;True|2026-08-25T18:29:42.4380406-11:00||;True|2026-08-25T18:02:05.1664446-11:00||;True|2026-08-24T04:56:34.6969931-11:00||;</History>
+    <LastFailureDetails />
+    <TimeStampOfAssociatedLegacyPublishXmlFile />
+  </PropertyGroup>
+</Project>

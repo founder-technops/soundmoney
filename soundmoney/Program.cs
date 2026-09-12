@@ -27,6 +27,7 @@ builder.Services.AddScoped<IFinancialRepository, FinancialRepository>();
 builder.Services.AddTransient<IValuationService, ValuationService>();
 
 builder.Services.AddTransient<IScreenerService, ScreenerService>();
+builder.Services.AddTransient<IScreenerComparisonService, ScreenerComparisonService>();
 
 // Use Gemini API for all stock screener data
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();

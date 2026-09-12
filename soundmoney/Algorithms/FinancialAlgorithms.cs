@@ -1091,6 +1091,45 @@ namespace SoundMoney.Algorithms
             return defaultFallback;
         }
 
+        public static bool IsCapitalIntensive(Financial current, IEnumerable<Financial>? historicals = null)
+        {
+            if (current == null) return false;
+
+            decimal fixedAssetBase = current.FixedAssetsCr + current.CwipCr + current.InvestmentsCr;
+            decimal totalEquity = CalculateTotalEquity(current);
+            decimal assetIntensity = fixedAssetBase > 0m ? fixedAssetBase / Math.Max(1m, totalEquity + current.TotalBorrowingsCr) : 0m;
+            decimal capexToOcf = CalculateCapexToOcf(current);
+            decimal debtToEbit = CalculateDebtToEbit(current);
+
+            bool isInfraLikeSector = !string.IsNullOrWhiteSpace(current.Sector)
+                && (current.Sector.Contains("Power", StringComparison.OrdinalIgnoreCase)
+                    || current.Sector.Contains("Road", StringComparison.OrdinalIgnoreCase)
+                    || current.Sector.Contains("Port", StringComparison.OrdinalIgnoreCase)
+                    || current.Sector.Contains("Rail", StringComparison.OrdinalIgnoreCase)
+                    || current.Sector.Contains("Cement", StringComparison.OrdinalIgnoreCase)
+                    || current.Sector.Contains("Construction", StringComparison.OrdinalIgnoreCase));
+
+            if (capexToOcf >= 0.35m || debtToEbit >= 1.30m) return true;
+            if (isInfraLikeSector || current.TotalBorrowingsCr > 0m && fixedAssetBase > totalEquity) return true;
+            if (assetIntensity >= 0.85m && (current.FixedAssetsCr > 0m || current.CwipCr > 0m)) return true;
+
+            if (historicals != null)
+            {
+                var history = historicals.Where(h => h != null).OrderBy(h => h.Year).ToList();
+                if (history.Count >= 3)
+                {
+                    decimal avgCapexToOcf = history.Average(h => h.CashFromOperationsCr > 0m ? Math.Max(0m, CalculateGrossCapex(h) / h.CashFromOperationsCr) : 0m);
+                    decimal avgDebtToEbit = history.Average(h => CalculateNetDebt(h) > 0m && CalculateEbit(h) > 0m ? Math.Max(0m, CalculateNetDebt(h) / CalculateEbit(h)) : 0m);
+                    if (avgCapexToOcf >= 0.35m || avgDebtToEbit >= 1.30m)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         public static decimal CalculateNetDebt(Financial current)
                 => current.IsCashEstimateReliable ? current.TotalBorrowingsCr - current.CashAndEquivalentsCr
                 : current.TotalBorrowingsCr;

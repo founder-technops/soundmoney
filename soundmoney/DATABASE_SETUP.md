@@ -5,7 +5,7 @@
 ### Database Infrastructure
 - **SoundMoneyDbContext** - Entity Framework Core DbContext for SQLite
 - **StockValuation** - Model class for storing stock data
-- **IStockRepository** / **StockRepository** - Repository pattern for data access
+- **IvaluationRepo** / **valuationRepo** - Repository pattern for data access
 
 ### Features
 ✅ Code-First approach with automatic migrations  
@@ -51,7 +51,7 @@ For each symbol:
   1. Call Gemini API
   2. Parse response
   3. Calculate intrinsic value
-  4. Store in SQLite via StockRepository
+  4. Store in SQLite via valuationRepo
   5. Return ScreenerResultRow
     ↓
 Apply filters (min MOS, sector)
@@ -106,22 +106,22 @@ Database persists between runs. Filtering and retrieval use cached data from the
 ### Repository Methods
 ```csharp
 // Get by symbol
-var stock = await _stockRepository.GetBySymbolAsync("TCS");
+var stock = await _valuationRepo.GetBySymbolAsync("TCS");
 
 // Get all stocks
-var allStocks = await _stockRepository.GetAllAsync();
+var allStocks = await _valuationRepo.GetAllAsync();
 
 // Filter by MOS and sector
-var filtered = await _stockRepository.GetByFilterAsync(20m, SectorCategory.Banking);
+var filtered = await _valuationRepo.GetByFilterAsync(20m, SectorCategory.Banking);
 
 // Add or update
-await _stockRepository.AddOrUpdateAsync(StockValuation);
+await _valuationRepo.AddOrUpdateAsync(StockValuation);
 
 // Delete
-await _stockRepository.DeleteAsync("TCS");
+await _valuationRepo.DeleteAsync("TCS");
 
 // Clear all
-await _stockRepository.DeleteAllAsync();
+await _valuationRepo.DeleteAllAsync();
 ```
 
 ## 🔍 View Database

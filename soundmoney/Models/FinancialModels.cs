@@ -342,8 +342,8 @@ namespace SoundMoney.Models
     internal static class RulePriority
     {
         public const int CoreInvestmentCompany = 8;
-        public const int FinancialSector = 10;
-        public const int WealthManagementAndAMC = 12; // Added priority for asset-light capital market entities
+        public const int WealthManagementAndAMC = 10; // Asset-light capital market entities should outrank generic financial-sector heuristics.
+        public const int FinancialSector = 12;
         public const int PoorCashConversionOrAccrual = 15;
         public const int ReinvestingGrowth = 20;
         public const int DistressTurnaround = 30;
@@ -435,7 +435,12 @@ namespace SoundMoney.Models
     public class HighLeverageCapitalIntensiveRule : IValuationRule
     {
         public int Priority => RulePriority.HighLeverageCapitalIntensive;
-        public bool IsMatch(EvaluationContext ctx) => ctx.DebtToEbit >= 2.5m || ctx.CapexToOcf >= 0.60m || ctx.IsInfrastructureUtility;
+        public bool IsMatch(EvaluationContext ctx) =>
+            ctx.DebtToEbit >= 1.30m
+            || ctx.CapexToOcf >= 0.35m
+            || ctx.IsInfrastructureUtility
+            || FinancialAlgorithms.IsCapitalIntensive(ctx.Current, ctx.Historicals)
+            || (ctx.Current.TotalBorrowingsCr > 0m && ctx.Current.FixedAssetsCr > 0m && (ctx.Current.FixedAssetsCr + ctx.Current.CwipCr + ctx.Current.InvestmentsCr) > (ctx.Current.ShareCapitalCr + ctx.Current.ReservesCr));
         public ValuationMethodology Result(EvaluationContext ctx)
         {
             if (ctx.CanComputeCashFlowDcf && ctx.CroicPercent >= 8.0m && !ctx.IsCyclical)
