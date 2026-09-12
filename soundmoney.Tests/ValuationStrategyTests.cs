@@ -104,4 +104,54 @@ public class ValuationStrategyTests
         Assert.Equal("Exit Multiple DCF (FCFF)", methodology.PrimaryMethod);
         Assert.Contains("FCFF", methodology.Rationale);
     }
+
+    [Fact]
+    public void ComputeValueByMethod_HandlesLowerCaseAndSpacingVariants()
+    {
+        var current = new Financial
+        {
+            Symbol = "TESTCO",
+            Sector = "Trading - Metals",
+            CurrentPrice = 120m,
+            MarketCapCr = 150m,
+            ShareCapitalCr = 80m,
+            ReservesCr = 60m,
+            TotalBorrowingsCr = 50m,
+            OtherLiabilitiesCr = 15m,
+            FixedAssetsCr = 90m,
+            CwipCr = 20m,
+            InvestmentsCr = 25m,
+            OtherAssetsCr = 40m,
+            CashAndEquivalentsCr = 20m,
+            SalesCr = 500m,
+            OperatingProfitCr = 40m,
+            OtherIncomeCr = 8m,
+            DepreciationCr = 12m,
+            NetProfitCr = 25m,
+            InterestExpenseCr = 5m,
+            CashFromOperationsCr = 10m,
+            CashFromInvestmentCr = -8m,
+            CashFromFinanceCr = -7m,
+            FreeCashFlowCr = 0m,
+            FaceValue = 1m,
+            DividendPayoutPercent = 20m,
+            ReportedRoePercent = 15m,
+            ReportedRocePercent = 16m
+        };
+
+        var value = ValuationService.ComputeValueByMethod("ev/sales relative multiple", current, new[] { current });
+
+        Assert.True(value > 0m);
+    }
+
+    [Fact]
+    public void MethodNames_UsesCanonicalPrimaryAndSecondaryNames()
+    {
+        Assert.Equal("Excess Returns Model", MethodNames.ExcessReturns.ToDisplayString());
+        Assert.Equal("Price-to-TBV (Tangible Book Value)", MethodNames.PriceToTangibleBookValue.ToDisplayString());
+        Assert.Equal("Net Asset Value (NAV)", MethodNames.NetAssetValue.ToDisplayString());
+        Assert.Equal("Price-to-Book (P/B)", MethodNames.PriceToBook.ToDisplayString());
+        Assert.Equal("2-Stage FCFE DCF", MethodNames.TwoStageFcfeDcf.ToDisplayString());
+        Assert.Equal("Price-to-Earnings-to-Growth (PEG)", MethodNames.PriceToEarningsToGrowth.ToDisplayString());
+    }
 }

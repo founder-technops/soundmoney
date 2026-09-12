@@ -298,7 +298,20 @@ namespace SoundMoney.Models
                 // Other / Miscelleneous
                 ["Trading & Distributors"] = MacroSector.Other, // FIX 3: Re-mapped from Energy
                 ["Distributors"] = MacroSector.Other,           // FIX 3: Re-mapped from Energy
-                ["Diversified"] = MacroSector.Other             // FIX 3: Re-mapped from Energy
+                ["Diversified"] = MacroSector.Other,            // FIX 3: Re-mapped from Energy
+
+                // Telecommunication
+                // Restored: these mappings were accidentally deleted during the FIX 3
+                // trading-sector reclassification above (they sat in the same dictionary
+                // block, right after the entries that got removed/re-mapped). The
+                // Telecommunication enum value was untouched, but with no string keys
+                // pointing to it, every telecom company (Bharti Airtel, Vodafone Idea,
+                // Indus Towers, etc.) would fall through to whatever this dictionary's
+                // default/unmatched behavior is instead of being classified correctly.
+                ["Telecom - Cellular & Fixed line services"] = MacroSector.Telecommunication,
+                ["Telecom - Infrastructure"] = MacroSector.Telecommunication,
+                ["Telecom - Equipment & Accessories"] = MacroSector.Telecommunication,
+                ["Other Telecom Services"] = MacroSector.Telecommunication
             }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
         public static MacroSector GetMacroSector(string? subSector)
@@ -361,14 +374,152 @@ namespace SoundMoney.Models
         ValuationMethodology Result(EvaluationContext ctx);
     }
 
+    public enum MethodNames
+    {
+        ExcessReturns,
+        PriceToTangibleBookValue,
+        NetAssetValue,
+        PriceToBook,
+        EvSalesRelativeMultiple,
+        PriceToSales,
+        NormalizedMidCyclePe,
+        ExitMultipleDcf,
+        EvEbitdaRelativeMultiple,
+        DividendDiscountModel,
+        DividendDiscountModelPassThrough,
+        GordonGrowthModel,
+        BuffettOwnerEarnings,
+        TwoStageFcfeDcf,
+        PriceToEarningsToGrowth,
+        PriceToEarnings,
+        DiscountedCashFlowDcf,
+        AdjustedNetAssetValue,
+        DefaultFallback
+    }
+
+    public static class MethodNamesExtensions
+    {
+        private static readonly IReadOnlyDictionary<MethodNames, string> DisplayNames = new Dictionary<MethodNames, string>
+        {
+            [MethodNames.ExcessReturns] = "Excess Returns Model",
+            [MethodNames.PriceToTangibleBookValue] = "Price-to-TBV (Tangible Book Value)",
+            [MethodNames.NetAssetValue] = "Net Asset Value (NAV)",
+            [MethodNames.PriceToBook] = "Price-to-Book (P/B)",
+            [MethodNames.EvSalesRelativeMultiple] = "EV/Sales Relative Multiple",
+            [MethodNames.PriceToSales] = "Price-to-Sales (P/S)",
+            [MethodNames.NormalizedMidCyclePe] = "Normalized Mid-Cycle P/E",
+            [MethodNames.ExitMultipleDcf] = "Exit Multiple DCF (FCFF)",
+            [MethodNames.EvEbitdaRelativeMultiple] = "EV/EBITDA Relative Multiple",
+            [MethodNames.DividendDiscountModel] = "Dividend Discount Model (DDM)",
+            [MethodNames.DividendDiscountModelPassThrough] = "Dividend Discount Model (Pass-Through Yield)",
+            [MethodNames.GordonGrowthModel] = "Gordon Growth Model",
+            [MethodNames.BuffettOwnerEarnings] = "Buffett Owner Earnings Model",
+            [MethodNames.TwoStageFcfeDcf] = "2-Stage FCFE DCF",
+            [MethodNames.PriceToEarningsToGrowth] = "Price-to-Earnings-to-Growth (PEG)",
+            [MethodNames.PriceToEarnings] = "Price-to-Earnings (P/E) Multiple",
+            [MethodNames.DiscountedCashFlowDcf] = "2-Stage Discounted Cash Flow (DCF)",
+            [MethodNames.AdjustedNetAssetValue] = "Adjusted Net Asset Value (SOTP with HoldCo Discount)",
+            [MethodNames.DefaultFallback] = "Price-to-Earnings (P/E) Multiple"
+        };
+
+        private static readonly IReadOnlyDictionary<string, MethodNames> LegacyAliases = new Dictionary<string, MethodNames>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Excess Returns Model"] = MethodNames.ExcessReturns,
+            ["Price-to-TBV (Tangible Book Value)"] = MethodNames.PriceToTangibleBookValue,
+            ["Price-to-Book (P/B)"] = MethodNames.PriceToTangibleBookValue,
+            ["Price to Book P B"] = MethodNames.PriceToTangibleBookValue,
+            ["Price to Book P B Intrinsic Multiples"] = MethodNames.PriceToTangibleBookValue,
+            ["EV/Sales Relative Multiple"] = MethodNames.EvSalesRelativeMultiple,
+            ["EV Sales Relative Multiple"] = MethodNames.EvSalesRelativeMultiple,
+            ["Price-to-Sales (P/S)"] = MethodNames.PriceToSales,
+            ["Price to Sales P S"] = MethodNames.PriceToSales,
+            ["Net Asset Value (NAV)"] = MethodNames.NetAssetValue,
+            ["Net Asset Value NAV"] = MethodNames.NetAssetValue,
+            ["Normalized Mid-Cycle P/E"] = MethodNames.NormalizedMidCyclePe,
+            ["Normalized Mid-Cycle EV/EBITDA"] = MethodNames.NormalizedMidCyclePe,
+            ["Normalized Mid Cycle P E"] = MethodNames.NormalizedMidCyclePe,
+            ["Exit Multiple DCF (FCFF)"] = MethodNames.ExitMultipleDcf,
+            ["Exit Multiple DCF"] = MethodNames.ExitMultipleDcf,
+            ["EV/EBITDA Relative Multiple"] = MethodNames.EvEbitdaRelativeMultiple,
+            ["EV EBITDA Relative Multiple"] = MethodNames.EvEbitdaRelativeMultiple,
+            ["Dividend Discount Model (DDM)"] = MethodNames.DividendDiscountModel,
+            ["Dividend Discount Model (Pass-Through Yield)"] = MethodNames.DividendDiscountModelPassThrough,
+            ["Gordon Growth Model"] = MethodNames.GordonGrowthModel,
+            ["Gordon Growth DDM"] = MethodNames.GordonGrowthModel,
+            ["Buffett Owner Earnings Model"] = MethodNames.BuffettOwnerEarnings,
+            ["2-Stage FCFE DCF"] = MethodNames.TwoStageFcfeDcf,
+            ["2-Stage Discounted Cash Flow (DCF)"] = MethodNames.TwoStageFcfeDcf,
+            ["2 Stage FCFE DCF"] = MethodNames.TwoStageFcfeDcf,
+            ["2 Stage Discounted Cash Flow DCF"] = MethodNames.TwoStageFcfeDcf,
+            ["Price-to-Earnings-to-Growth (PEG)"] = MethodNames.PriceToEarningsToGrowth,
+            ["Price-to-Earnings (P/E)"] = MethodNames.PriceToEarnings,
+            ["Price-to-Earnings (P/E) Multiple"] = MethodNames.PriceToEarnings,
+            ["Standard DCF"] = MethodNames.DiscountedCashFlowDcf,
+            ["Discounted Cash Flow DCF"] = MethodNames.DiscountedCashFlowDcf,
+            ["Adjusted Net Asset Value (SOTP with HoldCo Discount)"] = MethodNames.AdjustedNetAssetValue,
+            ["Price-to-Earnings (P/E) Multiple"] = MethodNames.PriceToEarnings
+        };
+
+        public static string ToDisplayString(this MethodNames methodName)
+        {
+            return DisplayNames.TryGetValue(methodName, out var value) ? value : methodName.ToString();
+        }
+
+        public static bool TryParse(string? value, out MethodNames methodName)
+        {
+            methodName = default;
+            if (string.IsNullOrWhiteSpace(value)) return false;
+
+            var trimmed = value.Trim();
+            if (LegacyAliases.TryGetValue(trimmed, out methodName)) return true;
+
+            foreach (var pair in DisplayNames)
+            {
+                if (string.Equals(pair.Value, trimmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    methodName = pair.Key;
+                    return true;
+                }
+            }
+
+            var normalized = trimmed.Replace("-", " ");
+            normalized = normalized.Replace("_", " ");
+            normalized = normalized.Replace("/", " ");
+            normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"\s+", " ");
+
+            foreach (var pair in DisplayNames)
+            {
+                var display = pair.Value.Replace("-", " ").Replace("/", " ");
+                if (string.Equals(display, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    methodName = pair.Key;
+                    return true;
+                }
+            }
+
+            foreach (var pair in LegacyAliases)
+            {
+                var aliasNormalized = pair.Key.Replace("-", " ").Replace("/", " ");
+                aliasNormalized = System.Text.RegularExpressions.Regex.Replace(aliasNormalized, @"\s+", " ");
+                if (string.Equals(aliasNormalized, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    methodName = pair.Value;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     public class FinancialSectorRule : IValuationRule
     {
         public int Priority => RulePriority.FinancialSector;
         public bool IsMatch(EvaluationContext ctx) => ctx.Current.IsFinancialSector;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Excess Returns Model",
-            SecondaryMethod = "Price-to-TBV (Tangible Book Value)",
+            PrimaryMethod = MethodNames.ExcessReturns.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToTangibleBookValue.ToDisplayString(),
             Rationale = "Financial institution: Operational inventory is capital; requiring equity residual income models."
         };
     }
@@ -383,8 +534,8 @@ namespace SoundMoney.Models
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Net Asset Value (NAV)",
-            SecondaryMethod = "Price-to-Book (P/B)",
+            PrimaryMethod = MethodNames.NetAssetValue.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToBook.ToDisplayString(),
             Rationale = "High accrual risk (Sloan Ratio > 12%) or severe paper profits (FCF conversion < 20%). Overriding cash/earnings multiples with asset floor."
         };
     }
@@ -400,8 +551,8 @@ namespace SoundMoney.Models
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "EV/Sales Relative Multiple",
-            SecondaryMethod = "Price-to-Sales (P/S)",
+            PrimaryMethod = MethodNames.EvSalesRelativeMultiple.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToSales.ToDisplayString(),
             Rationale = "Unprofitable on net income but cash-flow positive; valued on revenue scale and operating cash efficiency."
         };
     }
@@ -414,8 +565,8 @@ namespace SoundMoney.Models
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Net Asset Value (NAV)",
-            SecondaryMethod = "Price-to-Book (P/B)",
+            PrimaryMethod = MethodNames.NetAssetValue.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToBook.ToDisplayString(),
             Rationale = "Severe earnings distress or interest coverage strain (< 1.8x); falling back to asset liquidation floor."
         };
     }
@@ -426,8 +577,8 @@ namespace SoundMoney.Models
         public bool IsMatch(EvaluationContext ctx) => ctx.IsCyclical;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Normalized Mid-Cycle P/E",
-            SecondaryMethod = "Price-to-Book (P/B)",
+            PrimaryMethod = MethodNames.NormalizedMidCyclePe.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToBook.ToDisplayString(),
             Rationale = "High earnings volatility or cyclical sector detected; using mid-cycle normalized metrics to avoid peak/trough valuation errors."
         };
     }
@@ -447,19 +598,18 @@ namespace SoundMoney.Models
             {
                 return new ValuationMethodology
                 {
-                    PrimaryMethod = "Exit Multiple DCF (FCFF)",
-                    SecondaryMethod = "EV/EBITDA Relative Multiple",
+                    PrimaryMethod = MethodNames.ExitMultipleDcf.ToDisplayString(),
+                    SecondaryMethod = MethodNames.EvEbitdaRelativeMultiple.ToDisplayString(),
                     Rationale = "Capital-intensive profile with adequate Cash Return on Invested Capital (CROIC >= 8%); using Enterprise FCFF DCF."
                 };
             }
 
             if (FinancialAlgorithms.CalculateEbitda(ctx.Current) > 0m)
             {
-                // FIX 2: If cyclical, prioritize Normalized Mid-Cycle P/E over single-year EV/EBITDA
                 return new ValuationMethodology
                 {
-                    PrimaryMethod = ctx.IsCyclical ? "Normalized Mid-Cycle P/E" : "EV/EBITDA Relative Multiple",
-                    SecondaryMethod = ctx.IsCyclical ? "EV/EBITDA Relative Multiple" : "Price-to-Book (P/B)",
+                    PrimaryMethod = (ctx.IsCyclical ? MethodNames.NormalizedMidCyclePe : MethodNames.EvEbitdaRelativeMultiple).ToDisplayString(),
+                    SecondaryMethod = (ctx.IsCyclical ? MethodNames.EvEbitdaRelativeMultiple : MethodNames.PriceToBook).ToDisplayString(),
                     Rationale = ctx.IsCyclical
                         ? "Capital-intensive, highly levered, and cyclical; prioritizing mid-cycle normalized earnings over single-year EBITDA to prevent trough/peak distortions."
                         : "Capital-intensive/high-leverage profile with low cash return efficiency; using EV/EBITDA multiple."
@@ -468,8 +618,8 @@ namespace SoundMoney.Models
 
             return new ValuationMethodology
             {
-                PrimaryMethod = "Price-to-Book (P/B)",
-                SecondaryMethod = "Net Asset Value (NAV)",
+                PrimaryMethod = MethodNames.PriceToBook.ToDisplayString(),
+                SecondaryMethod = MethodNames.NetAssetValue.ToDisplayString(),
                 Rationale = "High leverage asset-heavy profile lacking positive cash flow; falling back to asset-based floor."
             };
         }
@@ -481,8 +631,8 @@ namespace SoundMoney.Models
         public bool IsMatch(EvaluationContext ctx) => ctx.Current.DividendPayoutPercent >= 40m && ctx.IsCashPredictable;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Dividend Discount Model (DDM)",
-            SecondaryMethod = "Gordon Growth Model",
+            PrimaryMethod = MethodNames.DividendDiscountModel.ToDisplayString(),
+            SecondaryMethod = MethodNames.GordonGrowthModel.ToDisplayString(),
             Rationale = "Mature entity distributing over 40% of earnings with predictable free cash flow support."
         };
     }
@@ -496,9 +646,9 @@ namespace SoundMoney.Models
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
             PrimaryMethod = (FinancialAlgorithms.CalculateRoe(ctx.Current) >= 20m && ctx.MarginTrend >= 0m)
-                ? "Buffett Owner Earnings Model"
-                : "2-Stage FCFE DCF",
-            SecondaryMethod = "Price-to-Earnings-to-Growth (PEG)",
+                ? MethodNames.BuffettOwnerEarnings.ToDisplayString()
+                : MethodNames.TwoStageFcfeDcf.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToEarningsToGrowth.ToDisplayString(),
             Rationale = "High ROIC/CROIC moat confirmed with predictable FCF; suitable for equity-level discounted cash flow modeling."
         };
     }
@@ -509,8 +659,8 @@ namespace SoundMoney.Models
         public bool IsMatch(EvaluationContext ctx) => ctx.Current.IsFinancialSector && FinancialAlgorithms.CheckCoreInvestmentCompany(ctx.Current);
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Adjusted Net Asset Value (SOTP with HoldCo Discount)",
-            SecondaryMethod = "Dividend Discount Model (Pass-Through Yield)",
+            PrimaryMethod = MethodNames.AdjustedNetAssetValue.ToDisplayString(),
+            SecondaryMethod = MethodNames.DividendDiscountModelPassThrough.ToDisplayString(),
             Rationale = "Core Investment / Holding Company detected: Applying standard 50% Holding Company discount to NAV."
         };
     }
@@ -521,8 +671,8 @@ namespace SoundMoney.Models
         public bool IsMatch(EvaluationContext ctx) => true;
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "Price-to-Earnings (P/E) Multiple",
-            SecondaryMethod = "Price-to-Book (P/B)",
+            PrimaryMethod = MethodNames.PriceToEarnings.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToBook.ToDisplayString(),
             Rationale = "Standard financial operating profile; applying relative earnings multiples."
         };
     }
@@ -546,8 +696,8 @@ namespace SoundMoney.Models
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
-            PrimaryMethod = "2-Stage Discounted Cash Flow (DCF)",
-            SecondaryMethod = "Price-to-Earnings (P/E) Multiple",
+            PrimaryMethod = MethodNames.DiscountedCashFlowDcf.ToDisplayString(),
+            SecondaryMethod = MethodNames.PriceToEarnings.ToDisplayString(),
             Rationale = "Asset-light financial intermediary / fee-based business: High ROE/ROIC generated without balance-sheet credit risk; evaluated using cash flow and earnings multiples rather than book-value models."
         };
     }

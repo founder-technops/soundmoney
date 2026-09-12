@@ -129,25 +129,31 @@ namespace SoundMoney.Services
 
         public static decimal ComputeValueByMethod(string methodName, Financial current, IEnumerable<Financial> historicals)
         {
-            return methodName switch
+            if (!MethodNamesExtensions.TryParse(methodName, out var resolvedMethod))
             {
-                "Excess Returns Model" => FinancialAlgorithms.CalculateExcessReturns(current),
-                "Price-to-TBV (Tangible Book Value)" or "Price-to-Book (P/B)" or "Price-to-Book (P/B) Intrinsic Multiples" => FinancialAlgorithms.CalculatePbIntrinsicValue(current),
-                "EV/Sales Relative Multiple" => FinancialAlgorithms.CalculateEvSalesMultiple(current),
-                "Price-to-Sales (P/S)" => FinancialAlgorithms.CalculatePriceToSales(current),
-                "Net Asset Value (NAV)" => FinancialAlgorithms.CalculateNavPerShare(current),
-                "Normalized Mid-Cycle P/E" or "Normalized Mid-Cycle EV/EBITDA" => FinancialAlgorithms.CalculateNormalizedPe(current, historicals),
-                "Exit Multiple DCF (FCFF)" or "Exit Multiple DCF" => FinancialAlgorithms.CalculateExitMultipleDcf(current, historicals),
-                "EV/EBITDA Relative Multiple" => FinancialAlgorithms.CalculateEvEbitdaMultiple(current),
-                "Dividend Discount Model (DDM)" => FinancialAlgorithms.CalculateDdm(current),
-                "Dividend Discount Model (Pass-Through Yield)" => FinancialAlgorithms.CalculateDdmPassThroughYield(current),
-                "Gordon Growth Model" or "Gordon Growth DDM" => FinancialAlgorithms.CalculateGordonGrowthDdm(current),
-                "Buffett Owner Earnings Model" => FinancialAlgorithms.CalculateOwnerEarnings(current, historicals),
-                "2-Stage FCFE DCF" or "2-Stage Discounted Cash Flow (DCF)" => FinancialAlgorithms.CalculateTwoStageDcf(current, historicals),
-                "Price-to-Earnings-to-Growth (PEG)" => FinancialAlgorithms.CalculatePegRatioValue(current, historicals),
-                "Price-to-Earnings (P/E) Multiple" => FinancialAlgorithms.CalculatePriceToEarnings(current),
-                "Discounted Cash Flow (DCF)" or "Standard DCF" => FinancialAlgorithms.CalculateStandardDcf(current, historicals),
-                "Adjusted Net Asset Value (SOTP with HoldCo Discount)" => FinancialAlgorithms.CalculateHoldingCompanyValue(current),
+                return FallbackExecution(methodName, current, historicals);
+            }
+
+            return resolvedMethod switch
+            {
+                MethodNames.ExcessReturns => FinancialAlgorithms.CalculateExcessReturns(current),
+                MethodNames.PriceToTangibleBookValue => FinancialAlgorithms.CalculatePbIntrinsicValue(current),
+                MethodNames.EvSalesRelativeMultiple => FinancialAlgorithms.CalculateEvSalesMultiple(current),
+                MethodNames.PriceToSales => FinancialAlgorithms.CalculatePriceToSales(current),
+                MethodNames.NetAssetValue => FinancialAlgorithms.CalculateNavPerShare(current),
+                MethodNames.NormalizedMidCyclePe => FinancialAlgorithms.CalculateNormalizedPe(current, historicals),
+                MethodNames.ExitMultipleDcf => FinancialAlgorithms.CalculateExitMultipleDcf(current, historicals),
+                MethodNames.EvEbitdaRelativeMultiple => FinancialAlgorithms.CalculateEvEbitdaMultiple(current),
+                MethodNames.DividendDiscountModel => FinancialAlgorithms.CalculateDdm(current),
+                MethodNames.DividendDiscountModelPassThrough => FinancialAlgorithms.CalculateDdmPassThroughYield(current),
+                MethodNames.GordonGrowthModel => FinancialAlgorithms.CalculateGordonGrowthDdm(current),
+                MethodNames.BuffettOwnerEarnings => FinancialAlgorithms.CalculateOwnerEarnings(current, historicals),
+                MethodNames.TwoStageFcfeDcf => FinancialAlgorithms.CalculateTwoStageDcf(current, historicals),
+                MethodNames.PriceToEarningsToGrowth => FinancialAlgorithms.CalculatePegRatioValue(current, historicals),
+                MethodNames.PriceToEarnings => FinancialAlgorithms.CalculatePriceToEarnings(current),
+                MethodNames.DiscountedCashFlowDcf => FinancialAlgorithms.CalculateStandardDcf(current, historicals),
+                MethodNames.AdjustedNetAssetValue => FinancialAlgorithms.CalculateHoldingCompanyValue(current),
+                MethodNames.DefaultFallback => FinancialAlgorithms.CalculatePriceToEarnings(current),
                 _ => FallbackExecution(methodName, current, historicals)
             };
         }
