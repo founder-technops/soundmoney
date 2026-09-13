@@ -417,7 +417,7 @@ namespace SoundMoney.Models
             [MethodNames.TwoStageFcfeDcf] = "2-Stage FCFE DCF",
             [MethodNames.PriceToEarningsToGrowth] = "Price-to-Earnings-to-Growth (PEG)",
             [MethodNames.PriceToEarnings] = "Price-to-Earnings (P/E) Multiple",
-            [MethodNames.DiscountedCashFlowDcf] = "2-Stage Discounted Cash Flow (DCF)",
+            [MethodNames.DiscountedCashFlowDcf] = "Discounted Cash Flow (DCF)",
             [MethodNames.AdjustedNetAssetValue] = "Adjusted Net Asset Value (SOTP with HoldCo Discount)",
             [MethodNames.DefaultFallback] = "Price-to-Earnings (P/E) Multiple"
         };

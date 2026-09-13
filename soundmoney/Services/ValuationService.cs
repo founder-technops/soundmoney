@@ -315,7 +315,28 @@ namespace SoundMoney.Services
                 // cyclical. A true loss (strictly negative) is a real signal; a profit
                 // that merely rounds to zero on a whole-Crore display is not.
                 int lossYears = historyList.Count(h => h.NetProfitCr < 0m);
-                if (lossYears >= 2 || hasRecurringReversals)
+
+                // A company that lost money during an early growth/scale-up phase (very
+                // common for recently-IPO'd tech/D2C/e-commerce businesses - Nykaa, for
+                // instance, was loss-making for years post-IPO before turning sustainably
+                // profitable) is not "cyclical" in the commodity boom-bust sense just
+                // because lossYears >= 2. That's a one-way structural maturation, not a
+                // recurring pattern - a genuine cyclical (steel, cement, sugar) keeps
+                // swinging through its recent history too, it doesn't settle into a
+                // multi-year stretch of consistent, growing profit. If the most recent 3
+                // years are all solidly profitable and non-declining, treat that as having
+                // matured past the early losses rather than flagging cyclical from
+                // lossYears alone.
+                bool recentlyStabilized = false;
+                if (lossYears >= 2 && historyList.Count >= 3)
+                {
+                    var mostRecentYears = historyList.TakeLast(3).ToList();
+                    recentlyStabilized = mostRecentYears.Count == 3
+                        && mostRecentYears.All(h => h.NetProfitCr > 0m)
+                        && mostRecentYears[2].NetProfitCr >= mostRecentYears[0].NetProfitCr;
+                }
+
+                if ((lossYears >= 2 && !recentlyStabilized) || hasRecurringReversals)
                 {
                     cyclical = true;
                 }
