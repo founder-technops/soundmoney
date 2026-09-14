@@ -91,7 +91,11 @@ public class StockDetailsViewModel
     public decimal DividendYieldPercent { get; set; }
     public bool IsDividendConsistent { get; set; }
 
-    // 4. Historical Trends (Simple)
+    // Health & Solvency Scores
+    public decimal AltmanZScore { get; set; }
+    public int PiotroskiFScore { get; set; }
+
+    // 4. Historical Trends (Simple CAGR)
     public decimal RevenueCagr3Yr { get; set; }
     public decimal RevenueCagr5Yr { get; set; }
     public decimal ProfitCagr3Yr { get; set; }
@@ -100,7 +104,7 @@ public class StockDetailsViewModel
     public decimal AverageRoe5Yr { get; set; }
     public int ConsecutiveDividendYears { get; set; }
 
-    // 5. Detailed Trend Analysis (New)
+    // 5. Detailed Trend Analysis (Year-by-Year Collections)
     public TrendAnalysisData? DetailedTrends { get; set; }
     public List<YearlyMetric> RevenueByYear { get; set; } = new();
     public List<YearlyMetric> ProfitByYear { get; set; } = new();
@@ -110,12 +114,81 @@ public class StockDetailsViewModel
     public List<YearlyMetric> FreeCashFlowByYear { get; set; } = new();
 
     // 6. Trend Summary Indicators
-    public string? RevenueTrend { get; set; } // "Improving", "Declining", "Stable"
+    public string? RevenueTrend { get; set; }
     public string? ProfitTrend { get; set; }
     public string? RoeTrend { get; set; }
     public string? RoceTrend { get; set; }
     public string? DebtTrend { get; set; }
     public string? CashFlowTrend { get; set; }
+
+    // --- Qualitative Metric Indications Helpers ---
+
+    public (string Label, string CssClass) GetPeIndication() =>
+        PE switch
+        {
+            <= 0 => ("Negative", "bg-secondary"),
+            < 15 => ("Cheaper", "bg-success"),
+            <= 25 => ("Fair", "bg-info text-dark"),
+            _ => ("Higher", "bg-warning text-dark")
+        };
+
+    public (string Label, string CssClass) GetPbIndication() =>
+        PB switch
+        {
+            <= 0 => ("Negative", "bg-secondary"),
+            < 1.5m => ("Cheaper", "bg-success"),
+            <= 3.5m => ("Fair", "bg-info text-dark"),
+            _ => ("Higher", "bg-warning text-dark")
+        };
+
+    public (string Label, string CssClass) GetEvEbitdaIndication() =>
+        EvToEbitda switch
+        {
+            <= 0 => ("N/A", "bg-secondary"),
+            < 10m => ("Cheaper", "bg-success"),
+            <= 16m => ("Fair", "bg-info text-dark"),
+            _ => ("Higher", "bg-warning text-dark")
+        };
+
+    public (string Label, string CssClass) GetDebtToEquityIndication() =>
+        DebtToEquity switch
+        {
+            < 0.5m => ("Safe", "bg-success"),
+            <= 1.0m => ("Moderate", "bg-warning text-dark"),
+            _ => ("Risky", "bg-danger")
+        };
+
+    public (string Label, string CssClass) GetInterestCoverageIndication() =>
+        InterestCoverageRatio switch
+        {
+            >= 5.0m => ("Safe", "bg-success"),
+            >= 2.0m => ("Moderate", "bg-warning text-dark"),
+            _ => ("Risky", "bg-danger")
+        };
+
+    public (string Label, string CssClass) GetCurrentRatioIndication() =>
+        CurrentRatio switch
+        {
+            >= 1.5m => ("Safe", "bg-success"),
+            >= 1.0m => ("Fair", "bg-info text-dark"),
+            _ => ("Risky", "bg-danger")
+        };
+
+    public (string Label, string CssClass) GetRoeIndication() =>
+        ROEPercent switch
+        {
+            >= 18.0m => ("High Return", "bg-success"),
+            >= 12.0m => ("Fair", "bg-info text-dark"),
+            _ => ("Low Return", "bg-secondary")
+        };
+
+    public (string Label, string CssClass) GetAltmanZIndication() =>
+        AltmanZScore switch
+        {
+            >= 2.99m => ("Safe Zone", "bg-success"),
+            >= 1.81m => ("Grey Zone", "bg-warning text-dark"),
+            _ => ("Distress Risk", "bg-danger")
+        };
 }
 
 public class ErrorViewModel

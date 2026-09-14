@@ -87,8 +87,6 @@ namespace SoundMoney.Services
                 SoundScoreRating = valuationResult.SoundScoreRating,
 
                 // 3. Deep Financial Indicators
-                // Screener's own trailing P/E when it scraped one; otherwise derive it
-                // from price / EPS rather than leaving it at a hardcoded 0.
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
                 PB = FinancialAlgorithms.CalculatePbRatio(current),
                 EvToEbitda = FinancialAlgorithms.CalculateEvToEbitda(current),
@@ -101,6 +99,10 @@ namespace SoundMoney.Services
                 FreeCashFlowCr = current.FreeCashFlowCr,
                 DividendYieldPercent = current.DividendYieldPercent,
                 IsDividendConsistent = dividendAnalysis.IsConsistent,
+
+                // Health & Solvency Risk Scores
+                AltmanZScore = FinancialAlgorithms.CalculateAltmanZScore(current),
+                PiotroskiFScore = FinancialAlgorithms.CalculatePiotroskiFScore(current, historicalList),
 
                 // 4. Historical Trends (Simple CAGR)
                 RevenueCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historicalList, 3, f => f.SalesCr),
@@ -126,7 +128,7 @@ namespace SoundMoney.Services
                 RoceTrend = roceTrend,
                 DebtTrend = debtTrend,
                 CashFlowTrend = cashFlowTrend
-            };
+            }; 
             return model;
         }
 

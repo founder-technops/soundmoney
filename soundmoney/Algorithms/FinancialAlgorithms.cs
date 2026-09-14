@@ -1278,6 +1278,12 @@ namespace SoundMoney.Algorithms
             return CalculateCurrentLiabilities(current) > 0m ? Math.Round(CalculateCurrentAssets(current) / CalculateCurrentLiabilities(current), 2) : 0m;
         }
 
+        public static decimal CalculatePriceToBook(Financial current, decimal targetPbMultiple = 1.0m)
+        {
+            decimal bookValuePerShare = CalculateBookValuePerShare(current);
+            return Math.Max(0m, bookValuePerShare * targetPbMultiple);
+        }
+
         #region Trend Analysis Methods
 
         /// <summary>

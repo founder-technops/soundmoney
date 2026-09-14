@@ -267,8 +267,16 @@ namespace SoundMoney.Services
             if (pnlSection != null)
             {
                 df.SalesCr = GetLastCellRowValue(pnlSection, "Sales");
+                if (df.SalesCr == 0)
+                {
+                    df.SalesCr = GetLastCellRowValue(pnlSection, "Revenue");
+                }
                 df.ExpenseCr = GetLastCellRowValue(pnlSection, "Expenses");
                 df.OperatingProfitCr = GetLastCellRowValue(pnlSection, "Operating Profit");
+                if (df.OperatingProfitCr == 0m)
+                {
+                    df.OperatingProfitCr = GetLastCellRowValue(pnlSection, "Financing Profit");
+                }
                 df.OtherIncomeCr = GetLastCellRowValue(pnlSection, "Other Income");
                 df.InterestExpenseCr = Math.Abs(GetLastCellRowValue(pnlSection, "Interest"));
                 df.DepreciationCr = Math.Abs(GetLastCellRowValue(pnlSection, "Depreciation"));
@@ -286,6 +294,10 @@ namespace SoundMoney.Services
                 df.ShareCapitalCr = GetLastCellRowValue(bsSection, "Equity Capital");
                 df.ReservesCr = GetLastCellRowValue(bsSection, "Reserves");
                 df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowings"));
+                if(df.TotalBorrowingsCr == 0m)
+                {
+                    df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowing"));
+                }
                 df.OtherLiabilitiesCr = GetLastCellRowValue(bsSection, "Other Liabilities");
                 df.FixedAssetsCr = GetLastCellRowValue(bsSection, "Fixed Assets");
                 df.CwipCr = GetLastCellRowValue(bsSection, "CWIP");
@@ -396,8 +408,12 @@ namespace SoundMoney.Services
 
             //profit & loss
             var dicSalesCr = GetRowValuesByColumn(pnlSection, "Sales");
+            if(dicSalesCr.Count ==0)
+                dicSalesCr = GetRowValuesByColumn(pnlSection, "Revenue");
             var dicExpenseCr = GetRowValuesByColumn(pnlSection, "Expenses");
             var dicOperatingProfitCr = GetRowValuesByColumn(pnlSection, "Operating Profit");
+            if(dicOperatingProfitCr.Count == 0)
+                dicOperatingProfitCr = GetRowValuesByColumn(pnlSection, "Financing Profit");
             var dicOtherIncomeCr = GetRowValuesByColumn(pnlSection, "Other Income");
             var dicInterestExpenseCr = GetRowValuesByColumn(pnlSection, "Interest");
             var dicDepreciationCr = GetRowValuesByColumn(pnlSection, "Depreciation");
@@ -411,6 +427,8 @@ namespace SoundMoney.Services
             var dicShareCapitalCr = GetRowValuesByColumn(bsSection, "Equity Capital");
             var dicReservesCr = GetRowValuesByColumn(bsSection, "Reserves");
             var dicTotalBorrowingsCr = GetRowValuesByColumn(bsSection, "Borrowings");
+            if(dicTotalBorrowingsCr.Count == 0)
+                dicTotalBorrowingsCr = GetRowValuesByColumn(bsSection, "Borrowing");
             var dicOtherLiabilitiesCr = GetRowValuesByColumn(bsSection, "Other Liabilities");
             var dicNetFixedAssetsCr = GetRowValuesByColumn(bsSection, "Fixed Assets");
             var dicCwipCr = GetRowValuesByColumn(bsSection, "CWIP");

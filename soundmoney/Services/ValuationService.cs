@@ -151,6 +151,7 @@ namespace SoundMoney.Services
                 MethodNames.TwoStageFcfeDcf => FinancialAlgorithms.CalculateTwoStageDcf(current, historicals),
                 MethodNames.PriceToEarningsToGrowth => FinancialAlgorithms.CalculatePegRatioValue(current, historicals),
                 MethodNames.PriceToEarnings => FinancialAlgorithms.CalculatePriceToEarnings(current),
+                MethodNames.PriceToBook => FinancialAlgorithms.CalculatePriceToBook(current),
                 MethodNames.DiscountedCashFlowDcf => FinancialAlgorithms.CalculateStandardDcf(current, historicals),
                 MethodNames.AdjustedNetAssetValue => FinancialAlgorithms.CalculateHoldingCompanyValue(current),
                 MethodNames.DefaultFallback => FinancialAlgorithms.CalculatePriceToEarnings(current),

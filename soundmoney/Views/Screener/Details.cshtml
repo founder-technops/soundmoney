@@ -1,80 +1,44 @@
 ﻿@model SoundMoney.Models.StockDetailsViewModel
 @{
     ViewData["Title"] = $"{Model.Symbol} - Deep Analysis";
+
+    var peInd = Model.GetPeIndication();
+    var pbInd = Model.GetPbIndication();
+    var evInd = Model.GetEvEbitdaIndication();
+    var debtInd = Model.GetDebtToEquityIndication();
+    var coverageInd = Model.GetInterestCoverageIndication();
+    var currentRatioInd = Model.GetCurrentRatioIndication();
+    var roeInd = Model.GetRoeIndication();
+    var altmanInd = Model.GetAltmanZIndication();
 }
 
 <style>
     .extra-small {
         font-size: 0.8rem !important;
     }
+
     .metric-card {
         background-color: #f8f9fa;
         border-radius: 0.5rem;
         padding: 0.75rem;
     }
-    /* Responsive column for 5-column layout on large screens */
-    .col-lg-2-4 {
-        flex: 0 0 auto;
-        width: 20%;
-    }
-    @@media (max-width: 1399.98px) {
-        .col-lg-2-4 {
-            width: 50%;
-        }
-    }
-    @@media (max-width: 767.98px) {
-        .col-lg-2-4 {
-            width: 100%;
-        }
-    }
-    /* Trend indicator styling */
-    .trend-indicator {
-        font-size: 0.9rem;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
-    }
-    .trend-up {
-        color: #198754;
-        font-weight: 500;
-    }
-    .trend-down {
-        color: #dc3545;
-        font-weight: 500;
-    }
-    .trend-flat {
-        color: #6c757d;
-        font-weight: 500;
-    }
-    /* Small badge styling for inline trends */
+
     .badge-sm {
-        font-size: 0.65rem;
-        padding: 0.25rem 0.4rem;
-        vertical-align: middle;
+        font-size: 0.7rem;
+        padding: 0.2rem 0.45rem;
+        font-weight: 500;
     }
-    /* Tooltip info icon styling */
+
     .text-info {
         color: #0dcaf0 !important;
         font-weight: 600;
         font-size: 0.85rem;
         opacity: 0.7;
-        transition: opacity 0.2s ease;
     }
-    .text-info:hover {
-        opacity: 1;
-    }
-    /* Tab styling enhancement */
-    .nav-tabs .nav-link {
-        border-bottom: 2px solid transparent;
-        color: #6c757d;
-        font-weight: 500;
-    }
-    .nav-tabs .nav-link:hover {
-        border-bottom-color: #dee2e6;
-    }
-    .nav-tabs .nav-link.active {
-        border-bottom-color: #0d6efd;
-        color: #0d6efd;
-    }
+
+        .text-info:hover {
+            opacity: 1;
+        }
 </style>
 
 <div class="container-fluid px-2 px-md-4 py-3">
@@ -96,7 +60,7 @@
                     </div>
                     <h3 class="fw-bold mb-1">@Model.CompanyName</h3>
                     <p class="text-muted extra-small font-monospace mb-0">
-                        Last Analyzed: @(Model.LastAnalyzed.HasValue? Model.LastAnalyzed.Value.ToString("dd MMM yyyy HH:mm") : "N/A")
+                        Last Analyzed: @(Model.LastAnalyzed.HasValue ? Model.LastAnalyzed.Value.ToString("dd MMM yyyy HH:mm") : "N/A")
                     </p>
                 </div>
 
@@ -108,7 +72,7 @@
         </div>
     </div>
 
-    <!-- 2. Core Valuation Output & Verdict -->
+    <!-- 2. Core Valuation Output & Safety Summary -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3 border-0">
             <h5 class="fw-bold mb-0">Valuation Verdict & Sound Score</h5>
@@ -149,40 +113,65 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Health & Safety Quick Bar -->
+            <div class="row g-3 mt-1">
+                <div class="col-12 col-md-6">
+                    <div class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
+                        <span class="small fw-bold text-muted">Altman Z-Score (Solvency Risk):</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-bold">@Model.AltmanZScore.ToString("N2")</span>
+                            <span class="badge badge-sm @altmanInd.CssClass">@altmanInd.Label</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
+                        <span class="small fw-bold text-muted">Piotroski F-Score (Financial Strength):</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-bold">@Model.PiotroskiFScore / 9</span>
+                            <span class="badge badge-sm @(Model.PiotroskiFScore >= 7 ? "bg-success" : Model.PiotroskiFScore >= 4 ? "bg-info text-dark" : "bg-danger")">
+                                @(Model.PiotroskiFScore >= 7 ? "Strong" : Model.PiotroskiFScore >= 4 ? "Average" : "Weak")
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- 3. Detailed Financial Indicators (Financials) -->
+    <!-- 3. Detailed Financial Indicators with Qualitative Indications -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3 border-0">
-            <h5 class="fw-bold mb-0">Financial Indicators</h5>
+            <h5 class="fw-bold mb-0">Financial Indicators & Safety Ratings</h5>
         </div>
         <div class="card-body p-3 p-md-4 pt-0">
             <div class="row g-4">
+
                 <!-- Valuation Multiples -->
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Valuation Multiples</h6>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                P/E Ratio
-                                <span class="ms-1 text-info" title="Price-to-Earnings: Stock Price divided by Earnings Per Share. Lower is cheaper (more undervalued), higher suggests growth expectations." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>@Model.PE.ToString("N2")</strong>
+                            <span class="text-muted small">P/E Ratio</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.PE.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @peInd.CssClass">@peInd.Label</span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                P/B Ratio
-                                <span class="ms-1 text-info" title="Price-to-Book: Stock Price divided by Book Value per Share. Below 1.0 = trading below book value (potentially undervalued)." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>@Model.PB.ToString("N2")</strong>
+                            <span class="text-muted small">P/B Ratio</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.PB.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @pbInd.CssClass">@pbInd.Label</span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                EV / EBITDA
-                                <span class="ms-1 text-info" title="Enterprise Value to EBITDA: Valuation multiple for comparing companies. Lower suggests undervalued, typical range 8-15x." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>@Model.EvToEbitda.ToString("N2")</strong>
+                            <span class="text-muted small">EV / EBITDA</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.EvToEbitda.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @evInd.CssClass">@evInd.Label</span>
+                            </div>
                         </li>
                     </ul>
                 </div>
@@ -200,9 +189,11 @@
                                         @(Model.RoeTrend == "Improving" ? "↑" : Model.RoeTrend == "Declining" ? "↓" : "→")
                                     </span>
                                 }
-                                <span class="ms-1 text-info" title="Return on Equity: Net Income divided by Shareholder Equity. Higher indicates efficient use of shareholder capital. >15% is excellent." style="cursor: help;">ⓘ</span>
                             </span>
-                            <strong>@Model.ROEPercent.ToString("N2")%</strong>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.ROEPercent.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @roeInd.CssClass">@roeInd.Label</span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                             <span class="text-muted small">
@@ -213,50 +204,45 @@
                                         @(Model.RoceTrend == "Improving" ? "↑" : Model.RoceTrend == "Declining" ? "↓" : "→")
                                     </span>
                                 }
-                                <span class="ms-1 text-info" title="Return on Capital Employed: Net Profit divided by Capital Employed. Higher indicates efficient capital deployment. >15% shows strong returns." style="cursor: help;">ⓘ</span>
                             </span>
-                            <strong>@Model.ROCEPercent.ToString("N2")%</strong>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.ROCEPercent.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @(Model.ROCEPercent >= 15.0m ? "bg-success" : "bg-secondary")">
+                                    @(Model.ROCEPercent >= 15.0m ? "Strong" : "Moderate")
+                                </span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Net Profit Margin
-                                <span class="ms-1 text-info" title="Net Income divided by Revenue. Shows how much profit is retained after all expenses. Higher is better. >10% is good." style="cursor: help;">ⓘ</span>
-                            </span>
+                            <span class="text-muted small">Net Profit Margin</span>
                             <strong>@Model.NetProfitMarginPercent.ToString("N2")%</strong>
                         </li>
                     </ul>
                 </div>
 
-                <!-- Financial Health & Debt -->
+                <!-- Financial Health & Debt Risk -->
                 <div class="col-12 col-md-6 col-lg-3">
-                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Health & Debt</h6>
+                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Health & Debt Risk</h6>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Debt to Equity
-                                @if (!string.IsNullOrEmpty(Model.DebtTrend))
-                                {
-                                    <span class="badge badge-sm ms-1 @(Model.DebtTrend == "Declining" ? "bg-danger" : Model.DebtTrend == "Improving" ? "bg-success" : "bg-secondary")">
-                                        @(Model.DebtTrend == "Declining" ? "↑" : Model.DebtTrend == "Improving" ? "↓" : "→")
-                                    </span>
-                                }
-                                <span class="ms-1 text-info" title="Total Debt divided by Total Equity. Measures financial leverage. Lower is safer. <0.5 is conservative, >1.0 is high risk." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>@Model.DebtToEquity.ToString("N2")</strong>
+                            <span class="text-muted small">Debt to Equity</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.DebtToEquity.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @debtInd.CssClass">@debtInd.Label</span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Interest Coverage
-                                <span class="ms-1 text-info" title="EBIT divided by Interest Expense. Shows if company can pay interest. Higher is safer. >5x is healthy, <2x is risky." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
+                            <span class="text-muted small">Interest Coverage</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
+                                <span class="badge badge-sm ms-1 @coverageInd.CssClass">@coverageInd.Label</span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Current Ratio
-                                <span class="ms-1 text-info" title="Current Assets divided by Current Liabilities. Shows short-term liquidity. Range 1.0-2.0 is healthy. <1.0 is problematic." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>@Model.CurrentRatio.ToString("N2")</strong>
+                            <span class="text-muted small">Current Ratio</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.CurrentRatio.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @currentRatioInd.CssClass">@currentRatioInd.Label</span>
+                            </div>
                         </li>
                     </ul>
                 </div>
@@ -266,44 +252,28 @@
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Cash Flow & Dividends</h6>
                     <ul class="list-group list-group-flush">
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Free Cash Flow
-                                @if (!string.IsNullOrEmpty(Model.CashFlowTrend))
-                                {
-                                    <span class="badge badge-sm ms-1 @(Model.CashFlowTrend == "Improving" ? "bg-success" : Model.CashFlowTrend == "Declining" ? "bg-danger" : "bg-secondary")">
-                                        @(Model.CashFlowTrend == "Improving" ? "↑" : Model.CashFlowTrend == "Declining" ? "↓" : "→")
-                                    </span>
-                                }
-                                <span class="ms-1 text-info" title="Operating Cash Flow minus Capital Expenditure. Real cash available for dividends/debt. Positive is good, growing is better." style="cursor: help;">ⓘ</span>
-                            </span>
-                            <strong>₹@Model.FreeCashFlowCr.ToString("N2") Cr</strong>
+                            <span class="text-muted small">Free Cash Flow</span>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>₹@Model.FreeCashFlowCr.ToString("N2") Cr</strong>
+                                <span class="badge badge-sm ms-1 @(Model.FreeCashFlowCr > 0 ? "bg-success" : "bg-danger")">
+                                    @(Model.FreeCashFlowCr > 0 ? "Positive" : "Negative")
+                                </span>
+                            </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Dividend Yield
-                                <span class="ms-1 text-info" title="Annual Dividend per Share divided by Stock Price. Income yield to shareholders. Higher yield attracts income investors." style="cursor: help;">ⓘ</span>
-                            </span>
+                            <span class="text-muted small">Dividend Yield</span>
                             <strong>@Model.DividendYieldPercent.ToString("N2")%</strong>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
-                                Dividend Status
-                                <span class="ms-1 text-info" title="Whether company has paid consistent dividends over time. Consistency shows financial stability and commitment to shareholders." style="cursor: help;">ⓘ</span>
-                            </span>
-                            @if (Model.IsDividendConsistent)
-                            {
-                                <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-light text-muted border">Inconsistent</span>
-                            }
+                            <span class="text-muted small">Dividend Track</span>
+                            <span>@Model.ConsecutiveDividendYears Yrs</span>
                         </li>
                     </ul>
                 </div>
             </div>
         </div>
     </div>
+
     <!-- 4. Detailed Year-by-Year Trends -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3 border-0">
