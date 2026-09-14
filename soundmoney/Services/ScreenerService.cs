@@ -51,6 +51,25 @@ namespace SoundMoney.Services
 
             DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
 
+            // Prepare historical data for trend analysis
+            var historicalList = historical.OrderBy(h => h.Year).ToList();
+
+            // Calculate yearly metrics for trend display
+            var revenueByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.SalesCr, isPercentageMetric: false);
+            var profitByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.NetProfitCr, isPercentageMetric: false);
+            var roeByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateRoe(f), isPercentageMetric: true);
+            var roceByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateRoce(f), isPercentageMetric: true);
+            var debtToEquityByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateDebtToEquity(f), isPercentageMetric: false);
+            var fcfByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FreeCashFlowCr, isPercentageMetric: false);
+
+            // Determine trend directions
+            string revenueTrend = FinancialAlgorithms.DetermineTrendDirection(revenueByYear);
+            string profitTrend = FinancialAlgorithms.DetermineTrendDirection(profitByYear);
+            string roeTrend = FinancialAlgorithms.DetermineTrendDirection(roeByYear);
+            string roceTrend = FinancialAlgorithms.DetermineTrendDirection(roceByYear);
+            string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear);
+            string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
+
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
             {
@@ -83,14 +102,30 @@ namespace SoundMoney.Services
                 DividendYieldPercent = current.DividendYieldPercent,
                 IsDividendConsistent = dividendAnalysis.IsConsistent,
 
-                // 4. Historical Trends
-                RevenueCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 3, f => f.SalesCr),
-                RevenueCagr5Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 5, f => f.SalesCr),
-                ProfitCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 3, f => f.NetProfitCr),
-                ProfitCagr5Yr = FinancialAlgorithms.CalculateCagrPercent(current, historical, 5, f => f.NetProfitCr),
-                AverageRoe3Yr = FinancialAlgorithms.CalculateAverageRoePercent(current, historical, 3),
-                AverageRoe5Yr = FinancialAlgorithms.CalculateAverageRoePercent(current, historical, 5),
-                ConsecutiveDividendYears = dividendAnalysis.ConsecutiveYearsPaid
+                // 4. Historical Trends (Simple CAGR)
+                RevenueCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historicalList, 3, f => f.SalesCr),
+                RevenueCagr5Yr = FinancialAlgorithms.CalculateCagrPercent(current, historicalList, 5, f => f.SalesCr),
+                ProfitCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historicalList, 3, f => f.NetProfitCr),
+                ProfitCagr5Yr = FinancialAlgorithms.CalculateCagrPercent(current, historicalList, 5, f => f.NetProfitCr),
+                AverageRoe3Yr = FinancialAlgorithms.CalculateAverageRoePercent(current, historicalList, 3),
+                AverageRoe5Yr = FinancialAlgorithms.CalculateAverageRoePercent(current, historicalList, 5),
+                ConsecutiveDividendYears = dividendAnalysis.ConsecutiveYearsPaid,
+
+                // 5. Detailed Trend Analysis (Year-by-Year)
+                RevenueByYear = revenueByYear,
+                ProfitByYear = profitByYear,
+                RoeByYear = roeByYear,
+                RoceByYear = roceByYear,
+                DebtToEquityByYear = debtToEquityByYear,
+                FreeCashFlowByYear = fcfByYear,
+
+                // 6. Trend Summary Indicators
+                RevenueTrend = revenueTrend,
+                ProfitTrend = profitTrend,
+                RoeTrend = roeTrend,
+                RoceTrend = roceTrend,
+                DebtTrend = debtTrend,
+                CashFlowTrend = cashFlowTrend
             };
             return model;
         }

@@ -1277,5 +1277,149 @@ namespace SoundMoney.Algorithms
         {
             return CalculateCurrentLiabilities(current) > 0m ? Math.Round(CalculateCurrentAssets(current) / CalculateCurrentLiabilities(current), 2) : 0m;
         }
+
+        #region Trend Analysis Methods
+
+        /// <summary>
+        /// Calculate yearly metrics for trend analysis
+        /// </summary>
+        public static List<YearlyMetric> CalculateYearlyMetrics(
+            Financial current,
+            List<Financial> historical,
+            Func<Financial, decimal> metricSelector,
+            bool isPercentageMetric = false)
+        {
+            var yearlyData = new List<YearlyMetric>();
+
+            if (historical == null || historical.Count == 0)
+            {
+                if (current != null)
+                {
+                    yearlyData.Add(new YearlyMetric { Year = current.Year, Value = metricSelector(current) });
+                }
+                return yearlyData;
+            }
+
+            // Add historical years
+            var sortedHistorical = historical.OrderBy(h => h.Year).ToList();
+            foreach (var item in sortedHistorical)
+            {
+                decimal value = metricSelector(item);
+                yearlyData.Add(new YearlyMetric { Year = item.Year, Value = value });
+            }
+
+            // Add current year if not already in historical
+            if (current != null && (sortedHistorical.Count == 0 || sortedHistorical[^1].Year < current.Year))
+            {
+                yearlyData.Add(new YearlyMetric { Year = current.Year, Value = metricSelector(current) });
+            }
+
+            // Calculate change percentages and trends
+            for (int i = 0; i < yearlyData.Count; i++)
+            {
+                if (i > 0)
+                {
+                    decimal prevValue = yearlyData[i - 1].Value;
+                    decimal currValue = yearlyData[i].Value;
+
+                    if (isPercentageMetric)
+                    {
+                        // For percentage metrics (ROE, ROCE, etc.), calculate basis point change
+                        // e.g., from 15% to 18% = +300 basis points (not +20% change)
+                        yearlyData[i].ChangePercent = Math.Round(currValue - prevValue, 2);
+                    }
+                    else
+                    {
+                        // For absolute value metrics (Revenue, Profit, FCF), calculate percentage change
+                        if (prevValue != 0m)
+                        {
+                            yearlyData[i].ChangePercent = Math.Round(((currValue - prevValue) / Math.Abs(prevValue)) * 100m, 2);
+                        }
+                        else if (currValue != 0m)
+                        {
+                            yearlyData[i].ChangePercent = 100m;
+                        }
+                    }
+
+                    // Determine trend direction
+                    if (yearlyData[i].ChangePercent.HasValue)
+                    {
+                        if (yearlyData[i].ChangePercent.Value > 5m)
+                            yearlyData[i].TrendDirection = "Up";
+                        else if (yearlyData[i].ChangePercent.Value < -5m)
+                            yearlyData[i].TrendDirection = "Down";
+                        else
+                            yearlyData[i].TrendDirection = "Flat";
+                    }
+                }
+            }
+
+            return yearlyData;
+        }
+
+        /// <summary>
+        /// Determine overall trend direction across multiple years
+        /// </summary>
+        public static string DetermineTrendDirection(List<YearlyMetric> yearlyMetrics)
+        {
+            if (yearlyMetrics == null || yearlyMetrics.Count < 2)
+                return "Insufficient Data";
+
+            // Look at recent years' trend
+            var recentMetrics = yearlyMetrics.TakeLast(Math.Min(3, yearlyMetrics.Count)).ToList();
+            int upCount = recentMetrics.Count(m => m.TrendDirection == "Up");
+            int downCount = recentMetrics.Count(m => m.TrendDirection == "Down");
+
+            if (upCount > downCount)
+                return "Improving";
+            else if (downCount > upCount)
+                return "Declining";
+            else
+                return "Stable";
+        }
+
+        /// <summary>
+        /// Calculate average yearly change
+        /// </summary>
+        public static decimal CalculateAverageChange(List<YearlyMetric> yearlyMetrics)
+        {
+            if (yearlyMetrics == null || yearlyMetrics.Count == 0)
+                return 0m;
+
+            var changes = yearlyMetrics.Where(m => m.ChangePercent.HasValue).Select(m => m.ChangePercent.Value).ToList();
+            if (changes.Count == 0)
+                return 0m;
+
+            return Math.Round(changes.Average(), 2);
+        }
+
+        /// <summary>
+        /// Assign trend health rating based on metric type and trend
+        /// </summary>
+        public static string GetTrendHealthRating(string metricName, string trendDirection, decimal averageChange)
+        {
+            // Metrics where "Improving" is good
+            var positiveMetrics = new[] { "Revenue", "Profit", "NetProfit", "EBITDA", "ROE", "ROCE", "FCF", "FreeCashFlow", "NPM" };
+
+            // Metrics where "Declining" is bad
+            var negativeMetrics = new[] { "Debt", "DebtToEquity", "InterestExpense", "InterestCoverage" };
+
+            bool isPositiveMetric = positiveMetrics.Any(m => metricName.Contains(m, StringComparison.OrdinalIgnoreCase));
+
+            if (trendDirection == "Improving")
+            {
+                return isPositiveMetric ? "Excellent" : "Poor";
+            }
+            else if (trendDirection == "Declining")
+            {
+                return isPositiveMetric ? "Poor" : "Excellent";
+            }
+            else
+            {
+                return "Fair";
+            }
+        }
+
+        #endregion
     }
 }

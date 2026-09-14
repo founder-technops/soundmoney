@@ -12,6 +12,69 @@
         border-radius: 0.5rem;
         padding: 0.75rem;
     }
+    /* Responsive column for 5-column layout on large screens */
+    .col-lg-2-4 {
+        flex: 0 0 auto;
+        width: 20%;
+    }
+    @@media (max-width: 1399.98px) {
+        .col-lg-2-4 {
+            width: 50%;
+        }
+    }
+    @@media (max-width: 767.98px) {
+        .col-lg-2-4 {
+            width: 100%;
+        }
+    }
+    /* Trend indicator styling */
+    .trend-indicator {
+        font-size: 0.9rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+    }
+    .trend-up {
+        color: #198754;
+        font-weight: 500;
+    }
+    .trend-down {
+        color: #dc3545;
+        font-weight: 500;
+    }
+    .trend-flat {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    /* Small badge styling for inline trends */
+    .badge-sm {
+        font-size: 0.65rem;
+        padding: 0.25rem 0.4rem;
+        vertical-align: middle;
+    }
+    /* Tooltip info icon styling */
+    .text-info {
+        color: #0dcaf0 !important;
+        font-weight: 600;
+        font-size: 0.85rem;
+        opacity: 0.7;
+        transition: opacity 0.2s ease;
+    }
+    .text-info:hover {
+        opacity: 1;
+    }
+    /* Tab styling enhancement */
+    .nav-tabs .nav-link {
+        border-bottom: 2px solid transparent;
+        color: #6c757d;
+        font-weight: 500;
+    }
+    .nav-tabs .nav-link:hover {
+        border-bottom-color: #dee2e6;
+    }
+    .nav-tabs .nav-link.active {
+        border-bottom-color: #0d6efd;
+        color: #0d6efd;
+    }
 </style>
 
 <div class="container-fluid px-2 px-md-4 py-3">
@@ -100,16 +163,25 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Valuation Multiples</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">P/E Ratio</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                P/E Ratio
+                                <span class="ms-1 text-info" title="Price-to-Earnings: Stock Price divided by Earnings Per Share. Lower is cheaper (more undervalued), higher suggests growth expectations." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.PE.ToString("N2")</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">P/B Ratio</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                P/B Ratio
+                                <span class="ms-1 text-info" title="Price-to-Book: Stock Price divided by Book Value per Share. Below 1.0 = trading below book value (potentially undervalued)." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.PB.ToString("N2")</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">EV / EBITDA</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                EV / EBITDA
+                                <span class="ms-1 text-info" title="Enterprise Value to EBITDA: Valuation multiple for comparing companies. Lower suggests undervalued, typical range 8-15x." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.EvToEbitda.ToString("N2")</strong>
                         </li>
                     </ul>
@@ -119,16 +191,37 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Profitability</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">ROE</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                ROE
+                                @if (!string.IsNullOrEmpty(Model.RoeTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.RoeTrend == "Improving" ? "bg-success" : Model.RoeTrend == "Declining" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.RoeTrend == "Improving" ? "↑" : Model.RoeTrend == "Declining" ? "↓" : "→")
+                                    </span>
+                                }
+                                <span class="ms-1 text-info" title="Return on Equity: Net Income divided by Shareholder Equity. Higher indicates efficient use of shareholder capital. >15% is excellent." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.ROEPercent.ToString("N2")%</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">ROCE</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                ROCE
+                                @if (!string.IsNullOrEmpty(Model.RoceTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.RoceTrend == "Improving" ? "bg-success" : Model.RoceTrend == "Declining" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.RoceTrend == "Improving" ? "↑" : Model.RoceTrend == "Declining" ? "↓" : "→")
+                                    </span>
+                                }
+                                <span class="ms-1 text-info" title="Return on Capital Employed: Net Profit divided by Capital Employed. Higher indicates efficient capital deployment. >15% shows strong returns." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.ROCEPercent.ToString("N2")%</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Net Profit Margin</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Net Profit Margin
+                                <span class="ms-1 text-info" title="Net Income divided by Revenue. Shows how much profit is retained after all expenses. Higher is better. >10% is good." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.NetProfitMarginPercent.ToString("N2")%</strong>
                         </li>
                     </ul>
@@ -138,16 +231,31 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Health & Debt</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Debt to Equity</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Debt to Equity
+                                @if (!string.IsNullOrEmpty(Model.DebtTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.DebtTrend == "Declining" ? "bg-success" : Model.DebtTrend == "Improving" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.DebtTrend == "Declining" ? "↓" : Model.DebtTrend == "Improving" ? "↑" : "→")
+                                    </span>
+                                }
+                                <span class="ms-1 text-info" title="Total Debt divided by Total Equity. Measures financial leverage. Lower is safer. <0.5 is conservative, >1.0 is high risk." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.DebtToEquity.ToString("N2")</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Interest Coverage</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Interest Coverage
+                                <span class="ms-1 text-info" title="EBIT divided by Interest Expense. Shows if company can pay interest. Higher is safer. >5x is healthy, <2x is risky." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Current Ratio</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Current Ratio
+                                <span class="ms-1 text-info" title="Current Assets divided by Current Liabilities. Shows short-term liquidity. Range 1.0-2.0 is healthy. <1.0 is problematic." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.CurrentRatio.ToString("N2")</strong>
                         </li>
                     </ul>
@@ -157,16 +265,31 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Cash Flow & Dividends</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Free Cash Flow</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Free Cash Flow
+                                @if (!string.IsNullOrEmpty(Model.CashFlowTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.CashFlowTrend == "Improving" ? "bg-success" : Model.CashFlowTrend == "Declining" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.CashFlowTrend == "Improving" ? "↑" : Model.CashFlowTrend == "Declining" ? "↓" : "→")
+                                    </span>
+                                }
+                                <span class="ms-1 text-info" title="Operating Cash Flow minus Capital Expenditure. Real cash available for dividends/debt. Positive is good, growing is better." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>₹@Model.FreeCashFlowCr.ToString("N2") Cr</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Dividend Yield</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Dividend Yield
+                                <span class="ms-1 text-info" title="Annual Dividend per Share divided by Stock Price. Income yield to shareholders. Higher yield attracts income investors." style="cursor: help;">ⓘ</span>
+                            </span>
                             <strong>@Model.DividendYieldPercent.ToString("N2")%</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Dividend Status</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
+                            <span class="text-muted small">
+                                Dividend Status
+                                <span class="ms-1 text-info" title="Whether company has paid consistent dividends over time. Consistency shows financial stability and commitment to shareholders." style="cursor: help;">ⓘ</span>
+                            </span>
                             @if (Model.IsDividendConsistent)
                             {
                                 <span class="badge bg-success-subtle text-success border border-success-subtle">Consistent</span>
@@ -181,59 +304,445 @@
             </div>
         </div>
     </div>
-
-    <!-- 4. Historical Trends (Financials) -->
+    <!-- 4. Detailed Year-by-Year Trends -->
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-header bg-white py-3 border-0">
-            <h5 class="fw-bold mb-0">Historical Trends & Stability</h5>
+            <h5 class="fw-bold mb-0">
+                <i class="bi bi-graph-up"></i> Year-by-Year Trend Analysis
+            </h5>
+            <p class="text-muted small mb-0 mt-2">Detailed historical performance year over year with trend indicators</p>
         </div>
         <div class="card-body p-3 p-md-4 pt-0">
-            <div class="row g-4">
-                <!-- Growth CAGRs -->
-                <div class="col-12 col-md-6">
-                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Compounded Growth Rates</h6>
-                    <table class="table table-bordered table-sm align-middle font-monospace small">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Metric</th>
-                                <th class="text-center">3-Year CAGR</th>
-                                <th class="text-center">5-Year CAGR</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Revenue Growth</td>
-                                <td class="text-center fw-bold">@Model.RevenueCagr3Yr.ToString("N2")%</td>
-                                <td class="text-center fw-bold">@Model.RevenueCagr5Yr.ToString("N2")%</td>
-                            </tr>
-                            <tr>
-                                <td>Net Profit Growth</td>
-                                <td class="text-center fw-bold">@Model.ProfitCagr3Yr.ToString("N2")%</td>
-                                <td class="text-center fw-bold">@Model.ProfitCagr5Yr.ToString("N2")%</td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <!-- Summary Indicators Row -->
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Revenue Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.RevenueTrend == "Improving" ? "bg-success" : Model.RevenueTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.RevenueTrend
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Profit Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.ProfitTrend == "Improving" ? "bg-success" : Model.ProfitTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.ProfitTrend
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">ROE Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.RoeTrend == "Improving" ? "bg-success" : Model.RoeTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.RoeTrend
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">ROCE Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.RoceTrend == "Improving" ? "bg-success" : Model.RoceTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.RoceTrend
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Debt Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.DebtTrend == "Declining" ? "bg-success" : Model.DebtTrend == "Improving" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.DebtTrend
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Cash Flow Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.CashFlowTrend == "Improving" ? "bg-success" : Model.CashFlowTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.CashFlowTrend
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs for Different Metrics -->
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="revenue-tab" data-bs-toggle="tab" data-bs-target="#revenue-content" type="button" role="tab" aria-controls="revenue-content" aria-selected="true">Revenue</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="profit-tab" data-bs-toggle="tab" data-bs-target="#profit-content" type="button" role="tab" aria-controls="profit-content" aria-selected="false">Profit</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="roe-tab" data-bs-toggle="tab" data-bs-target="#roe-content" type="button" role="tab" aria-controls="roe-content" aria-selected="false">ROE</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="roce-tab" data-bs-toggle="tab" data-bs-target="#roce-content" type="button" role="tab" aria-controls="roce-content" aria-selected="false">ROCE</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="debt-tab" data-bs-toggle="tab" data-bs-target="#debt-content" type="button" role="tab" aria-controls="debt-content" aria-selected="false">Debt</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="fcf-tab" data-bs-toggle="tab" data-bs-target="#fcf-content" type="button" role="tab" aria-controls="fcf-content" aria-selected="false">FCF</button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Revenue Tab -->
+                <div class="tab-pane fade show active" id="revenue-content" role="tabpanel" aria-labelledby="revenue-tab">
+                    @if (Model.RevenueByYear != null && Model.RevenueByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">Revenue (₹ Cr)</th>
+                                    <th class="text-center">YoY Change %</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.RevenueByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N2")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
                 </div>
 
-                <!-- ROE Stability & Dividend History -->
-                <div class="col-12 col-md-6">
-                    <h6 class="fw-bold text-muted small text-uppercase mb-3">Historical Stability</h6>
-                    <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">3-Yr Average ROE</span>
-                            <strong>@Model.AverageRoe3Yr.ToString("N2")%</strong>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">5-Yr Average ROE</span>
-                            <strong>@Model.AverageRoe5Yr.ToString("N2")%</strong>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between px-0 py-2">
-                            <span class="text-muted small">Dividend Payout Track Record</span>
-                            <strong>@Model.ConsecutiveDividendYears Years Paid</strong>
-                        </li>
-                    </ul>
+                <!-- Profit Tab -->
+                <div class="tab-pane fade" id="profit-content" role="tabpanel" aria-labelledby="profit-tab">
+                    @if (Model.ProfitByYear != null && Model.ProfitByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">Net Profit (₹ Cr)</th>
+                                    <th class="text-center">YoY Change %</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.ProfitByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N2")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+
+                <!-- ROE Tab -->
+                <div class="tab-pane fade" id="roe-content" role="tabpanel" aria-labelledby="roe-tab">
+                    @if (Model.RoeByYear != null && Model.RoeByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">ROE %</th>
+                                    <th class="text-center">YoY Change (bps)</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.RoeByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")%</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N0")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+
+                <!-- ROCE Tab -->
+                <div class="tab-pane fade" id="roce-content" role="tabpanel" aria-labelledby="roce-tab">
+                    @if (Model.RoceByYear != null && Model.RoceByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">ROCE %</th>
+                                    <th class="text-center">YoY Change (bps)</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.RoceByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")%</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N0")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+
+                <!-- Debt Tab -->
+                <div class="tab-pane fade" id="debt-content" role="tabpanel" aria-labelledby="debt-tab">
+                    @if (Model.DebtToEquityByYear != null && Model.DebtToEquityByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">Debt-to-Equity</th>
+                                    <th class="text-center">YoY Change %</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.DebtToEquityByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-danger" : metric.ChangePercent < 0 ? "text-success" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N2")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-danger">↑ Worsening</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-success">↓ Improving</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Stable</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+
+                <!-- FCF Tab -->
+                <div class="tab-pane fade" id="fcf-content" role="tabpanel" aria-labelledby="fcf-tab">
+                    @if (Model.FreeCashFlowByYear != null && Model.FreeCashFlowByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">Free Cash Flow (₹ Cr)</th>
+                                    <th class="text-center">YoY Change %</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.FreeCashFlowByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N2")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
                 </div>
             </div>
         </div>
     </div>
-</div>
+

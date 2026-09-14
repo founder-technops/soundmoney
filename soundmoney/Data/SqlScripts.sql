@@ -24,13 +24,13 @@ UPDATE StockValuations
  SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
  SoundScore=0,SoundScoreRating='', UpdatedAt = NULL where symbol ='ARCHIES';
 
-SELECT COUNT(Sector) 
+SELECT * 
 FROM StockValuations 
-WHERE UpdatedAt < '2026-08-16 15:00:00';
+WHERE UpdatedAt > '2026-09-11 00:00:00';
 
 select count(symbol) from stockvaluations where updatedat is not null;
 
-select * from stockvaluations where symbol in ('DRCSYSTEMS');
+select * from stockvaluations where symbol in ('MAHABANK');
 
 select * from stockvaluations where verdict in ('BUY','STRONG BUY') 
 and SoundScoreRating in ('STRONG SOUND','SOUND') order by soundscore desc,marginofsafety desc;
