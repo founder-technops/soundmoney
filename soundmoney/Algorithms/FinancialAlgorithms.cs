@@ -672,29 +672,29 @@ namespace SoundMoney.Algorithms
         {
             if (CalculateTotalShares(current) <= 0) return 0m;
 
-            decimal fcfCr = current.FreeCashFlowCr != 0
-                ? current.FreeCashFlowCr
-                : (current.CashFromOperationsCr - CalculateGrossCapex(current));
+            // Derive NOPAT-based Free Cash Flow to Firm (FCFF)
+            decimal taxRate = CalculateEffectiveTaxRate(current);
+            decimal nopat = CalculateEbit(current) * (1m - taxRate);
+            decimal fcffCr = nopat + current.DepreciationCr - CalculateGrossCapex(current);
 
-            if (fcfCr <= 0) return 0m;
+            if (fcffCr <= 0) return 0m;
 
             decimal growthRate = ResolveDynamicGrowthRate(current, historicals, defaultFallback: 0.08m);
-            decimal discountRate = CalculateWacc(current);
-
+            decimal wacc = CalculateWacc(current);
             decimal terminalRate = 0.03m;
 
             decimal cumulativePv = 0m;
-            decimal projectedFcf = fcfCr;
+            decimal projectedFcff = fcffCr;
 
             for (int yr = 1; yr <= 5; yr++)
             {
-                projectedFcf *= (1m + growthRate);
-                cumulativePv += projectedFcf / (decimal)Math.Pow((double)(1m + discountRate), yr);
+                projectedFcff *= (1m + growthRate);
+                cumulativePv += projectedFcff / (decimal)Math.Pow((double)(1m + wacc), yr);
             }
 
-            decimal denominator = Math.Max(0.005m, discountRate - terminalRate);
-            decimal terminalValue = (projectedFcf * (1m + terminalRate)) / denominator;
-            decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + discountRate), 5);
+            decimal denominator = Math.Max(0.005m, wacc - terminalRate);
+            decimal terminalValue = (projectedFcff * (1m + terminalRate)) / denominator;
+            decimal pvTerminal = terminalValue / (decimal)Math.Pow((double)(1m + wacc), 5);
 
             decimal enterpriseValueCr = cumulativePv + pvTerminal;
             decimal netDebtCr = CalculateNetDebt(current);
@@ -1181,6 +1181,18 @@ namespace SoundMoney.Algorithms
 
         public static decimal CalculateCagr(decimal initialValue, decimal finalValue, int periods)
         {
+            // Domain guard: a CAGR is only meaningful going from one POSITIVE value to
+            // another over a positive number of periods. Without this, a negative-to-
+            // negative pair (e.g. net profit -50 -> -10) produces a positive ratio and a
+            // real, finite, non-NaN result that LOOKS like a valid growth rate but means
+            // nothing in the ordinary sense of "compounded annual growth" - the try/catch
+            // and NaN/Infinity checks below won't catch this case because nothing actually
+            // goes wrong arithmetically. Keep this in addition to that safety net, not
+            // instead of it: this is the correct financial answer for known-bad inputs;
+            // the safety net below is for whatever this guard doesn't anticipate.
+            if (initialValue <= 0m || finalValue <= 0m || periods <= 0)
+                return 0m;
+
             try
             {
                 double ratio = (double)(finalValue / initialValue);

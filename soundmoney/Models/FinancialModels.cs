@@ -426,8 +426,18 @@ namespace SoundMoney.Models
         {
             ["Excess Returns Model"] = MethodNames.ExcessReturns,
             ["Price-to-TBV (Tangible Book Value)"] = MethodNames.PriceToTangibleBookValue,
-            ["Price-to-Book (P/B)"] = MethodNames.PriceToTangibleBookValue,
-            ["Price to Book P B"] = MethodNames.PriceToTangibleBookValue,
+            // "Price-to-Book (P/B)" (plain) is the NEW flat-multiple method
+            // (MethodNames.PriceToBook -> CalculatePriceToBook), distinct from the
+            // ROE-reactive "Intrinsic Multiples" variant below. These two were both
+            // pointing at PriceToTangibleBookValue, which meant every rule that sets
+            // SecondaryMethod = MethodNames.PriceToBook.ToDisplayString() - including
+            // PoorCashConversionOrAccrualRule, DistressTurnaroundRule, and
+            // HighLeverageCapitalIntensiveRule - got silently routed back to the old
+            // ROE-reactive CalculatePbIntrinsicValue instead of the flat CalculatePriceToBook
+            // those rules actually intend, reintroducing the exact "distressed company's
+            // poor ROE gets penalized twice" issue that CalculatePriceToBook was added to fix.
+            ["Price-to-Book (P/B)"] = MethodNames.PriceToBook,
+            ["Price to Book P B"] = MethodNames.PriceToBook,
             ["Price to Book P B Intrinsic Multiples"] = MethodNames.PriceToTangibleBookValue,
             ["EV/Sales Relative Multiple"] = MethodNames.EvSalesRelativeMultiple,
             ["EV Sales Relative Multiple"] = MethodNames.EvSalesRelativeMultiple,
@@ -527,10 +537,41 @@ namespace SoundMoney.Models
     public class PoorCashConversionOrAccrualRule : IValuationRule
     {
         public int Priority => RulePriority.PoorCashConversionOrAccrual;
-        public bool IsMatch(EvaluationContext ctx) =>
-            !ctx.Current.IsFinancialSector
-            && ctx.Current.NetProfitCr > 0m
-            && (ctx.OcfToNetProfit < 0.30m || ctx.FcfToNetProfit < 0.20m || ctx.SloanRatio > 12.0m);
+
+        public bool IsMatch(EvaluationContext ctx)
+        {
+            if (ctx.Current.IsFinancialSector || ctx.Current.NetProfitCr <= 0m) return false;
+
+            bool currentYearLooksPoor = ctx.OcfToNetProfit < 0.30m || ctx.FcfToNetProfit < 0.20m || ctx.SloanRatio > 12.0m;
+            if (!currentYearLooksPoor) return false;
+
+            // ctx.OcfToNetProfit/ctx.FcfToNetProfit come from the single latest year only,
+            // so one unusually heavy capex or working-capital year - a perfectly normal,
+            // even healthy thing for a growing business to have once in a while - is
+            // enough to flag "accrual risk" here and route straight to an asset-floor NAV
+            // valuation. This rule runs at a very high priority (right after the
+            // financial-sector rules), so unlike before, there's no later rule left to
+            // catch a company this misclassifies. Before flagging on the current year
+            // alone, check whether the trailing multi-year record tells a healthier story,
+            // and trust that instead.
+            var recentProfitableYears = ctx.Historicals
+                .TakeLast(5)
+                .Where(h => h.NetProfitCr > 0m)
+                .ToList();
+
+            if (recentProfitableYears.Count >= 3)
+            {
+                decimal avgOcfToNp = recentProfitableYears.Average(h => h.CashFromOperationsCr / h.NetProfitCr);
+                decimal avgFcfToNp = recentProfitableYears.Average(h => h.FreeCashFlowCr / h.NetProfitCr);
+
+                if (avgOcfToNp >= 0.60m && avgFcfToNp >= 0.40m)
+                {
+                    return false; // solid multi-year track record; don't flag on one weak year
+                }
+            }
+
+            return true;
+        }
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {
