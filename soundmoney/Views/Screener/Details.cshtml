@@ -236,8 +236,8 @@
                                 Debt to Equity
                                 @if (!string.IsNullOrEmpty(Model.DebtTrend))
                                 {
-                                    <span class="badge badge-sm ms-1 @(Model.DebtTrend == "Declining" ? "bg-success" : Model.DebtTrend == "Improving" ? "bg-danger" : "bg-secondary")">
-                                        @(Model.DebtTrend == "Declining" ? "↓" : Model.DebtTrend == "Improving" ? "↑" : "→")
+                                    <span class="badge badge-sm ms-1 @(Model.DebtTrend == "Declining" ? "bg-danger" : Model.DebtTrend == "Improving" ? "bg-success" : "bg-secondary")">
+                                        @(Model.DebtTrend == "Declining" ? "↑" : Model.DebtTrend == "Improving" ? "↓" : "→")
                                     </span>
                                 }
                                 <span class="ms-1 text-info" title="Total Debt divided by Total Equity. Measures financial leverage. Lower is safer. <0.5 is conservative, >1.0 is high risk." style="cursor: help;">ⓘ</span>
@@ -350,7 +350,7 @@
                 <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
                     <div class="metric-card text-center border">
                         <span class="text-muted d-block small">Debt Trend</span>
-                        <div class="badge fs-6 mt-2 w-100 @(Model.DebtTrend == "Declining" ? "bg-success" : Model.DebtTrend == "Improving" ? "bg-danger" : "bg-warning text-dark")">
+                        <div class="badge fs-6 mt-2 w-100 @(Model.DebtTrend == "Improving" ? "bg-success" : Model.DebtTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
                             @Model.DebtTrend
                         </div>
                     </div>

@@ -67,7 +67,7 @@ namespace SoundMoney.Services
             string profitTrend = FinancialAlgorithms.DetermineTrendDirection(profitByYear);
             string roeTrend = FinancialAlgorithms.DetermineTrendDirection(roeByYear);
             string roceTrend = FinancialAlgorithms.DetermineTrendDirection(roceByYear);
-            string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear);
+            string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining": FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
             string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
 
             // Map scraped metrics to Details ViewModel
