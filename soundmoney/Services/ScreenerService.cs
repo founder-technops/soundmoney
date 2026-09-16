@@ -67,7 +67,7 @@ namespace SoundMoney.Services
             string profitTrend = FinancialAlgorithms.DetermineTrendDirection(profitByYear);
             string roeTrend = FinancialAlgorithms.DetermineTrendDirection(roeByYear);
             string roceTrend = FinancialAlgorithms.DetermineTrendDirection(roceByYear);
-            string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining": FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
+            string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining" : FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
             string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
 
             // Map scraped metrics to Details ViewModel
@@ -103,6 +103,7 @@ namespace SoundMoney.Services
                 // Health & Solvency Risk Scores
                 AltmanZScore = FinancialAlgorithms.CalculateAltmanZScore(current),
                 PiotroskiFScore = FinancialAlgorithms.CalculatePiotroskiFScore(current, historicalList),
+                MScore = FinancialAlgorithms.CalculateBeneishMScore(current, historicalList),
 
                 // 4. Historical Trends (Simple CAGR)
                 RevenueCagr3Yr = FinancialAlgorithms.CalculateCagrPercent(current, historicalList, 3, f => f.SalesCr),
@@ -128,7 +129,7 @@ namespace SoundMoney.Services
                 RoceTrend = roceTrend,
                 DebtTrend = debtTrend,
                 CashFlowTrend = cashFlowTrend
-            }; 
+            };
             return model;
         }
 

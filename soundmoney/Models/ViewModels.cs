@@ -94,6 +94,7 @@ public class StockDetailsViewModel
     // Health & Solvency Scores
     public decimal AltmanZScore { get; set; }
     public int PiotroskiFScore { get; set; }
+    public decimal MScore { get; set; }
 
     // 4. Historical Trends (Simple CAGR)
     public decimal RevenueCagr3Yr { get; set; }
@@ -188,6 +189,35 @@ public class StockDetailsViewModel
             >= 2.99m => ("Safe Zone", "bg-success"),
             >= 1.81m => ("Grey Zone", "bg-warning text-dark"),
             _ => ("Distress Risk", "bg-danger")
+        };
+
+    // Beneish M-Score: a forensic-accounting check for whether a company's reported
+    // profit looks "too good to be true" compared to its actual cash and asset trends -
+    // i.e. is it possibly dressing up its numbers rather than genuinely earning them.
+    // -1.78 is the same threshold already used internally by the Sound Score calculation
+    // (CalculateSoundScore's isBeneishManipulator flag), so this indicator always agrees
+    // with what's already factored into the score above. -2.22 is the standard academic
+    // "unlikely manipulator" cutoff from the original Beneish research, used here as a
+    // stricter "Low Risk" band so the common case (most healthy companies) reads clearly
+    // safe rather than merely "not flagged".
+    public (string Label, string CssClass) GetMScoreIndication() =>
+        MScore switch
+        {
+            <= -2.22m => ("Low Risk", "bg-success"),
+            <= -1.78m => ("Some Risk", "bg-warning text-dark"),
+            _ => ("High Risk", "bg-danger")
+        };
+
+    // Net profit margin: how many rupees of real, bottom-line profit a company keeps for
+    // every Rs. 100 of sales. Thresholds are deliberately simple, general-purpose bands
+    // (not sector-adjusted) so a non-specialist gets an honest, if rough, first read.
+    public (string Label, string CssClass) GetNetProfitMarginIndication() =>
+        NetProfitMarginPercent switch
+        {
+            < 0m => ("Loss-Making", "bg-danger"),
+            < 5.0m => ("Thin Margin", "bg-secondary"),
+            <= 15.0m => ("Healthy", "bg-info text-dark"),
+            _ => ("High Margin", "bg-success")
         };
 }
 

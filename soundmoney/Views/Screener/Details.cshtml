@@ -10,6 +10,8 @@
     var currentRatioInd = Model.GetCurrentRatioIndication();
     var roeInd = Model.GetRoeIndication();
     var altmanInd = Model.GetAltmanZIndication();
+    var mScoreInd = Model.GetMScoreIndication();
+    var marginInd = Model.GetNetProfitMarginIndication();
 }
 
 <style>
@@ -116,24 +118,42 @@
 
             <!-- Health & Safety Quick Bar -->
             <div class="row g-3 mt-1">
-                <div class="col-12 col-md-6">
-                    <div class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
-                        <span class="small fw-bold text-muted">Altman Z-Score (Solvency Risk):</span>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="fw-bold">@Model.AltmanZScore.ToString("N2")</span>
-                            <span class="badge badge-sm @altmanInd.CssClass">@altmanInd.Label</span>
+                <div class="col-12 col-md-4">
+                    <div class="p-2 border rounded bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small fw-bold text-muted">Altman Z-Score (Solvency Risk):</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold">@Model.AltmanZScore.ToString("N2")</span>
+                                <span class="badge badge-sm @altmanInd.CssClass">@altmanInd.Label</span>
+                            </div>
                         </div>
+                        <div class="extra-small text-muted mt-1">In plain terms: how likely this company is to run into serious financial trouble in the next couple of years.</div>
                     </div>
                 </div>
-                <div class="col-12 col-md-6">
-                    <div class="p-2 border rounded bg-light d-flex justify-content-between align-items-center">
-                        <span class="small fw-bold text-muted">Piotroski F-Score (Financial Strength):</span>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="fw-bold">@Model.PiotroskiFScore / 9</span>
-                            <span class="badge badge-sm @(Model.PiotroskiFScore >= 7 ? "bg-success" : Model.PiotroskiFScore >= 4 ? "bg-info text-dark" : "bg-danger")">
-                                @(Model.PiotroskiFScore >= 7 ? "Strong" : Model.PiotroskiFScore >= 4 ? "Average" : "Weak")
-                            </span>
+                <div class="col-12 col-md-4">
+                    <div class="p-2 border rounded bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small fw-bold text-muted">Piotroski F-Score (Financial Strength):</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold">@Model.PiotroskiFScore / 9</span>
+                                <span class="badge badge-sm @(Model.PiotroskiFScore >= 7 ? "bg-success" : Model.PiotroskiFScore >= 4 ? "bg-info text-dark" : "bg-danger")">
+                                    @(Model.PiotroskiFScore >= 7 ? "Strong" : Model.PiotroskiFScore >= 4 ? "Average" : "Weak")
+                                </span>
+                            </div>
                         </div>
+                        <div class="extra-small text-muted mt-1">In plain terms: a 9-point checklist of the company's finances (profit, debt, efficiency) - higher out of 9 is healthier.</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="p-2 border rounded bg-light">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small fw-bold text-muted">M-Score (Earnings Manipulation Risk):</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold">@Model.MScore.ToString("N2")</span>
+                                <span class="badge badge-sm @mScoreInd.CssClass">@mScoreInd.Label</span>
+                            </div>
+                        </div>
+                        <div class="extra-small text-muted mt-1">In plain terms: checks whether the reported profit looks genuine, or whether the numbers may be dressed up to look better than the underlying business really is.</div>
                     </div>
                 </div>
             </div>
@@ -212,12 +232,19 @@
                                 </span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Net Profit Margin</span>
-                            <strong>@Model.NetProfitMarginPercent.ToString("N2")%</strong>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Net Profit Margin
+                                <div class="extra-small text-muted">Rupees of real profit kept per ₹100 of sales</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.NetProfitMarginPercent.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @marginInd.CssClass">@marginInd.Label</span>
+                            </div>
                         </li>
                     </ul>
                 </div>
+
 
                 <!-- Financial Health & Debt Risk -->
                 <div class="col-12 col-md-6 col-lg-3">
@@ -715,4 +742,3 @@
             </div>
         </div>
     </div>
-
