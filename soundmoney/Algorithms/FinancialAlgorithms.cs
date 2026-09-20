@@ -13,6 +13,21 @@ namespace SoundMoney.Algorithms
         public static decimal CalculateEbitda(Financial current) =>
             current.OperatingProfitCr + current.OtherIncomeCr;
 
+        public static decimal CalculateDebtToEbitda(Financial current)
+        {
+            // Net Debt / EBITDA - the standard credit-analysis "years of core operating
+            // profit needed to clear all debt" measure. Lower is safer; a negative result
+            // is a genuinely meaningful, not degenerate, case - it means the company holds
+            // more cash than debt (net cash position), which should read as very safe
+            // rather than being clamped away. Only bails to 0 (an "N/A" sentinel) when
+            // EBITDA itself is zero or negative, since the ratio isn't meaningful without
+            // a positive core profit to measure debt against.
+            decimal ebitda = CalculateEbitda(current);
+            if (ebitda <= 0m) return 0m;
+
+            return Math.Round(CalculateNetDebt(current) / ebitda, 2);
+        }
+
         public static decimal CalculateTotalEquity(Financial current) =>
             current.ShareCapitalCr + current.ReservesCr;
 

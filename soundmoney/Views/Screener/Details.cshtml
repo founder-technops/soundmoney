@@ -6,9 +6,15 @@
     var pbInd = Model.GetPbIndication();
     var evInd = Model.GetEvEbitdaIndication();
     var debtInd = Model.GetDebtToEquityIndication();
+    var debtEbitdaInd = Model.GetDebtToEbitdaIndication();
     var coverageInd = Model.GetInterestCoverageIndication();
     var currentRatioInd = Model.GetCurrentRatioIndication();
     var roeInd = Model.GetRoeIndication();
+    var roicInd = Model.GetRoicIndication();
+    var opmInd = Model.GetOperatingMarginIndication();
+    var sloanInd = Model.GetSloanRatioIndication();
+    var fcfConvInd = Model.GetFcfConversionIndication();
+    var payoutInd = Model.GetDividendPayoutIndication();
     var altmanInd = Model.GetAltmanZIndication();
     var mScoreInd = Model.GetMScoreIndication();
     var marginInd = Model.GetNetProfitMarginIndication();
@@ -71,6 +77,25 @@
                     <h2 class="fw-bold text-primary mb-0">₹@Model.CurrentPrice.ToString("N2")</h2>
                 </div>
             </div>
+
+            <!-- Company snapshot: simple facts to anchor the ratios below, not "good or bad" on their own -->
+            <div class="row g-2 mt-3 pt-3 border-top text-center text-md-start">
+                <div class="col-4 col-md-3">
+                    <span class="text-muted extra-small d-block">Market Cap</span>
+                    <strong>₹@Model.MarketCapCr.ToString("N0") Cr</strong>
+                    <div class="extra-small text-muted">Total value of the whole company</div>
+                </div>
+                <div class="col-4 col-md-3">
+                    <span class="text-muted extra-small d-block">EPS (Earnings/Share)</span>
+                    <strong>₹@Model.Eps.ToString("N2")</strong>
+                    <div class="extra-small text-muted">Actual profit earned per share this year</div>
+                </div>
+                <div class="col-4 col-md-3">
+                    <span class="text-muted extra-small d-block">Book Value/Share</span>
+                    <strong>₹@Model.BookValuePerShareAmount.ToString("N2")</strong>
+                    <div class="extra-small text-muted">Accounting net worth behind each share</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -112,6 +137,22 @@
                         <span class="badge fs-6 mt-1 @(Model.SoundScoreRating == "STRONG SOUND" || Model.SoundScoreRating == "SOUND" ? "bg-primary" : "bg-secondary")">
                             @Model.SoundScoreRating
                         </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- How this valuation was actually worked out -->
+            <div class="row g-3 mt-1">
+                <div class="col-12 col-md-6">
+                    <div class="p-2 border rounded bg-light">
+                        <span class="small fw-bold text-muted">Main method used: <span class="text-dark">@Model.PrimaryMethod</span></span>
+                        <div class="extra-small text-muted mt-1">@Model.GetMethodExplanation(Model.PrimaryMethod)</div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <div class="p-2 border rounded bg-light">
+                        <span class="small fw-bold text-muted">Cross-checked with: <span class="text-dark">@Model.SecondaryMethod</span></span>
+                        <div class="extra-small text-muted mt-1">@Model.GetMethodExplanation(Model.SecondaryMethod)</div>
                     </div>
                 </div>
             </div>
@@ -172,22 +213,31 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Valuation Multiples</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">P/E Ratio</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                P/E Ratio
+                                <div class="extra-small text-muted">Years of current profit to earn back the share price</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.PE.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @peInd.CssClass">@peInd.Label</span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">P/B Ratio</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                P/B Ratio
+                                <div class="extra-small text-muted">Multiple of the company's accounting net worth you're paying</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.PB.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @pbInd.CssClass">@pbInd.Label</span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">EV / EBITDA</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                EV / EBITDA
+                                <div class="extra-small text-muted">Years of core operating profit to buy the whole company, debt included</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.EvToEbitda.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @evInd.CssClass">@evInd.Label</span>
@@ -200,8 +250,8 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Profitability</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
                                 ROE
                                 @if (!string.IsNullOrEmpty(Model.RoeTrend))
                                 {
@@ -209,14 +259,15 @@
                                         @(Model.RoeTrend == "Improving" ? "↑" : Model.RoeTrend == "Declining" ? "↓" : "→")
                                     </span>
                                 }
-                            </span>
+                                <div class="extra-small text-muted">Profit earned per ₹100 shareholders have invested</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.ROEPercent.ToString("N2")%</strong>
                                 <span class="badge badge-sm ms-1 @roeInd.CssClass">@roeInd.Label</span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
                                 ROCE
                                 @if (!string.IsNullOrEmpty(Model.RoceTrend))
                                 {
@@ -224,12 +275,33 @@
                                         @(Model.RoceTrend == "Improving" ? "↑" : Model.RoceTrend == "Declining" ? "↓" : "→")
                                     </span>
                                 }
-                            </span>
+                                <div class="extra-small text-muted">Profit earned per ₹100 of total capital used (own + borrowed money)</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.ROCEPercent.ToString("N2")%</strong>
                                 <span class="badge badge-sm ms-1 @(Model.ROCEPercent >= 15.0m ? "bg-success" : "bg-secondary")">
                                     @(Model.ROCEPercent >= 15.0m ? "Strong" : "Moderate")
                                 </span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                ROIC
+                                <div class="extra-small text-muted">Return on ALL money invested in the business - a sign of a real competitive edge</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.ROICPercent.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @roicInd.CssClass">@roicInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Operating Margin
+                                <div class="extra-small text-muted">Core operating profit per ₹100 of sales, before interest, tax or one-offs</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.OperatingProfitMarginPercent.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @opmInd.CssClass">@opmInd.Label</span>
                             </div>
                         </li>
                         <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
@@ -250,25 +322,54 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Health & Debt Risk</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Debt to Equity</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Debt to Equity
+                                <div class="extra-small text-muted">How much is borrowed vs. what shareholders put in - lower is safer</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.DebtToEquity.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @debtInd.CssClass">@debtInd.Label</span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Interest Coverage</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Debt / EBITDA
+                                <div class="extra-small text-muted">Years of core profit needed to pay off all debt (negative = more cash than debt)</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.DebtToEbitda.ToString("N2")x</strong>
+                                <span class="badge badge-sm ms-1 @debtEbitdaInd.CssClass">@debtEbitdaInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Interest Coverage
+                                <div class="extra-small text-muted">Times over the company can pay its yearly interest bill from profit</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
                                 <span class="badge badge-sm ms-1 @coverageInd.CssClass">@coverageInd.Label</span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Current Ratio</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Current Ratio
+                                <div class="extra-small text-muted">Whether short-term assets can cover bills due within a year</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.CurrentRatio.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @currentRatioInd.CssClass">@currentRatioInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Earnings Quality (Sloan Ratio)
+                                <div class="extra-small text-muted">Checks if profit is real cash or mostly accounting entries - lower is better</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.SloanRatio.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @sloanInd.CssClass">@sloanInd.Label</span>
                             </div>
                         </li>
                     </ul>
@@ -278,8 +379,11 @@
                 <div class="col-12 col-md-6 col-lg-3">
                     <h6 class="fw-bold text-muted small text-uppercase mb-3">Cash Flow & Dividends</h6>
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Free Cash Flow</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Free Cash Flow
+                                <div class="extra-small text-muted">Real cash left over after running and investing in the business</div>
+                            </div>
                             <div class="d-flex align-items-center gap-1">
                                 <strong>₹@Model.FreeCashFlowCr.ToString("N2") Cr</strong>
                                 <span class="badge badge-sm ms-1 @(Model.FreeCashFlowCr > 0 ? "bg-success" : "bg-danger")">
@@ -287,12 +391,38 @@
                                 </span>
                             </div>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Dividend Yield</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                FCF Conversion
+                                <div class="extra-small text-muted">How much of the accounting profit became real cash</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.FcfConversionPercent.ToString("N0")%</strong>
+                                <span class="badge badge-sm ms-1 @fcfConvInd.CssClass">@fcfConvInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Dividend Yield
+                                <div class="extra-small text-muted">Cash paid back to you each year, as a % of the share price</div>
+                            </div>
                             <strong>@Model.DividendYieldPercent.ToString("N2")%</strong>
                         </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                            <span class="text-muted small">Dividend Track</span>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Dividend Payout Ratio
+                                <div class="extra-small text-muted">Share of profit actually paid out, rather than reinvested</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.DividendPayoutPercent.ToString("N0")%</strong>
+                                <span class="badge badge-sm ms-1 @payoutInd.CssClass">@payoutInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Dividend Track
+                                <div class="extra-small text-muted">Years in a row with a dividend paid, no gaps</div>
+                            </div>
                             <span>@Model.ConsecutiveDividendYears Yrs</span>
                         </li>
                     </ul>

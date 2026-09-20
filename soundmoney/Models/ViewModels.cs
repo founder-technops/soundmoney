@@ -76,6 +76,14 @@ public class StockDetailsViewModel
     public decimal MarginOfSafetyPercent { get; set; }
     public string Verdict { get; set; } = string.Empty;
     public string SoundScoreRating { get; set; } = string.Empty;
+    public string PrimaryMethod { get; set; } = string.Empty;
+    public string SecondaryMethod { get; set; } = string.Empty;
+
+    // Simple per-share / company snapshot facts - not "good or bad" on their own, just
+    // concrete reference numbers a common man can anchor the ratios above to.
+    public decimal MarketCapCr { get; set; }
+    public decimal Eps { get; set; }
+    public decimal BookValuePerShareAmount { get; set; }
 
     // 3. Deep Financial Indicators
     public decimal PE { get; set; }
@@ -83,12 +91,18 @@ public class StockDetailsViewModel
     public decimal EvToEbitda { get; set; }
     public decimal ROEPercent { get; set; }
     public decimal ROCEPercent { get; set; }
+    public decimal ROICPercent { get; set; }
     public decimal NetProfitMarginPercent { get; set; }
+    public decimal OperatingProfitMarginPercent { get; set; }
+    public decimal SloanRatio { get; set; }
     public decimal DebtToEquity { get; set; }
+    public decimal DebtToEbitda { get; set; }
     public decimal InterestCoverageRatio { get; set; }
     public decimal CurrentRatio { get; set; }
     public decimal FreeCashFlowCr { get; set; }
+    public decimal FcfConversionPercent { get; set; }
     public decimal DividendYieldPercent { get; set; }
+    public decimal DividendPayoutPercent { get; set; }
     public bool IsDividendConsistent { get; set; }
 
     // Health & Solvency Scores
@@ -159,6 +173,19 @@ public class StockDetailsViewModel
             _ => ("Risky", "bg-danger")
         };
 
+    // Net Debt / EBITDA: how many years of core operating profit it would take to pay
+    // off all debt. A negative value means the company holds more cash than debt (a net
+    // cash position) - genuinely the safest case, not a data error, so it gets the same
+    // "Very Safe" label as a very low positive ratio rather than being treated oddly.
+    public (string Label, string CssClass) GetDebtToEbitdaIndication() =>
+        DebtToEbitda switch
+        {
+            <= 0m => ("Net Cash", "bg-success"),
+            <= 2.0m => ("Safe", "bg-success"),
+            <= 4.0m => ("Moderate", "bg-warning text-dark"),
+            _ => ("Risky", "bg-danger")
+        };
+
     public (string Label, string CssClass) GetInterestCoverageIndication() =>
         InterestCoverageRatio switch
         {
@@ -183,6 +210,66 @@ public class StockDetailsViewModel
             _ => ("Low Return", "bg-secondary")
         };
 
+    // ROIC (Return on Invested Capital) uses the same bands as ROE - it's a stricter,
+    // leverage-neutral version of the same "how well does this business turn money into
+    // profit" question, so a consistent scale makes the three return metrics easy to
+    // compare against each other at a glance.
+    public (string Label, string CssClass) GetRoicIndication() =>
+        ROICPercent switch
+        {
+            >= 18.0m => ("High Return", "bg-success"),
+            >= 12.0m => ("Fair", "bg-info text-dark"),
+            _ => ("Low Return", "bg-secondary")
+        };
+
+    public (string Label, string CssClass) GetOperatingMarginIndication() =>
+        OperatingProfitMarginPercent switch
+        {
+            < 0m => ("Loss-Making", "bg-danger"),
+            < 10.0m => ("Thin Margin", "bg-secondary"),
+            <= 20.0m => ("Healthy", "bg-info text-dark"),
+            _ => ("High Margin", "bg-success")
+        };
+
+    // Sloan Ratio = (Net Profit - Operating Cash Flow) / Total Assets. Positive means
+    // profit is running ahead of the cash actually coming in the door (a red flag);
+    // negative means cash is running ahead of paper profit (a good sign). 12% is the
+    // same threshold PoorCashConversionOrAccrualRule already uses internally to flag
+    // high accrual risk, so this indicator always agrees with what's already factored
+    // into that rule's decision.
+    public (string Label, string CssClass) GetSloanRatioIndication() =>
+        SloanRatio switch
+        {
+            <= 5.0m => ("Low Risk", "bg-success"),
+            <= 12.0m => ("Some Risk", "bg-warning text-dark"),
+            _ => ("High Risk", "bg-danger")
+        };
+
+    // FCF Conversion: what share of accounting profit actually showed up as real free
+    // cash. A different lens on the same "is the profit real" question the Sloan Ratio
+    // asks - one temporarily weak year (e.g. a heavy capex year) isn't necessarily a
+    // red flag on its own, so this reads as a caution ("Weak"), not an alarm.
+    public (string Label, string CssClass) GetFcfConversionIndication() =>
+        FcfConversionPercent switch
+        {
+            >= 80.0m => ("Excellent", "bg-success"),
+            >= 50.0m => ("Fair", "bg-info text-dark"),
+            _ => ("Weak", "bg-warning text-dark")
+        };
+
+    // Dividend payout ratio: what share of profit is actually paid out, as opposed to
+    // kept and reinvested. Distinct from Dividend Yield (which is a % of the SHARE
+    // PRICE, not of profit) - a stock can have a low yield but a high payout ratio, or
+    // vice versa. A very high payout leaves little buffer for a bad year or reinvestment.
+    public (string Label, string CssClass) GetDividendPayoutIndication() =>
+        DividendPayoutPercent switch
+        {
+            <= 0m => ("No Dividend", "bg-secondary"),
+            <= 60.0m => ("Balanced", "bg-success"),
+            <= 90.0m => ("High Payout", "bg-warning text-dark"),
+            _ => ("Very High", "bg-danger")
+        };
+
     public (string Label, string CssClass) GetAltmanZIndication() =>
         AltmanZScore switch
         {
@@ -190,6 +277,42 @@ public class StockDetailsViewModel
             >= 1.81m => ("Grey Zone", "bg-warning text-dark"),
             _ => ("Distress Risk", "bg-danger")
         };
+
+    // Plain-language, one-line translations of the valuation method names into what each
+    // one actually does, for someone without a finance background. Keyed on the exact
+    // display strings the valuation engine produces (see MethodNames.ToDisplayString()).
+    private static readonly Dictionary<string, string> MethodExplanations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Excess Returns Model"] = "Values the company by how much profit it earns above what investors could reasonably expect for the risk taken.",
+        ["Price-to-TBV (Tangible Book Value)"] = "Based on the value of the company's physical assets alone, adjusted for how well it puts them to use.",
+        ["Price-to-Book (P/B)"] = "Compares the price to the company's accounting net worth - what's left if it paid off every debt today.",
+        ["Price-to-Book (P/B) Intrinsic Multiples"] = "Compares the price to net worth, adjusted up or down based on how profitable the company currently is.",
+        ["EV/Sales Relative Multiple"] = "Values the company against the size of its revenue, compared to similar businesses.",
+        ["Price-to-Sales (P/S)"] = "Compares the price to the company's total sales - useful when profit is too small or negative to judge by.",
+        ["Net Asset Value (NAV)"] = "What would be left for shareholders if the company sold everything it owns and paid off all its debts today.",
+        ["Normalized Mid-Cycle P/E"] = "Averages out unusually good and bad years to estimate a fair profit multiple for a business with ups and downs.",
+        ["Normalized Mid-Cycle EV/EBITDA"] = "Same idea as Normalized P/E, but based on core operating profit instead of net profit.",
+        ["Exit Multiple DCF (FCFF)"] = "Projects the cash the business will generate for years ahead and works out what that's worth today.",
+        ["Exit Multiple DCF"] = "Projects the cash the business will generate for years ahead and works out what that's worth today.",
+        ["EV/EBITDA Relative Multiple"] = "Compares the full value of the company (including its debt) to its core operating profit.",
+        ["Dividend Discount Model (DDM)"] = "Values the company based on the dividends it's expected to keep paying shareholders.",
+        ["Dividend Discount Model (Pass-Through Yield)"] = "Estimates fair value from the dividend the stock is already paying out right now.",
+        ["Gordon Growth Model"] = "Assumes dividends grow at a steady, modest pace forever, and values the stock on that basis.",
+        ["Gordon Growth DDM"] = "Assumes dividends grow at a steady, modest pace forever, and values the stock on that basis.",
+        ["Buffett Owner Earnings Model"] = "Values the business on the real cash left over for owners after the reinvestment needed to keep it running.",
+        ["2-Stage FCFE DCF"] = "Assumes a few years of faster growth followed by slower, steady growth, and values the cash this produces.",
+        ["2-Stage Discounted Cash Flow (DCF)"] = "Assumes a few years of faster growth followed by slower, steady growth, and values the cash this produces.",
+        ["Price-to-Earnings-to-Growth (PEG)"] = "Checks whether the price is reasonable given how fast the company's profit is actually growing.",
+        ["Price-to-Earnings (P/E) Multiple"] = "Compares the price to how much profit the company makes per share - the most common yardstick.",
+        ["Discounted Cash Flow (DCF)"] = "Projects the company's future cash flows and works out what all of that is worth today.",
+        ["Standard DCF"] = "Projects the company's future cash flows and works out what all of that is worth today.",
+        ["Adjusted Net Asset Value (SOTP with HoldCo Discount)"] = "Adds up the value of each part of the business separately, with a discount for the complexity of holding them together."
+    };
+
+    public string GetMethodExplanation(string? methodName) =>
+        !string.IsNullOrWhiteSpace(methodName) && MethodExplanations.TryGetValue(methodName, out var explanation)
+            ? explanation
+            : "A financial model used to estimate what the company is really worth.";
 
     // Beneish M-Score: a forensic-accounting check for whether a company's reported
     // profit looks "too good to be true" compared to its actual cash and asset trends -

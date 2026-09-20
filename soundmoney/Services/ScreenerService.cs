@@ -85,6 +85,11 @@ namespace SoundMoney.Services
                 MarginOfSafetyPercent = valuationResult.MarginOfSafety,
                 Verdict = valuationResult.Verdict,
                 SoundScoreRating = valuationResult.SoundScoreRating,
+                PrimaryMethod = valuationResult.PrimaryMethod,
+                SecondaryMethod = valuationResult.SecondaryMethod,
+                MarketCapCr = current.MarketCapCr,
+                Eps = current.Eps,
+                BookValuePerShareAmount = FinancialAlgorithms.CalculateBookValuePerShare(current),
 
                 // 3. Deep Financial Indicators
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
@@ -92,12 +97,18 @@ namespace SoundMoney.Services
                 EvToEbitda = FinancialAlgorithms.CalculateEvToEbitda(current),
                 ROEPercent = FinancialAlgorithms.CalculateRoe(current),
                 ROCEPercent = FinancialAlgorithms.CalculateRoce(current),
+                ROICPercent = FinancialAlgorithms.CalculateRoic(current),
                 NetProfitMarginPercent = FinancialAlgorithms.CalculateNetProfitMarginPercent(current),
+                OperatingProfitMarginPercent = FinancialAlgorithms.CalculateOperatingProfitMargin(current),
+                SloanRatio = FinancialAlgorithms.CalculateSloanRatio(current),
                 DebtToEquity = FinancialAlgorithms.CalculateDebtToEquity(current),
+                DebtToEbitda = FinancialAlgorithms.CalculateDebtToEbitda(current),
                 InterestCoverageRatio = FinancialAlgorithms.CalculateInterestCoverage(current),
                 CurrentRatio = FinancialAlgorithms.CalculateCurrentRatio(current),
                 FreeCashFlowCr = current.FreeCashFlowCr,
+                FcfConversionPercent = FinancialAlgorithms.CalculateFcfToNetProfit(current) * 100m,
                 DividendYieldPercent = current.DividendYieldPercent,
+                DividendPayoutPercent = current.DividendPayoutPercent,
                 IsDividendConsistent = dividendAnalysis.IsConsistent,
 
                 // Health & Solvency Risk Scores
