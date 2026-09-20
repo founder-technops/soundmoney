@@ -95,6 +95,7 @@ namespace SoundMoney.Services
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
                 PB = FinancialAlgorithms.CalculatePbRatio(current),
                 EvToEbitda = FinancialAlgorithms.CalculateEvToEbitda(current),
+                PegRatio = FinancialAlgorithms.CalculatePegRatio(current, historicalList),
                 ROEPercent = FinancialAlgorithms.CalculateRoe(current),
                 ROCEPercent = FinancialAlgorithms.CalculateRoce(current),
                 ROICPercent = FinancialAlgorithms.CalculateRoic(current),

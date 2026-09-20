@@ -89,6 +89,7 @@ public class StockDetailsViewModel
     public decimal PE { get; set; }
     public decimal PB { get; set; }
     public decimal EvToEbitda { get; set; }
+    public decimal PegRatio { get; set; }
     public decimal ROEPercent { get; set; }
     public decimal ROCEPercent { get; set; }
     public decimal ROICPercent { get; set; }
@@ -163,6 +164,20 @@ public class StockDetailsViewModel
             < 10m => ("Cheaper", "bg-success"),
             <= 16m => ("Fair", "bg-info text-dark"),
             _ => ("Higher", "bg-warning text-dark")
+        };
+
+    // PEG: the P/E ratio divided by the expected earnings growth rate. Below 1 means
+    // you're paying less for each point of growth than the market typically demands
+    // (often read as attractive); around 1-2 is the broadly "fair" range; above 2 means
+    // you're paying a rich premium for that growth. <= 0 covers loss-making or
+    // no-growth cases where the ratio isn't meaningful at all.
+    public (string Label, string CssClass) GetPegIndication() =>
+        PegRatio switch
+        {
+            <= 0m => ("N/A", "bg-secondary"),
+            < 1.0m => ("Attractive", "bg-success"),
+            <= 2.0m => ("Fair", "bg-info text-dark"),
+            _ => ("Expensive", "bg-warning text-dark")
         };
 
     public (string Label, string CssClass) GetDebtToEquityIndication() =>

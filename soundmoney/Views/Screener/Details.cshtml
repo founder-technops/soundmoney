@@ -5,6 +5,7 @@
     var peInd = Model.GetPeIndication();
     var pbInd = Model.GetPbIndication();
     var evInd = Model.GetEvEbitdaIndication();
+    var pegInd = Model.GetPegIndication();
     var debtInd = Model.GetDebtToEquityIndication();
     var debtEbitdaInd = Model.GetDebtToEbitdaIndication();
     var coverageInd = Model.GetInterestCoverageIndication();
@@ -241,6 +242,16 @@
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.EvToEbitda.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @evInd.CssClass">@evInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                PEG Ratio
+                                <div class="extra-small text-muted">Whether the price is reasonable given how fast profit is actually growing</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.PegRatio.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @pegInd.CssClass">@pegInd.Label</span>
                             </div>
                         </li>
                     </ul>
@@ -872,3 +883,4 @@
             </div>
         </div>
     </div>
+

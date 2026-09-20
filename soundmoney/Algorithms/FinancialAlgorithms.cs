@@ -963,6 +963,24 @@ namespace SoundMoney.Algorithms
             return Math.Round(eps * fairPe, 2);
         }
 
+        public static decimal CalculatePegRatio(Financial current, IEnumerable<Financial> historicals)
+        {
+            // The PEG ratio investors actually quote day to day: today's P/E divided by
+            // the expected earnings growth rate (as a plain number, not a fair-value
+            // estimate). Reuses the same growth-rate resolution (ResolveDynamicGrowthRate)
+            // that CalculatePegRatioValue already relies on internally, so the displayed
+            // PEG stays consistent with whatever growth assumption the valuation engine
+            // itself is using - rather than a second, independently-guessed growth figure
+            // that could quietly disagree with it.
+            decimal pe = CalculatePeRatio(current);
+            if (pe <= 0m) return 0m;
+
+            decimal growthRatePercent = ResolveDynamicGrowthRate(current, historicals, 0.10m) * 100m;
+            if (growthRatePercent <= 0m) return 0m;
+
+            return Math.Round(pe / growthRatePercent, 2);
+        }
+
         public static decimal CalculateEvSalesMultiple(Financial current)
         {
             if (CalculateTotalShares(current) <= 0 || current.SalesCr <= 0) return 0m;
