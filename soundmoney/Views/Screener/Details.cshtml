@@ -6,6 +6,8 @@
     var pbInd = Model.GetPbIndication();
     var evInd = Model.GetEvEbitdaIndication();
     var pegInd = Model.GetPegIndication();
+    var betaInd = Model.GetBetaIndication();
+    var cccInd = Model.GetCashConversionCycleIndication();
     var debtInd = Model.GetDebtToEquityIndication();
     var debtEbitdaInd = Model.GetDebtToEbitdaIndication();
     var coverageInd = Model.GetInterestCoverageIndication();
@@ -81,20 +83,25 @@
 
             <!-- Company snapshot: simple facts to anchor the ratios below, not "good or bad" on their own -->
             <div class="row g-2 mt-3 pt-3 border-top text-center text-md-start">
-                <div class="col-4 col-md-3">
+                <div class="col-6 col-md-3">
                     <span class="text-muted extra-small d-block">Market Cap</span>
                     <strong>₹@Model.MarketCapCr.ToString("N0") Cr</strong>
                     <div class="extra-small text-muted">Total value of the whole company</div>
                 </div>
-                <div class="col-4 col-md-3">
+                <div class="col-6 col-md-3">
                     <span class="text-muted extra-small d-block">EPS (Earnings/Share)</span>
                     <strong>₹@Model.Eps.ToString("N2")</strong>
                     <div class="extra-small text-muted">Actual profit earned per share this year</div>
                 </div>
-                <div class="col-4 col-md-3">
+                <div class="col-6 col-md-3">
                     <span class="text-muted extra-small d-block">Book Value/Share</span>
                     <strong>₹@Model.BookValuePerShareAmount.ToString("N2")</strong>
                     <div class="extra-small text-muted">Accounting net worth behind each share</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <span class="text-muted extra-small d-block">Face Value</span>
+                    <strong>₹@Model.FaceValue.ToString("N2")</strong>
+                    <div class="extra-small text-muted">Original nominal value of one share</div>
                 </div>
             </div>
         </div>
@@ -252,6 +259,16 @@
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.PegRatio.ToString("N2")</strong>
                                 <span class="badge badge-sm ms-1 @pegInd.CssClass">@pegInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Beta
+                                <div class="extra-small text-muted">How much the stock swings compared to the overall market</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.Beta.ToString("N2")</strong>
+                                <span class="badge badge-sm ms-1 @betaInd.CssClass">@betaInd.Label</span>
                             </div>
                         </li>
                     </ul>
@@ -435,6 +452,16 @@
                                 <div class="extra-small text-muted">Years in a row with a dividend paid, no gaps</div>
                             </div>
                             <span>@Model.ConsecutiveDividendYears Yrs</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Cash Conversion Cycle
+                                <div class="extra-small text-muted">Days cash is tied up before it's collected back - lower (even negative) is better</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.CashConversionCycleDays.ToString("N0") days</strong>
+                                <span class="badge badge-sm ms-1 @cccInd.CssClass">@cccInd.Label</span>
+                            </div>
                         </li>
                     </ul>
                 </div>

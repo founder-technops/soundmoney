@@ -53,7 +53,23 @@ namespace SoundMoney.Algorithms
             CalculateCurrentAssets(current) - CalculateWorkingCapital(current);
 
         public static decimal CalculateSharesOutStanding(Financial current) =>
-            current.FaceValue != 0m ? current.ShareCapitalCr / current.FaceValue : 0m;
+            CalculateFaceValue(current) != 0m ? current.ShareCapitalCr / CalculateFaceValue(current) : 0m;
+
+        public static decimal CalculateFaceValue(Financial current)
+        {
+            // Face value isn't a ratio like the others - it's a fixed corporate attribute
+            // (₹10, ₹5, ₹2, ₹1...), set at IPO and only ever changed by a split/consolidation.
+            // There's no "formula" for it, but it CAN be back-derived: paid-up share capital
+            // = shares outstanding x face value, and CalculateTotalShares already gives an
+            // independent estimate of shares outstanding from MarketCap / CurrentPrice (no
+            // dependency on FaceValue at all). So when the scraped value is missing, invert
+            // that relationship instead of returning 0 and silently breaking every formula
+            // downstream of CalculateSharesOutStanding.
+            if (current.FaceValue != 0m) return current.FaceValue;
+
+            decimal totalShares = CalculateTotalShares(current);
+            return totalShares != 0m ? Math.Round(current.ShareCapitalCr / totalShares, 2) : 0m;
+        }
 
         public static decimal CalculateTotalShareholderEquity(Financial current) =>
             (current.ShareCapitalCr + current.ReservesCr);

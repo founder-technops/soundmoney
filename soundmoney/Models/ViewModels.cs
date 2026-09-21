@@ -84,6 +84,9 @@ public class StockDetailsViewModel
     public decimal MarketCapCr { get; set; }
     public decimal Eps { get; set; }
     public decimal BookValuePerShareAmount { get; set; }
+    public decimal FaceValue { get; set; }
+    public decimal Beta { get; set; }
+    public decimal CashConversionCycleDays { get; set; }
 
     // 3. Deep Financial Indicators
     public decimal PE { get; set; }
@@ -178,6 +181,30 @@ public class StockDetailsViewModel
             < 1.0m => ("Attractive", "bg-success"),
             <= 2.0m => ("Fair", "bg-info text-dark"),
             _ => ("Expensive", "bg-warning text-dark")
+        };
+
+    // Beta: how much the stock swings compared to the overall market. This is the same
+    // figure CalculateWacc already uses to set the discount rate behind every DCF-based
+    // valuation method - showing it here doubles as a bit of transparency into what risk
+    // assumption the valuation itself is built on, not just a standalone volatility fact.
+    public (string Label, string CssClass) GetBetaIndication() =>
+        Beta switch
+        {
+            < 0.8m => ("Low Volatility", "bg-success"),
+            <= 1.2m => ("Market-like", "bg-info text-dark"),
+            _ => ("High Volatility", "bg-warning text-dark")
+        };
+
+    // Cash Conversion Cycle: days between paying for inventory and collecting cash from
+    // customers. Lower (even negative, which some retailers/e-commerce businesses
+    // achieve by collecting from customers before paying suppliers) means less cash
+    // tied up in day-to-day operations - a real efficiency signal, not a data error.
+    public (string Label, string CssClass) GetCashConversionCycleIndication() =>
+        CashConversionCycleDays switch
+        {
+            <= 30m => ("Efficient", "bg-success"),
+            <= 90m => ("Moderate", "bg-info text-dark"),
+            _ => ("Slow", "bg-warning text-dark")
         };
 
     public (string Label, string CssClass) GetDebtToEquityIndication() =>

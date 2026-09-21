@@ -90,6 +90,9 @@ namespace SoundMoney.Services
                 MarketCapCr = current.MarketCapCr,
                 Eps = current.Eps,
                 BookValuePerShareAmount = FinancialAlgorithms.CalculateBookValuePerShare(current),
+                FaceValue = FinancialAlgorithms.CalculateFaceValue(current),
+                Beta = current.Beta,
+                CashConversionCycleDays = current.CashConversionCycleDays,
 
                 // 3. Deep Financial Indicators
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
