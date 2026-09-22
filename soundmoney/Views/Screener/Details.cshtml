@@ -165,6 +165,33 @@
                 </div>
             </div>
 
+            <!-- Concrete entry/exit price levels, straight from the Verdict's own thresholds -->
+            <div class="row g-2 mt-1">
+                <div class="col-12">
+                    <div class="p-2 p-md-3 border rounded">
+                        <span class="small fw-bold text-muted d-block mb-2">When would you actually buy or sell this, in rupees?</span>
+                        <div class="row text-center g-2">
+                            <div class="col-4">
+                                <span class="badge bg-success mb-1">Buy Zone</span>
+                                <div class="fw-bold">₹@Model.StrongBuyBelowPrice.ToString("N2")</div>
+                                <div class="extra-small text-muted">Attractive entry price - a genuine margin of safety at this level</div>
+                            </div>
+                            <div class="col-4">
+                                <span class="badge bg-info text-dark mb-1">Fair Value</span>
+                                <div class="fw-bold">₹@Model.IntrinsicValue.ToString("N2")</div>
+                                <div class="extra-small text-muted">What the company is estimated to actually be worth per share</div>
+                            </div>
+                            <div class="col-4">
+                                <span class="badge bg-danger mb-1">Sell Zone</span>
+                                <div class="fw-bold">₹@Model.SellAbovePrice.ToString("N2")</div>
+                                <div class="extra-small text-muted">Above this, the price has run well ahead of estimated value</div>
+                            </div>
+                        </div>
+                        <div class="extra-small text-muted mt-2">These are the exact same price breakpoints that decide the Verdict above (Strong Buy / Buy / Hold / Overvalued) - shown here as real prices instead of just a label, so it's clear what would need to change for the Verdict to change too.</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Health & Safety Quick Bar -->
             <div class="row g-3 mt-1">
                 <div class="col-12 col-md-4">

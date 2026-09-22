@@ -79,6 +79,14 @@ public class StockDetailsViewModel
     public string PrimaryMethod { get; set; } = string.Empty;
     public string SecondaryMethod { get; set; } = string.Empty;
 
+    // Entry/exit price levels: the same 0.70x / 1.00x / 1.20x thresholds that decide the
+    // Verdict above, translated into actual rupee prices rather than left as an abstract
+    // label. These are computed, not stored - they're pure functions of IntrinsicValue,
+    // so they can never drift out of sync with however the Verdict itself is calculated.
+    public decimal StrongBuyBelowPrice => Math.Round(IntrinsicValue * 0.70m, 2);
+    public decimal BuyBelowPrice => Math.Round(IntrinsicValue, 2);
+    public decimal SellAbovePrice => Math.Round(IntrinsicValue * 1.20m, 2);
+
     // Simple per-share / company snapshot facts - not "good or bad" on their own, just
     // concrete reference numbers a common man can anchor the ratios above to.
     public decimal MarketCapCr { get; set; }
