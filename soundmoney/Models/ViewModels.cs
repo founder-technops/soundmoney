@@ -70,6 +70,7 @@ public class StockDetailsViewModel
     public string Sector { get; set; } = string.Empty;
     public decimal CurrentPrice { get; set; }
     public DateTime? LastAnalyzed { get; set; }
+    public bool IsFinancialSector { get; set; }
 
     // 2. Core Valuation Output
     public decimal IntrinsicValue { get; set; }
@@ -237,12 +238,14 @@ public class StockDetailsViewModel
         };
 
     public (string Label, string CssClass) GetInterestCoverageIndication() =>
-        InterestCoverageRatio switch
-        {
-            >= 5.0m => ("Safe", "bg-success"),
-            >= 2.0m => ("Moderate", "bg-warning text-dark"),
-            _ => ("Risky", "bg-danger")
-        };
+        IsFinancialSector
+            ? ("Not Applicable", "bg-secondary")
+            : InterestCoverageRatio switch
+            {
+                >= 5.0m => ("Safe", "bg-success"),
+                >= 2.0m => ("Moderate", "bg-warning text-dark"),
+                _ => ("Risky", "bg-danger")
+            };
 
     public (string Label, string CssClass) GetCurrentRatioIndication() =>
         CurrentRatio switch
@@ -321,12 +324,28 @@ public class StockDetailsViewModel
         };
 
     public (string Label, string CssClass) GetAltmanZIndication() =>
-        AltmanZScore switch
-        {
-            >= 2.99m => ("Safe Zone", "bg-success"),
-            >= 1.81m => ("Grey Zone", "bg-warning text-dark"),
-            _ => ("Distress Risk", "bg-danger")
-        };
+        IsFinancialSector
+            ? ("Not Applicable", "bg-secondary")
+            : AltmanZScore switch
+            {
+                >= 2.99m => ("Safe Zone", "bg-success"),
+                >= 1.81m => ("Grey Zone", "bg-warning text-dark"),
+                _ => ("Distress Risk", "bg-danger")
+            };
+
+    // Piotroski F-Score indicator, matching the inline badge logic that used to live
+    // directly in Details.cshtml - centralized here so it gets the same
+    // IsFinancialSector guard as the other three health scores below, rather than
+    // needing a separate, easy-to-forget check duplicated in the view.
+    public (string Label, string CssClass) GetPiotroskiIndication() =>
+        IsFinancialSector
+            ? ("Not Applicable", "bg-secondary")
+            : PiotroskiFScore switch
+            {
+                >= 7 => ("Strong", "bg-success"),
+                >= 4 => ("Average", "bg-info text-dark"),
+                _ => ("Weak", "bg-danger")
+            };
 
     // Plain-language, one-line translations of the valuation method names into what each
     // one actually does, for someone without a finance background. Keyed on the exact
@@ -374,12 +393,14 @@ public class StockDetailsViewModel
     // stricter "Low Risk" band so the common case (most healthy companies) reads clearly
     // safe rather than merely "not flagged".
     public (string Label, string CssClass) GetMScoreIndication() =>
-        MScore switch
-        {
-            <= -2.22m => ("Low Risk", "bg-success"),
-            <= -1.78m => ("Some Risk", "bg-warning text-dark"),
-            _ => ("High Risk", "bg-danger")
-        };
+        IsFinancialSector
+            ? ("Not Applicable", "bg-secondary")
+            : MScore switch
+            {
+                <= -2.22m => ("Low Risk", "bg-success"),
+                <= -1.78m => ("Some Risk", "bg-warning text-dark"),
+                _ => ("High Risk", "bg-danger")
+            };
 
     // Net profit margin: how many rupees of real, bottom-line profit a company keeps for
     // every Rs. 100 of sales. Thresholds are deliberately simple, general-purpose bands

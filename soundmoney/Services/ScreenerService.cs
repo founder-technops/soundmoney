@@ -79,6 +79,7 @@ namespace SoundMoney.Services
                 Sector = stockValuation.Sector,
                 CurrentPrice = stockValuation.CurrentPrice,
                 LastAnalyzed = DateTime.Now,
+                IsFinancialSector = current.IsFinancialSector,
 
                 // 2. Core Valuation Output
                 IntrinsicValue = valuationResult.IntrinsicValue,

@@ -19,6 +19,7 @@
     var fcfConvInd = Model.GetFcfConversionIndication();
     var payoutInd = Model.GetDividendPayoutIndication();
     var altmanInd = Model.GetAltmanZIndication();
+    var piotroskiInd = Model.GetPiotroskiIndication();
     var mScoreInd = Model.GetMScoreIndication();
     var marginInd = Model.GetNetProfitMarginIndication();
 }
@@ -199,11 +200,27 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="small fw-bold text-muted">Altman Z-Score (Solvency Risk):</span>
                             <div class="d-flex align-items-center gap-2">
-                                <span class="fw-bold">@Model.AltmanZScore.ToString("N2")</span>
+                                @if (Model.IsFinancialSector)
+                                {
+                                    <span class="fw-bold text-muted">N/A</span>
+                                }
+                                else
+                                {
+                                    <span class="fw-bold">@Model.AltmanZScore.ToString("N2")</span>
+                                }
                                 <span class="badge badge-sm @altmanInd.CssClass">@altmanInd.Label</span>
                             </div>
                         </div>
-                        <div class="extra-small text-muted mt-1">In plain terms: how likely this company is to run into serious financial trouble in the next couple of years.</div>
+                        <div class="extra-small text-muted mt-1">
+                            @if (Model.IsFinancialSector)
+                            {
+                                <text>This check doesn't apply to banks/NBFCs, whose balance sheets work differently from typical businesses.</text>
+                            }
+                            else
+                            {
+                                <text>In plain terms: how likely this company is to run into serious financial trouble in the next couple of years.</text>
+                            }
+                        </div>
                     </div>
                 </div>
                 <div class="col-12 col-md-4">
@@ -211,13 +228,27 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="small fw-bold text-muted">Piotroski F-Score (Financial Strength):</span>
                             <div class="d-flex align-items-center gap-2">
-                                <span class="fw-bold">@Model.PiotroskiFScore / 9</span>
-                                <span class="badge badge-sm @(Model.PiotroskiFScore >= 7 ? "bg-success" : Model.PiotroskiFScore >= 4 ? "bg-info text-dark" : "bg-danger")">
-                                    @(Model.PiotroskiFScore >= 7 ? "Strong" : Model.PiotroskiFScore >= 4 ? "Average" : "Weak")
-                                </span>
+                                @if (Model.IsFinancialSector)
+                                {
+                                    <span class="fw-bold text-muted">N/A</span>
+                                }
+                                else
+                                {
+                                    <span class="fw-bold">@Model.PiotroskiFScore / 9</span>
+                                }
+                                <span class="badge badge-sm @piotroskiInd.CssClass">@piotroskiInd.Label</span>
                             </div>
                         </div>
-                        <div class="extra-small text-muted mt-1">In plain terms: a 9-point checklist of the company's finances (profit, debt, efficiency) - higher out of 9 is healthier.</div>
+                        <div class="extra-small text-muted mt-1">
+                            @if (Model.IsFinancialSector)
+                            {
+                                <text>This checklist doesn't apply to banks/NBFCs, whose balance sheets work differently from typical businesses.</text>
+                            }
+                            else
+                            {
+                                <text>In plain terms: a 9-point checklist of the company's finances (profit, debt, efficiency) - higher out of 9 is healthier.</text>
+                            }
+                        </div>
                     </div>
                 </div>
                 <div class="col-12 col-md-4">
@@ -225,11 +256,27 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="small fw-bold text-muted">M-Score (Earnings Manipulation Risk):</span>
                             <div class="d-flex align-items-center gap-2">
-                                <span class="fw-bold">@Model.MScore.ToString("N2")</span>
+                                @if (Model.IsFinancialSector)
+                                {
+                                    <span class="fw-bold text-muted">N/A</span>
+                                }
+                                else
+                                {
+                                    <span class="fw-bold">@Model.MScore.ToString("N2")</span>
+                                }
                                 <span class="badge badge-sm @mScoreInd.CssClass">@mScoreInd.Label</span>
                             </div>
                         </div>
-                        <div class="extra-small text-muted mt-1">In plain terms: checks whether the reported profit looks genuine, or whether the numbers may be dressed up to look better than the underlying business really is.</div>
+                        <div class="extra-small text-muted mt-1">
+                            @if (Model.IsFinancialSector)
+                            {
+                                <text>This check doesn't apply to banks/NBFCs, whose balance sheets work differently from typical businesses.</text>
+                            }
+                            else
+                            {
+                                <text>In plain terms: checks whether the reported profit looks genuine, or whether the numbers may be dressed up to look better than the underlying business really is.</text>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -400,10 +447,26 @@
                         <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
                             <div class="text-muted small">
                                 Interest Coverage
-                                <div class="extra-small text-muted">Times over the company can pay its yearly interest bill from profit</div>
+                                <div class="extra-small text-muted">
+                                    @if (Model.IsFinancialSector)
+                                    {
+                                        <text>Doesn't apply to banks/NBFCs - lending IS the business, not debt to service</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Times over the company can pay its yearly interest bill from profit</text>
+                                    }
+                                </div>
                             </div>
                             <div class="d-flex align-items-center gap-1">
-                                <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
+                                @if (Model.IsFinancialSector)
+                                {
+                                    <strong class="text-muted">N/A</strong>
+                                }
+                                else
+                                {
+                                    <strong>@Model.InterestCoverageRatio.ToString("N2")x</strong>
+                                }
                                 <span class="badge badge-sm ms-1 @coverageInd.CssClass">@coverageInd.Label</span>
                             </div>
                         </li>
