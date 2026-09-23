@@ -108,7 +108,6 @@ namespace SoundMoney.Services
                 SloanRatio = FinancialAlgorithms.CalculateSloanRatio(current),
                 DebtToEquity = FinancialAlgorithms.CalculateDebtToEquity(current),
                 DebtToEbitda = FinancialAlgorithms.CalculateDebtToEbitda(current),
-                PromoterPledgePercent = FinancialAlgorithms.CalculatePromoterPledgePercent(current),
                 InterestCoverageRatio = FinancialAlgorithms.CalculateInterestCoverage(current),
                 CurrentRatio = FinancialAlgorithms.CalculateCurrentRatio(current),
                 FreeCashFlowCr = current.FreeCashFlowCr,
