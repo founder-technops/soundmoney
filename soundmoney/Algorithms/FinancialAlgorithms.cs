@@ -2,6 +2,16 @@
 
 namespace SoundMoney.Algorithms
 {
+    /// <summary>
+    /// Sound Score plus the reasoning behind it: RawScore is what the points add up to,
+    /// Score is what's reported after the value-trap cap, CapReasons lists (in plain
+    /// language) the trap(s) that actually pulled Score below RawScore. Empty = not capped.
+    /// </summary>
+    public sealed record SoundScoreResult(int Score, int RawScore, IReadOnlyList<string> CapReasons)
+    {
+        public bool IsCapped => CapReasons.Count > 0;
+    }
+
     public static class FinancialAlgorithms
     {
         public static decimal CalculateOperatingProfitMargin(Financial current) =>
@@ -423,8 +433,11 @@ namespace SoundMoney.Algorithms
         }
 
         public static int CalculateSoundScore(decimal marginOfSafety, Financial current, IEnumerable<Financial> historicals)
+            => CalculateSoundScoreDetailed(marginOfSafety, current, historicals).Score;
+
+        public static SoundScoreResult CalculateSoundScoreDetailed(decimal marginOfSafety, Financial current, IEnumerable<Financial> historicals)
         {
-            if (current == null) return 0;
+            if (current == null) return new SoundScoreResult(0, 0, Array.Empty<string>());
 
             decimal score = 0m;
 
@@ -561,8 +574,15 @@ namespace SoundMoney.Algorithms
                     salesGrowth = CalculateCagr(oldest.SalesCr, newest.SalesCr, periods);
                 }
 
+                // The "revenue fell >15% from its peak" override is a decline signal for
+                // operating businesses. For banks/NBFCs/investment companies, reported
+                // revenue is lumpy (treasury/investment gains, one-off fee income) and can
+                // swing by half year to year while profit and ROE keep compounding - e.g.
+                // CPCAP's sales went 105 -> 49 -> 85 -> 49 -> 76 while profit grew 5 -> 43.
+                // Profit is the meaningful decline signal for financials (handled below),
+                // so the peak-drop override is not applied to them.
                 decimal peakRevenue = historyList.Max(h => h.SalesCr);
-                if (newest.SalesCr < (peakRevenue * 0.85m))
+                if (!current.IsFinancialSector && newest.SalesCr < (peakRevenue * 0.85m))
                 {
                     salesGrowth = -0.10m;
                 }
@@ -646,13 +666,17 @@ namespace SoundMoney.Algorithms
                 else if (current.CashConversionCycleDays > 120m) score -= 5m;
             }
 
-            if (salesGrowth < 0m && hasValidHistory) score -= 5m;
+            if (salesGrowth < 0m && hasValidHistory && !current.IsFinancialSector) score -= 5m;
             if (profitGrowth < 0m && hasValidHistory && hasValidProfitGrowth) score -= 5m;
 
             bool hasHeavyNetDebt = current.IsCashEstimateReliable ? CalculateNetCash(current) < -300m : current.TotalBorrowingsCr > 300m;
             bool isCapitalDestroyer = !current.IsFinancialSector && (roePercent < 8.0m || roicPercent < 5.0m) && salesGrowth < 0.05m;
             bool isHighDebtCommodity = !current.IsFinancialSector && opmPercent < 8.0m && hasHeavyNetDebt;
-            bool isDeclining = (salesGrowth < 0m || (hasValidProfitGrowth && profitGrowth < 0m)) && hasValidHistory;
+            // Non-financials: shrinking sales OR shrinking profit. Financials: profit only
+            // (see the peak-revenue note above - their revenue line is too lumpy to trust).
+            bool isDeclining = hasValidHistory && (current.IsFinancialSector
+                ? (hasValidProfitGrowth && profitGrowth < 0m)
+                : (salesGrowth < 0m || (hasValidProfitGrowth && profitGrowth < 0m)));
             bool isSeverePledge = pledgePercent >= 35.0m;
 
             bool isPaperProfitTrap = !current.IsFinancialSector
@@ -682,21 +706,31 @@ namespace SoundMoney.Algorithms
             bool isBeneishManipulator = beneishM > -1.78m && !current.IsFinancialSector;
             if (isBeneishManipulator) score -= 20m;
 
-            bool isValueTrap = roePercent < 5.0m
-                || (!current.IsFinancialSector && roicPercent < 5.0m)
-                || isDeclining
-                || current.NetProfitCr <= 0m
-                || isCapitalDestroyer
-                || isHighDebtCommodity
-                || isSeverePledge
-                || isPaperProfitTrap
-                || isFcfDrainTrap
-                || isAggressiveAccrualTrap
-                || isBeneishManipulator;
+            // Same trap conditions as before, but collected with a plain-language reason
+            // each, so the UI can explain WHY a score was held down instead of leaving a
+            // high verdict next to a middling rating with no visible cause.
+            var trapReasons = new List<string>();
+            if (roePercent < 5.0m) trapReasons.Add("very low return on equity");
+            if (!current.IsFinancialSector && roicPercent < 5.0m) trapReasons.Add("very low return on invested capital");
+            if (isDeclining) trapReasons.Add(current.IsFinancialSector ? "shrinking profit over the years" : "shrinking sales or profit over the years");
+            if (current.NetProfitCr <= 0m) trapReasons.Add("loss-making");
+            if (isCapitalDestroyer) trapReasons.Add("low returns with no real growth");
+            if (isHighDebtCommodity) trapReasons.Add("heavy debt with thin margins");
+            if (isSeverePledge) trapReasons.Add("a large share of promoter holding is pledged");
+            if (isPaperProfitTrap) trapReasons.Add("profit is not turning into cash");
+            if (isFcfDrainTrap) trapReasons.Add("business is draining cash");
+            if (isAggressiveAccrualTrap) trapReasons.Add("profit is mostly accounting entries, not cash");
+            if (isBeneishManipulator) trapReasons.Add("reported profit looks possibly manipulated");
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
+            bool isValueTrap = trapReasons.Count > 0;
+            int cappedScore = isValueTrap ? Math.Min(finalScore, 40) : finalScore;
 
-            return isValueTrap ? Math.Min(finalScore, 40) : finalScore;
+            // Only report reasons when the cap actually lowered the score.
+            return new SoundScoreResult(
+                cappedScore,
+                finalScore,
+                cappedScore < finalScore ? trapReasons : Array.Empty<string>());
         }
 
         public static decimal CalculateStandardDcf(Financial current, IEnumerable<Financial> historicals)
@@ -1166,7 +1200,7 @@ namespace SoundMoney.Algorithms
             {
                 var history = historicals.Where(h => h != null).OrderBy(h => h.Year).ToList();
                 if (history.Count >= 3)
-                {
+                { 
                     decimal avgCapexToOcf = history.Average(h => h.CashFromOperationsCr > 0m ? Math.Max(0m, CalculateGrossCapex(h) / h.CashFromOperationsCr) : 0m);
                     decimal avgDebtToEbit = history.Average(h => CalculateNetDebt(h) > 0m && CalculateEbit(h) > 0m ? Math.Max(0m, CalculateNetDebt(h) / CalculateEbit(h)) : 0m);
                     if (avgCapexToOcf >= 0.35m || avgDebtToEbit >= 1.30m)

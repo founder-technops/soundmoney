@@ -77,6 +77,14 @@ public class StockDetailsViewModel
     public decimal MarginOfSafetyPercent { get; set; }
     public string Verdict { get; set; } = string.Empty;
     public string SoundScoreRating { get; set; } = string.Empty;
+
+    // Numeric Sound Score (0-100) behind the rating, plus - when a value-trap cap held it
+    // down - the score it would have had and the plain-language reasons for the cap.
+    public int SoundScore { get; set; }
+    public int SoundScoreRaw { get; set; }
+    public List<string> ScoreCapReasons { get; set; } = new();
+    public bool IsScoreCapped => ScoreCapReasons.Count > 0;
+
     public string PrimaryMethod { get; set; } = string.Empty;
     public string SecondaryMethod { get; set; } = string.Empty;
 

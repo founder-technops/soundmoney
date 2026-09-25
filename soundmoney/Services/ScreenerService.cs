@@ -51,6 +51,12 @@ namespace SoundMoney.Services
 
             DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
 
+            // Same inputs ValuationService used for the score, re-run only to get the
+            // breakdown (raw score + why it was capped). Skipped when there's no valuation.
+            var scoreDetail = valuationResult.Verdict == "INSUFFICIENT DATA"
+                ? null
+                : FinancialAlgorithms.CalculateSoundScoreDetailed(valuationResult.MarginOfSafety, current, historical);
+
             // Prepare historical data for trend analysis
             var historicalList = historical.OrderBy(h => h.Year).ToList();
 
@@ -86,6 +92,9 @@ namespace SoundMoney.Services
                 MarginOfSafetyPercent = valuationResult.MarginOfSafety,
                 Verdict = valuationResult.Verdict,
                 SoundScoreRating = valuationResult.SoundScoreRating,
+                SoundScore = (int)valuationResult.SoundScore,
+                SoundScoreRaw = scoreDetail?.RawScore ?? (int)valuationResult.SoundScore,
+                ScoreCapReasons = scoreDetail?.CapReasons.ToList() ?? new List<string>(),
                 PrimaryMethod = valuationResult.PrimaryMethod,
                 SecondaryMethod = valuationResult.SecondaryMethod,
                 MarketCapCr = current.MarketCapCr,

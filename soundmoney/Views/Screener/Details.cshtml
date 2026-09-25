@@ -146,6 +146,11 @@
                         <span class="badge fs-6 mt-1 @(Model.SoundScoreRating == "STRONG SOUND" || Model.SoundScoreRating == "SOUND" ? "bg-primary" : "bg-secondary")">
                             @Model.SoundScoreRating
                         </span>
+                        <div class="extra-small text-muted mt-1">Score: @Model.SoundScore / 100</div>
+                        @if (Model.IsScoreCapped)
+                        {
+                            <div class="extra-small text-warning-emphasis mt-1">Held down from @Model.SoundScoreRaw because: @string.Join("; ", Model.ScoreCapReasons)</div>
+                        }
                     </div>
                 </div>
             </div>
