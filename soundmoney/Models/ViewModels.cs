@@ -104,6 +104,9 @@ public class StockDetailsViewModel
     public decimal FaceValue { get; set; }
     public decimal Beta { get; set; }
     public decimal CashConversionCycleDays { get; set; }
+    public decimal PromoterHoldingPercent { get; set; }
+    public string? PromoterHoldingTrend { get; set; }
+    public decimal PromoterPledgePercent { get; set; }
 
     // 3. Deep Financial Indicators
     public decimal PE { get; set; }
@@ -329,6 +332,17 @@ public class StockDetailsViewModel
             <= 60.0m => ("Balanced", "bg-success"),
             <= 90.0m => ("High Payout", "bg-warning text-dark"),
             _ => ("Very High", "bg-danger")
+        };
+
+    // Same 25%/10% thresholds CalculateSoundScore already penalizes on (-15 / -8 points),
+    // so this badge always agrees with what's already factored into the score above.
+    public (string Label, string CssClass) GetPromoterPledgeIndication() =>
+        PromoterPledgePercent switch
+        {
+            <= 0m => ("None", "bg-success"),
+            < 10.0m => ("Low", "bg-success"),
+            < 25.0m => ("Moderate", "bg-warning text-dark"),
+            _ => ("High Risk", "bg-danger")
         };
 
     public (string Label, string CssClass) GetAltmanZIndication() =>

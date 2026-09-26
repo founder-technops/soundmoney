@@ -160,6 +160,18 @@ namespace SoundMoney.Algorithms
         public static decimal CalculateInterestIncomeRatio(Financial current) =>
             current.SalesCr > 0m ? Math.Clamp(current.InterestIncomeCr / current.SalesCr, 0m, 1m) : 0m;
 
+        // PromoterPledgePercent is scraped from two different sources depending on which
+        // one Screener's page actually has populated (the shareholding table's own
+        // "Pledged" row, or a percentage parsed out of a Pros/Cons bullet) - those two
+        // sources don't agree on units, so the raw field can come through either as a
+        // fraction (0.05 = 5%) or already as a percent (5.0). Centralized here instead of
+        // duplicated inline so every caller (Sound Score, the Details screen) reads the
+        // same normalized value.
+        public static decimal NormalizePromoterPledgePercent(Financial current) =>
+            (current.PromoterPledgePercent <= 1.0m && current.PromoterPledgePercent > 0m)
+                ? current.PromoterPledgePercent * 100m
+                : current.PromoterPledgePercent;
+
         public static bool CheckCoreInvestmentCompany(Financial current) =>
             current.IsCoreInvestmentCompanyExplicit || (CalculateInvestmentAssetsRatio(current) >= 0.70m && CalculateInterestIncomeRatio(current) < 0.30m);
 
@@ -643,9 +655,7 @@ namespace SoundMoney.Algorithms
                     break;
             }
 
-            decimal pledgePercent = (current.PromoterPledgePercent <= 1.0m && current.PromoterPledgePercent > 0m)
-                ? current.PromoterPledgePercent * 100m
-                : current.PromoterPledgePercent;
+            decimal pledgePercent = NormalizePromoterPledgePercent(current);
 
             if (pledgePercent >= 25.0m) score -= 15m;
             else if (pledgePercent >= 10.0m) score -= 8m;
@@ -1200,9 +1210,40 @@ namespace SoundMoney.Algorithms
             {
                 var history = historicals.Where(h => h != null).OrderBy(h => h.Year).ToList();
                 if (history.Count >= 3)
-                { 
+                {
+                    // avgCapexToOcf deliberately still averages the FULL scraped history
+                    // (no trailing-window trim, unlike the debt check below). Checked
+                    // against DRCSYSTEMS as a real test case: its elevated ratio (avg
+                    // ~59%, ~89%/70% in FY24/FY25) initially looked like it might be an
+                    // artifact of this proxy (GrossCapex = CFO - FCF can't distinguish
+                    // PP&E capex from investment/M&A outflows) - but a source that
+                    // reports "Capital Expenditures" and "Investment in Securities" as
+                    // separate cash-flow lines shows GrossCapex tracking the REAL capex
+                    // line within rounding in all 5 years (e.g. FY24: proxy=25 vs
+                    // reported=24.5). The balance sheet confirms what it is: Other
+                    // Intangible Assets grew by almost exactly the same amounts
+                    // (+-22 Cr in FY24, +-20 Cr in FY25) - this is genuine, ongoing
+                    // capitalized software/platform development spend, not an M&A or
+                    // classification artifact. So unlike the stale FY2022 debt spike,
+                    // this is a real, current signal and a trailing window would be
+                    // wrong to apply here - it would mask legitimate capital intensity
+                    // rather than correct for a one-off.
                     decimal avgCapexToOcf = history.Average(h => h.CashFromOperationsCr > 0m ? Math.Max(0m, CalculateGrossCapex(h) / h.CashFromOperationsCr) : 0m);
-                    decimal avgDebtToEbit = history.Average(h => CalculateNetDebt(h) > 0m && CalculateEbit(h) > 0m ? Math.Max(0m, CalculateNetDebt(h) / CalculateEbit(h)) : 0m);
+
+                    // avgDebtToEbit DOES use a trailing window (most recent 3 scraped
+                    // years, or all of them if fewer than 3 exist). A single old, since-
+                    // resolved high-debt year (e.g. debt taken on around an IPO/listing,
+                    // paid down within a year or two) can otherwise dominate a 5+ year
+                    // average forever, long after the company is genuinely debt-free -
+                    // the same "one stale year skews a multi-year average" pattern already
+                    // guarded against elsewhere in this file (see CheckCashPredictable's
+                    // recovery check and the cyclicality "recentlyStabilized" check above).
+                    // This only ever makes the leverage read LOWER than the full-history
+                    // average would - it never hides genuinely current, ongoing high debt,
+                    // since recent high-debt years are exactly what remains in the window.
+                    var recentHistory = history.TakeLast(3).ToList();
+                    decimal avgDebtToEbit = recentHistory.Average(h => CalculateNetDebt(h) > 0m && CalculateEbit(h) > 0m ? Math.Max(0m, CalculateNetDebt(h) / CalculateEbit(h)) : 0m);
+
                     if (avgCapexToOcf >= 0.35m || avgDebtToEbit >= 1.30m)
                     {
                         return true;

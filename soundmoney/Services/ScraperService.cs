@@ -262,6 +262,10 @@ namespace SoundMoney.Services
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
             }
 
+            var (promoterHolding, promoterTrend) = ExtractPromoterHoldingAndTrend(doc);
+            df.PromoterHoldingPercent = promoterHolding;
+            df.PromoterHoldingTrend = promoterTrend;
+
             // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             if (pnlSection != null)
@@ -294,7 +298,7 @@ namespace SoundMoney.Services
                 df.ShareCapitalCr = GetLastCellRowValue(bsSection, "Equity Capital");
                 df.ReservesCr = GetLastCellRowValue(bsSection, "Reserves");
                 df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowings"));
-                if(df.TotalBorrowingsCr == 0m)
+                if (df.TotalBorrowingsCr == 0m)
                 {
                     df.TotalBorrowingsCr = Math.Abs(GetLastCellRowValue(bsSection, "Borrowing"));
                 }
@@ -340,6 +344,35 @@ namespace SoundMoney.Services
             }
 
             return 0m;
+        }
+
+        private (decimal Current, string? Trend) ExtractPromoterHoldingAndTrend(HtmlDocument doc)
+        {
+            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
+            if (shareholdingSection == null) return (0m, null);
+
+            decimal current = GetLastCellRowValue(shareholdingSection, "Promoters");
+
+            var quarterly = GetRowValuesByColumn(shareholdingSection, "Promoters");
+            string? trend = DeterminePromoterHoldingTrend(quarterly);
+
+            return (current, trend);
+        }
+
+        private string? DeterminePromoterHoldingTrend(Dictionary<int, decimal> quarterlyValues)
+        {
+            if (quarterlyValues == null || quarterlyValues.Count < 2) return null;
+
+            // Compare the oldest to the newest scraped quarter rather than quarter-over-
+            // quarter: promoter holding moves in small, deliberate steps (block deals,
+            // open-market buys/sells, ESOP-driven dilution), so a single-quarter wiggle is
+            // noise - the direction across the whole scraped window is the real signal.
+            var ordered = quarterlyValues.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToList();
+            decimal change = ordered.Last() - ordered.First();
+
+            if (change > 0.5m) return "Improving";
+            if (change < -0.5m) return "Declining";
+            return "Stable";
         }
 
         private decimal ExtractPromoterPledgeFromProsAndCons(HtmlDocument doc)
@@ -408,11 +441,11 @@ namespace SoundMoney.Services
 
             //profit & loss
             var dicSalesCr = GetRowValuesByColumn(pnlSection, "Sales");
-            if(dicSalesCr.Count ==0)
+            if (dicSalesCr.Count == 0)
                 dicSalesCr = GetRowValuesByColumn(pnlSection, "Revenue");
             var dicExpenseCr = GetRowValuesByColumn(pnlSection, "Expenses");
             var dicOperatingProfitCr = GetRowValuesByColumn(pnlSection, "Operating Profit");
-            if(dicOperatingProfitCr.Count == 0)
+            if (dicOperatingProfitCr.Count == 0)
                 dicOperatingProfitCr = GetRowValuesByColumn(pnlSection, "Financing Profit");
             var dicOtherIncomeCr = GetRowValuesByColumn(pnlSection, "Other Income");
             var dicInterestExpenseCr = GetRowValuesByColumn(pnlSection, "Interest");
@@ -427,7 +460,7 @@ namespace SoundMoney.Services
             var dicShareCapitalCr = GetRowValuesByColumn(bsSection, "Equity Capital");
             var dicReservesCr = GetRowValuesByColumn(bsSection, "Reserves");
             var dicTotalBorrowingsCr = GetRowValuesByColumn(bsSection, "Borrowings");
-            if(dicTotalBorrowingsCr.Count == 0)
+            if (dicTotalBorrowingsCr.Count == 0)
                 dicTotalBorrowingsCr = GetRowValuesByColumn(bsSection, "Borrowing");
             var dicOtherLiabilitiesCr = GetRowValuesByColumn(bsSection, "Other Liabilities");
             var dicNetFixedAssetsCr = GetRowValuesByColumn(bsSection, "Fixed Assets");

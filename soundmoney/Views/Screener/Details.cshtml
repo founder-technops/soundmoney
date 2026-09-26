@@ -22,6 +22,7 @@
     var piotroskiInd = Model.GetPiotroskiIndication();
     var mScoreInd = Model.GetMScoreIndication();
     var marginInd = Model.GetNetProfitMarginIndication();
+    var pledgeInd = Model.GetPromoterPledgeIndication();
 }
 
 <style>
@@ -493,6 +494,29 @@
                             <div class="d-flex align-items-center gap-1">
                                 <strong>@Model.SloanRatio.ToString("N2")%</strong>
                                 <span class="badge badge-sm ms-1 @sloanInd.CssClass">@sloanInd.Label</span>
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Promoter Holding
+                                @if (!string.IsNullOrEmpty(Model.PromoterHoldingTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.PromoterHoldingTrend == "Improving" ? "bg-success" : Model.PromoterHoldingTrend == "Declining" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.PromoterHoldingTrend == "Improving" ? "↑" : Model.PromoterHoldingTrend == "Declining" ? "↓" : "→")
+                                    </span>
+                                }
+                                <div class="extra-small text-muted">Share of the company still owned by founders/promoters</div>
+                            </div>
+                            <strong>@Model.PromoterHoldingPercent.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                Promoter Pledge
+                                <div class="extra-small text-muted">Share of promoter holding pledged as loan collateral - higher is riskier</div>
+                            </div>
+                            <div class="d-flex align-items-center gap-1">
+                                <strong>@Model.PromoterPledgePercent.ToString("N2")%</strong>
+                                <span class="badge badge-sm ms-1 @pledgeInd.CssClass">@pledgeInd.Label</span>
                             </div>
                         </li>
                     </ul>

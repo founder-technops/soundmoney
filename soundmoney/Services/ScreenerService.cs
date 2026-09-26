@@ -103,6 +103,9 @@ namespace SoundMoney.Services
                 FaceValue = FinancialAlgorithms.CalculateFaceValue(current),
                 Beta = current.Beta,
                 CashConversionCycleDays = current.CashConversionCycleDays,
+                PromoterHoldingPercent = current.PromoterHoldingPercent,
+                PromoterHoldingTrend = current.PromoterHoldingTrend,
+                PromoterPledgePercent = FinancialAlgorithms.NormalizePromoterPledgePercent(current),
 
                 // 3. Deep Financial Indicators
                 PE = FinancialAlgorithms.CalculatePeRatio(current),

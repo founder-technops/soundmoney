@@ -40,6 +40,10 @@ namespace SoundMoney.Models
         // --- Shareholding Metrics ---
         public decimal Beta { get; set; } = 1.0m;
         public decimal PromoterPledgePercent { get; set; }
+        public decimal PromoterHoldingPercent { get; set; }
+        // "Improving"/"Declining"/"Stable", comparing the oldest to the newest quarter in
+        // the scraped shareholding-pattern table; null when there isn't enough history.
+        public string? PromoterHoldingTrend { get; set; }
         public int Year { get; set; }
 
         // --- P&L Metrics (Cr) ---
