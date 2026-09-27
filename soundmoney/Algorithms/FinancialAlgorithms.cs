@@ -1429,7 +1429,8 @@ namespace SoundMoney.Algorithms
             Financial current,
             List<Financial> historical,
             Func<Financial, decimal> metricSelector,
-            bool isPercentageMetric = false)
+            bool isPercentageMetric = false,
+            decimal upDownThresholdPercent = 5m)
         {
             var yearlyData = new List<YearlyMetric>();
 
@@ -1483,12 +1484,16 @@ namespace SoundMoney.Algorithms
                         }
                     }
 
-                    // Determine trend direction
+                    // Determine trend direction. Threshold is configurable (default 5,
+                    // unchanged for every existing caller) because it isn't one-size-fits-
+                    // all: ROE/ROCE can swing several points in a year, but a metric like
+                    // Promoter Holding moves in much smaller steps, so the same 5-point bar
+                    // would read as "Flat" even for a decline worth flagging.
                     if (yearlyData[i].ChangePercent.HasValue)
                     {
-                        if (yearlyData[i].ChangePercent.Value > 5m)
+                        if (yearlyData[i].ChangePercent.Value > upDownThresholdPercent)
                             yearlyData[i].TrendDirection = "Up";
-                        else if (yearlyData[i].ChangePercent.Value < -5m)
+                        else if (yearlyData[i].ChangePercent.Value < -upDownThresholdPercent)
                             yearlyData[i].TrendDirection = "Down";
                         else
                             yearlyData[i].TrendDirection = "Flat";

@@ -67,6 +67,10 @@ namespace SoundMoney.Services
             var roceByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateRoce(f), isPercentageMetric: true);
             var debtToEquityByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateDebtToEquity(f), isPercentageMetric: false);
             var fcfByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FreeCashFlowCr, isPercentageMetric: false);
+            // Promoter Holding moves far more slowly year-to-year than ROE/ROCE, so it
+            // needs a much tighter Up/Down threshold than those metrics' default 5 points -
+            // otherwise a real, worth-flagging decline reads as "Flat" (see FinancialAlgorithms.CalculateYearlyMetrics).
+            var promoterHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.PromoterHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
 
             // Determine trend directions
             string revenueTrend = FinancialAlgorithms.DetermineTrendDirection(revenueByYear);
@@ -75,6 +79,7 @@ namespace SoundMoney.Services
             string roceTrend = FinancialAlgorithms.DetermineTrendDirection(roceByYear);
             string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining" : FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
             string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
+            string promoterHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(promoterHoldingByYear);
 
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
@@ -104,7 +109,7 @@ namespace SoundMoney.Services
                 Beta = current.Beta,
                 CashConversionCycleDays = current.CashConversionCycleDays,
                 PromoterHoldingPercent = current.PromoterHoldingPercent,
-                PromoterHoldingTrend = current.PromoterHoldingTrend,
+                PromoterHoldingTrend = promoterHoldingTrend,
                 PromoterPledgePercent = FinancialAlgorithms.NormalizePromoterPledgePercent(current),
 
                 // 3. Deep Financial Indicators
@@ -149,6 +154,7 @@ namespace SoundMoney.Services
                 RoceByYear = roceByYear,
                 DebtToEquityByYear = debtToEquityByYear,
                 FreeCashFlowByYear = fcfByYear,
+                PromoterHoldingByYear = promoterHoldingByYear,
 
                 // 6. Trend Summary Indicators
                 RevenueTrend = revenueTrend,

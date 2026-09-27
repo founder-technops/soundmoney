@@ -151,6 +151,7 @@ public class StockDetailsViewModel
     public List<YearlyMetric> RoceByYear { get; set; } = new();
     public List<YearlyMetric> DebtToEquityByYear { get; set; } = new();
     public List<YearlyMetric> FreeCashFlowByYear { get; set; } = new();
+    public List<YearlyMetric> PromoterHoldingByYear { get; set; } = new();
 
     // 6. Trend Summary Indicators
     public string? RevenueTrend { get; set; }

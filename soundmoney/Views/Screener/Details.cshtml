@@ -647,6 +647,14 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">Promoter Holding Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.PromoterHoldingTrend == "Improving" ? "bg-success" : Model.PromoterHoldingTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.PromoterHoldingTrend
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Tabs for Different Metrics -->
@@ -668,6 +676,9 @@
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="fcf-tab" data-bs-toggle="tab" data-bs-target="#fcf-content" type="button" role="tab" aria-controls="fcf-content" aria-selected="false">FCF</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="promoter-tab" data-bs-toggle="tab" data-bs-target="#promoter-content" type="button" role="tab" aria-controls="promoter-content" aria-selected="false">Promoter Holding</button>
                 </li>
             </ul>
 
@@ -1020,6 +1031,66 @@
                                 }
                             </tbody>
                         </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+
+                <!-- Promoter Holding Tab -->
+                <div class="tab-pane fade" id="promoter-content" role="tabpanel" aria-labelledby="promoter-tab">
+                    @if (Model.PromoterHoldingByYear != null && Model.PromoterHoldingByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">Promoter Holding %</th>
+                                    <th class="text-center">YoY Change (bps)</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.PromoterHoldingByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")%</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N0")
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <p class="text-muted extra-small mb-0">Only the fiscal year-end (March) quarter is shown, so this lines up with the annual figures above rather than mixing in quarterly noise.</p>
                     }
                     else
                     {

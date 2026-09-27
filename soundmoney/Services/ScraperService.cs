@@ -262,9 +262,7 @@ namespace SoundMoney.Services
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
             }
 
-            var (promoterHolding, promoterTrend) = ExtractPromoterHoldingAndTrend(doc);
-            df.PromoterHoldingPercent = promoterHolding;
-            df.PromoterHoldingTrend = promoterTrend;
+            df.PromoterHoldingPercent = ExtractCurrentPromoterHolding(doc);
 
             // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
@@ -346,33 +344,46 @@ namespace SoundMoney.Services
             return 0m;
         }
 
-        private (decimal Current, string? Trend) ExtractPromoterHoldingAndTrend(HtmlDocument doc)
+        private decimal ExtractCurrentPromoterHolding(HtmlDocument doc)
         {
             var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
-            if (shareholdingSection == null) return (0m, null);
-
-            decimal current = GetLastCellRowValue(shareholdingSection, "Promoters");
-
-            var quarterly = GetRowValuesByColumn(shareholdingSection, "Promoters");
-            string? trend = DeterminePromoterHoldingTrend(quarterly);
-
-            return (current, trend);
+            return shareholdingSection == null ? 0m : GetLastCellRowValue(shareholdingSection, "Promoters");
         }
 
-        private string? DeterminePromoterHoldingTrend(Dictionary<int, decimal> quarterlyValues)
+        // Screener's shareholding table is scraped quarterly (Jun/Sep/Dec/Mar), unlike the
+        // P&L/balance-sheet/cash-flow tables this file otherwise reads, which are annual.
+        // Every other Year-by-Year metric (Sales, Profit, ROE...) compares one value per
+        // fiscal year, so mixing in Jun/Sep/Dec columns would compare a DIFFERENT quarter
+        // each year - not a fair year-over-year trend. Keeping only the Mar (fiscal
+        // year-end) columns lines this metric up on the same annual grain as the rest of
+        // the Year-by-Year Trend Analysis section. Keyed by YEAR (not column index),
+        // because the shareholding table has a different column count/shape than the
+        // P&L table that ExtractHistoricalFinancials otherwise indexes by column.
+        private Dictionary<int, decimal> ExtractPromoterHoldingByFiscalYear(HtmlDocument doc)
         {
-            if (quarterlyValues == null || quarterlyValues.Count < 2) return null;
+            var result = new Dictionary<int, decimal>();
 
-            // Compare the oldest to the newest scraped quarter rather than quarter-over-
-            // quarter: promoter holding moves in small, deliberate steps (block deals,
-            // open-market buys/sells, ESOP-driven dilution), so a single-quarter wiggle is
-            // noise - the direction across the whole scraped window is the real signal.
-            var ordered = quarterlyValues.OrderBy(kv => kv.Key).Select(kv => kv.Value).ToList();
-            decimal change = ordered.Last() - ordered.First();
+            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
+            if (shareholdingSection == null) return result;
 
-            if (change > 0.5m) return "Improving";
-            if (change < -0.5m) return "Declining";
-            return "Stable";
+            var headerCells = shareholdingSection.SelectNodes(".//thead//th");
+            if (headerCells == null || headerCells.Count <= 1) return result;
+
+            var promoterByColumn = GetRowValuesByColumn(shareholdingSection, "Promoters");
+
+            for (int i = 1; i < headerCells.Count; i++)
+            {
+                string headerText = headerCells[i].InnerText.Trim();
+                if (!headerText.Contains("Mar", StringComparison.OrdinalIgnoreCase)) continue;
+
+                int year = ExtractYearFromHeader(headerText);
+                if (year > 0 && promoterByColumn.TryGetValue(i, out decimal value))
+                {
+                    result[year] = value;
+                }
+            }
+
+            return result;
         }
 
         private decimal ExtractPromoterPledgeFromProsAndCons(HtmlDocument doc)
@@ -477,6 +488,9 @@ namespace SoundMoney.Services
             //ratios
             var dicCashConversionCycleDays = GetRowValuesByColumn(ratiosSection, "Cash Conversion Cycle");
 
+            //shareholding (year-keyed, not column-index-keyed - see method comment)
+            var dicPromoterHoldingPercent = ExtractPromoterHoldingByFiscalYear(doc);
+
             foreach (var header in yearHeaderList)
             {
                 historyList.Add(new Financial
@@ -515,6 +529,8 @@ namespace SoundMoney.Services
                     FreeCashFlowCr = dicFreeCashFlowCr.TryGetValue(header.ColumnIndex, out decimal freecashflowcr) ? freecashflowcr : 0m,
                     //ratios
                     CashConversionCycleDays = dicCashConversionCycleDays.TryGetValue(header.ColumnIndex, out decimal cashconversioncycledays) ? cashconversioncycledays : 0m,
+                    //shareholding - keyed by header.Year, not header.ColumnIndex (see dicPromoterHoldingPercent above)
+                    PromoterHoldingPercent = dicPromoterHoldingPercent.TryGetValue(header.Year, out decimal promoterholdingpercent) ? promoterholdingpercent : 0m,
                 });
             }
 
