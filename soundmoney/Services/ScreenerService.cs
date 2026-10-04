@@ -71,6 +71,8 @@ namespace SoundMoney.Services
             // needs a much tighter Up/Down threshold than those metrics' default 5 points -
             // otherwise a real, worth-flagging decline reads as "Flat" (see FinancialAlgorithms.CalculateYearlyMetrics).
             var promoterHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.PromoterHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
+            var fiiHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FiiHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
+            var diiHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.DiiHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
 
             // Determine trend directions
             string revenueTrend = FinancialAlgorithms.DetermineTrendDirection(revenueByYear);
@@ -80,6 +82,8 @@ namespace SoundMoney.Services
             string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining" : FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
             string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
             string promoterHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(promoterHoldingByYear);
+            string fiiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(fiiHoldingByYear);
+            string diiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(diiHoldingByYear);
 
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
@@ -110,6 +114,10 @@ namespace SoundMoney.Services
                 CashConversionCycleDays = current.CashConversionCycleDays,
                 PromoterHoldingPercent = current.PromoterHoldingPercent,
                 PromoterHoldingTrend = promoterHoldingTrend,
+                FiiHoldingPercent = current.FiiHoldingPercent,
+                FiiHoldingTrend = fiiHoldingTrend,
+                DiiHoldingPercent = current.DiiHoldingPercent,
+                DiiHoldingTrend = diiHoldingTrend,
                 PromoterPledgePercent = FinancialAlgorithms.NormalizePromoterPledgePercent(current),
 
                 // 3. Deep Financial Indicators
@@ -155,6 +163,8 @@ namespace SoundMoney.Services
                 DebtToEquityByYear = debtToEquityByYear,
                 FreeCashFlowByYear = fcfByYear,
                 PromoterHoldingByYear = promoterHoldingByYear,
+                FiiHoldingByYear = fiiHoldingByYear,
+                DiiHoldingByYear = diiHoldingByYear,
 
                 // 6. Trend Summary Indicators
                 RevenueTrend = revenueTrend,

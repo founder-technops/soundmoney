@@ -106,6 +106,10 @@ public class StockDetailsViewModel
     public decimal CashConversionCycleDays { get; set; }
     public decimal PromoterHoldingPercent { get; set; }
     public string? PromoterHoldingTrend { get; set; }
+    public decimal FiiHoldingPercent { get; set; }
+    public string? FiiHoldingTrend { get; set; }
+    public decimal DiiHoldingPercent { get; set; }
+    public string? DiiHoldingTrend { get; set; }
     public decimal PromoterPledgePercent { get; set; }
 
     // 3. Deep Financial Indicators
@@ -152,6 +156,8 @@ public class StockDetailsViewModel
     public List<YearlyMetric> DebtToEquityByYear { get; set; } = new();
     public List<YearlyMetric> FreeCashFlowByYear { get; set; } = new();
     public List<YearlyMetric> PromoterHoldingByYear { get; set; } = new();
+    public List<YearlyMetric> FiiHoldingByYear { get; set; } = new();
+    public List<YearlyMetric> DiiHoldingByYear { get; set; } = new();
 
     // 6. Trend Summary Indicators
     public string? RevenueTrend { get; set; }

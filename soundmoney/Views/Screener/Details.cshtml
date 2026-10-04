@@ -519,6 +519,32 @@
                                 <span class="badge badge-sm ms-1 @pledgeInd.CssClass">@pledgeInd.Label</span>
                             </div>
                         </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                FII Holding
+                                @if (!string.IsNullOrEmpty(Model.FiiHoldingTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.FiiHoldingTrend == "Improving" ? "bg-success" : Model.FiiHoldingTrend == "Declining" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.FiiHoldingTrend == "Improving" ? "↑" : Model.FiiHoldingTrend == "Declining" ? "↓" : "→")
+                                    </span>
+                                }
+                                <div class="extra-small text-muted">Share held by Foreign Institutional Investors</div>
+                            </div>
+                            <strong>@Model.FiiHoldingPercent.ToString("N2")%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
+                            <div class="text-muted small">
+                                DII Holding
+                                @if (!string.IsNullOrEmpty(Model.DiiHoldingTrend))
+                                {
+                                    <span class="badge badge-sm ms-1 @(Model.DiiHoldingTrend == "Improving" ? "bg-success" : Model.DiiHoldingTrend == "Declining" ? "bg-danger" : "bg-secondary")">
+                                        @(Model.DiiHoldingTrend == "Improving" ? "↑" : Model.DiiHoldingTrend == "Declining" ? "↓" : "→")
+                                    </span>
+                                }
+                                <div class="extra-small text-muted">Share held by Domestic Institutional Investors (mutual funds, insurers, banks)</div>
+                            </div>
+                            <strong>@Model.DiiHoldingPercent.ToString("N2")%</strong>
+                        </li>
                     </ul>
                 </div>
 
@@ -655,6 +681,22 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">FII Holding Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.FiiHoldingTrend == "Improving" ? "bg-success" : Model.FiiHoldingTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.FiiHoldingTrend
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4 col-lg-2-4">
+                    <div class="metric-card text-center border">
+                        <span class="text-muted d-block small">DII Holding Trend</span>
+                        <div class="badge fs-6 mt-2 w-100 @(Model.DiiHoldingTrend == "Improving" ? "bg-success" : Model.DiiHoldingTrend == "Declining" ? "bg-danger" : "bg-warning text-dark")">
+                            @Model.DiiHoldingTrend
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Tabs for Different Metrics -->
@@ -679,6 +721,12 @@
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="promoter-tab" data-bs-toggle="tab" data-bs-target="#promoter-content" type="button" role="tab" aria-controls="promoter-content" aria-selected="false">Promoter Holding</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="fii-tab" data-bs-toggle="tab" data-bs-target="#fii-content" type="button" role="tab" aria-controls="fii-content" aria-selected="false">FII Holding</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="dii-tab" data-bs-toggle="tab" data-bs-target="#dii-content" type="button" role="tab" aria-controls="dii-content" aria-selected="false">DII Holding</button>
                 </li>
             </ul>
 
@@ -1091,6 +1139,122 @@
                             </tbody>
                         </table>
                         <p class="text-muted extra-small mb-0">Only the fiscal year-end (March) quarter is shown, so this lines up with the annual figures above rather than mixing in quarterly noise.</p>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+                <!-- FII Holding Tab -->
+                <div class="tab-pane fade" id="fii-content" role="tabpanel" aria-labelledby="fii-tab">
+                    @if (Model.FiiHoldingByYear != null && Model.FiiHoldingByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">FII Holding %</th>
+                                    <th class="text-center">YoY Change (bps)</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.FiiHoldingByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")%</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N2")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-0">No data available</p>
+                    }
+                </div>
+                <!-- DII Holding Tab -->
+                <div class="tab-pane fade" id="dii-content" role="tabpanel" aria-labelledby="dii-tab">
+                    @if (Model.DiiHoldingByYear != null && Model.DiiHoldingByYear.Count > 0)
+                    {
+                        <table class="table table-sm align-middle font-monospace small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Year</th>
+                                    <th class="text-center">DII Holding %</th>
+                                    <th class="text-center">YoY Change (bps)</th>
+                                    <th class="text-center">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var metric in Model.DiiHoldingByYear)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">@metric.Year</td>
+                                        <td class="text-center">@metric.Value.ToString("N2")%</td>
+                                        <td class="text-center">
+                                            @if (metric.ChangePercent.HasValue)
+                                            {
+                                                <span class="@(metric.ChangePercent > 0 ? "text-success" : metric.ChangePercent < 0 ? "text-danger" : "text-muted")">
+                                                    @(metric.ChangePercent > 0 ? "+" : "")@metric.ChangePercent.Value.ToString("N2")%
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                        <td class="text-center">
+                                            @if (!string.IsNullOrEmpty(metric.TrendDirection))
+                                            {
+                                                if (metric.TrendDirection == "Up")
+                                                {
+                                                    <span class="badge bg-success">↑ Up</span>
+                                                }
+                                                else if (metric.TrendDirection == "Down")
+                                                {
+                                                    <span class="badge bg-danger">↓ Down</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">→ Flat</span>
+                                                }
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     }
                     else
                     {

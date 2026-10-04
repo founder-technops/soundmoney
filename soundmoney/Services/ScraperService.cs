@@ -262,7 +262,9 @@ namespace SoundMoney.Services
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
             }
 
-            df.PromoterHoldingPercent = ExtractCurrentPromoterHolding(doc);
+            df.PromoterHoldingPercent = ExtractCurrentShareholdingPercent(doc, "Promoters");
+            df.FiiHoldingPercent = ExtractCurrentShareholdingPercent(doc, "FII");
+            df.DiiHoldingPercent = ExtractCurrentShareholdingPercent(doc, "DII");
 
             // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
@@ -344,10 +346,17 @@ namespace SoundMoney.Services
             return 0m;
         }
 
-        private decimal ExtractCurrentPromoterHolding(HtmlDocument doc)
+        // Generalized versions of the two Promoter-specific methods below: Screener's
+        // shareholding table has one row each for Promoters, FIIs and DIIs, all in the
+        // same table/shape, so a single row-name-parameterized pair of methods covers all
+        // three rather than three near-identical copy-pasted extractors. Row names use
+        // GetLastCellRowValue/GetRowValuesByColumn's existing case-insensitive substring
+        // match, so "FII" matches Screener's actual "FIIs +" row label, "DII" matches
+        // "DIIs +", and "Promoters" matches "Promoters +".
+        private decimal ExtractCurrentShareholdingPercent(HtmlDocument doc, string rowName)
         {
             var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
-            return shareholdingSection == null ? 0m : GetLastCellRowValue(shareholdingSection, "Promoters");
+            return shareholdingSection == null ? 0m : GetLastCellRowValue(shareholdingSection, rowName);
         }
 
         // Screener's shareholding table is scraped quarterly (Jun/Sep/Dec/Mar), unlike the
@@ -359,7 +368,7 @@ namespace SoundMoney.Services
         // the Year-by-Year Trend Analysis section. Keyed by YEAR (not column index),
         // because the shareholding table has a different column count/shape than the
         // P&L table that ExtractHistoricalFinancials otherwise indexes by column.
-        private Dictionary<int, decimal> ExtractPromoterHoldingByFiscalYear(HtmlDocument doc)
+        private Dictionary<int, decimal> ExtractShareholdingByFiscalYear(HtmlDocument doc, string rowName)
         {
             var result = new Dictionary<int, decimal>();
 
@@ -369,7 +378,7 @@ namespace SoundMoney.Services
             var headerCells = shareholdingSection.SelectNodes(".//thead//th");
             if (headerCells == null || headerCells.Count <= 1) return result;
 
-            var promoterByColumn = GetRowValuesByColumn(shareholdingSection, "Promoters");
+            var byColumn = GetRowValuesByColumn(shareholdingSection, rowName);
 
             for (int i = 1; i < headerCells.Count; i++)
             {
@@ -377,7 +386,7 @@ namespace SoundMoney.Services
                 if (!headerText.Contains("Mar", StringComparison.OrdinalIgnoreCase)) continue;
 
                 int year = ExtractYearFromHeader(headerText);
-                if (year > 0 && promoterByColumn.TryGetValue(i, out decimal value))
+                if (year > 0 && byColumn.TryGetValue(i, out decimal value))
                 {
                     result[year] = value;
                 }
@@ -489,7 +498,9 @@ namespace SoundMoney.Services
             var dicCashConversionCycleDays = GetRowValuesByColumn(ratiosSection, "Cash Conversion Cycle");
 
             //shareholding (year-keyed, not column-index-keyed - see method comment)
-            var dicPromoterHoldingPercent = ExtractPromoterHoldingByFiscalYear(doc);
+            var dicPromoterHoldingPercent = ExtractShareholdingByFiscalYear(doc, "Promoters");
+            var dicFiiHoldingPercent = ExtractShareholdingByFiscalYear(doc, "FII");
+            var dicDiiHoldingPercent = ExtractShareholdingByFiscalYear(doc, "DII");
 
             foreach (var header in yearHeaderList)
             {
@@ -531,6 +542,8 @@ namespace SoundMoney.Services
                     CashConversionCycleDays = dicCashConversionCycleDays.TryGetValue(header.ColumnIndex, out decimal cashconversioncycledays) ? cashconversioncycledays : 0m,
                     //shareholding - keyed by header.Year, not header.ColumnIndex (see dicPromoterHoldingPercent above)
                     PromoterHoldingPercent = dicPromoterHoldingPercent.TryGetValue(header.Year, out decimal promoterholdingpercent) ? promoterholdingpercent : 0m,
+                    FiiHoldingPercent = dicFiiHoldingPercent.TryGetValue(header.Year, out decimal fiiholdingpercent) ? fiiholdingpercent : 0m,
+                    DiiHoldingPercent = dicDiiHoldingPercent.TryGetValue(header.Year, out decimal diiholdingpercent) ? diiholdingpercent : 0m,
                 });
             }
 

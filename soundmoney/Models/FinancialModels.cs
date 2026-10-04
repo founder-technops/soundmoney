@@ -41,6 +41,8 @@ namespace SoundMoney.Models
         public decimal Beta { get; set; } = 1.0m;
         public decimal PromoterPledgePercent { get; set; }
         public decimal PromoterHoldingPercent { get; set; }
+        public decimal FiiHoldingPercent { get; set; }
+        public decimal DiiHoldingPercent { get; set; }
         public int Year { get; set; }
 
         // --- P&L Metrics (Cr) ---
