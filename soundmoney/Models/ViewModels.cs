@@ -52,6 +52,11 @@ public class ScreenerResultRow
 
     public decimal DividendYieldPercent { get; set; }
     public bool IsDividendConsistent { get; set; }
+
+    // Same derivation as StockDetailsViewModel.DividendPerShareRupees - kept here too
+    // since the screener list card shows its own Dividend Yield figure independently of
+    // the Details/Summary pages.
+    public decimal DividendPerShareRupees => Math.Round((DividendYieldPercent / 100m) * CurrentPrice, 2);
 }
 
 public class ScreenerViewModel
@@ -60,6 +65,18 @@ public class ScreenerViewModel
     public string? SearchQuery { get; set; }
     public decimal MinMarginOfSafety { get; set; }
     public List<string> SelectedScores { get; set; } = new();
+}
+
+/// <summary>
+/// A simple, non-technical roll-up of every colour-coded indicator already shown on the
+/// Details screen (ratio badges plus trend arrows), so a reader who doesn't want to parse
+/// 20+ individual metrics can see "how many look good vs. how many look concerning" at a
+/// glance. NotApplicable (e.g. ratios that don't apply to banks/NBFCs) is tracked
+/// separately and left out of Total, so it never silently counts against or for a stock.
+/// </summary>
+public record SignalTally(int Positive, int Caution, int Negative, int NotApplicable)
+{
+    public int Total => Positive + Caution + Negative;
 }
 
 public class StockDetailsViewModel
@@ -95,6 +112,12 @@ public class StockDetailsViewModel
     public decimal StrongBuyBelowPrice => Math.Round(IntrinsicValue * 0.70m, 2);
     public decimal BuyBelowPrice => Math.Round(IntrinsicValue, 2);
     public decimal SellAbovePrice => Math.Round(IntrinsicValue * 1.20m, 2);
+
+    // Dividend Yield is, by definition, (dividend per share / current price) x 100 - so
+    // the rupee amount is just that relationship run in reverse. Computed rather than
+    // scraped, like the three prices above, so it can never drift out of sync with
+    // whatever DividendYieldPercent/CurrentPrice the rest of the page is already showing.
+    public decimal DividendPerShareRupees => Math.Round((DividendYieldPercent / 100m) * CurrentPrice, 2);
 
     // Simple per-share / company snapshot facts - not "good or bad" on their own, just
     // concrete reference numbers a common man can anchor the ratios above to.
@@ -442,6 +465,136 @@ public class StockDetailsViewModel
             <= 15.0m => ("Healthy", "bg-info text-dark"),
             _ => ("High Margin", "bg-success")
         };
+
+    // Walks every existing ratio badge and trend arrow already shown on the Details
+    // screen and buckets each by its own CssClass/value, rather than curating a smaller
+    // hand-picked subset - a plain count of "how many look good" is honest precisely
+    // because it doesn't quietly decide which few metrics matter most for this reader.
+    // "bg-secondary" doubles as both "Not Applicable" (e.g. Altman Z for a bank) and
+    // "Thin Margin" on NetProfitMargin; both read as a caution-leaning fact rather than a
+    // clear pass or fail, so bg-secondary is counted as NotApplicable only when it isn't
+    // already covered by Caution - in practice this only affects a handful of sector-gated
+    // ratios, and errs toward NOT overstating the Negative count.
+    public SignalTally GetSignalTally()
+    {
+        var ratioCssClasses = new List<string>
+        {
+            GetPeIndication().CssClass,
+            GetPbIndication().CssClass,
+            GetEvEbitdaIndication().CssClass,
+            GetPegIndication().CssClass,
+            GetBetaIndication().CssClass,
+            GetCashConversionCycleIndication().CssClass,
+            GetDebtToEquityIndication().CssClass,
+            GetDebtToEbitdaIndication().CssClass,
+            GetInterestCoverageIndication().CssClass,
+            GetCurrentRatioIndication().CssClass,
+            GetRoeIndication().CssClass,
+            GetRoicIndication().CssClass,
+            GetOperatingMarginIndication().CssClass,
+            GetSloanRatioIndication().CssClass,
+            GetFcfConversionIndication().CssClass,
+            GetDividendPayoutIndication().CssClass,
+            GetAltmanZIndication().CssClass,
+            GetPiotroskiIndication().CssClass,
+            GetMScoreIndication().CssClass,
+            GetNetProfitMarginIndication().CssClass,
+            GetPromoterPledgeIndication().CssClass,
+        };
+
+        int positive = ratioCssClasses.Count(c => c == "bg-success");
+        int negative = ratioCssClasses.Count(c => c == "bg-danger");
+        int secondaryCount = ratioCssClasses.Count(c => c == "bg-secondary");
+        int caution = ratioCssClasses.Count - positive - negative - secondaryCount;
+
+        // Trend arrows (Revenue/Profit/ROE/ROCE/Debt/Cash Flow from the Year-by-Year
+        // section, plus Promoter/FII/DII Holding) use "Improving"/"Declining"/"Stable"
+        // rather than a CssClass, so they're translated into the same three-way language
+        // here instead of introducing a second, parallel classification scheme.
+        string?[] trends =
+        {
+            RevenueTrend, ProfitTrend, RoeTrend, RoceTrend, DebtTrend, CashFlowTrend,
+            PromoterHoldingTrend, FiiHoldingTrend, DiiHoldingTrend
+        };
+
+        int trendNotApplicable = 0;
+        foreach (var t in trends)
+        {
+            if (t == "Improving") positive++;
+            else if (t == "Declining") negative++;
+            else if (t == "Stable") caution++;
+            else trendNotApplicable++; // null or "Insufficient Data"
+        }
+
+        return new SignalTally(positive, caution, negative, secondaryCount + trendNotApplicable);
+    }
+
+    // A short, plain-English reading of the numbers above - descriptive, not a
+    // recommendation. Deliberately uses "looks"/"shows"/hedged language throughout rather
+    // than imperative advice ("buy"/"sell"), matching the Screener page's own
+    // "for educational and screening purposes" framing. Every clause is driven entirely by
+    // values already computed elsewhere on this view model - nothing here is a new,
+    // independently-asserted judgment about the company.
+    public (string Summary, string Sentiment) GetBottomLineSummary()
+    {
+        string valuationPhrase = Verdict switch
+        {
+            "STRONG BUY" => "looks meaningfully cheaper than what it's probably worth",
+            "BUY" => "looks moderately undervalued",
+            "HOLD" => "looks roughly fairly priced",
+            "OVERVALUED" => "looks more expensive than what it's probably worth",
+            _ => "couldn't be reliably valued with the data available"
+        };
+
+        string healthPhrase = SoundScoreRating switch
+        {
+            "STRONG SOUND" => "its underlying financial health looks strong",
+            "SOUND" => "its underlying financial health looks solid",
+            "NEUTRAL" => "its underlying financial health is mixed - some things look fine, others need a closer look",
+            _ => "its underlying financial health shows real warning signs"
+        };
+
+        // Worth-watching callouts, roughly worst-first; capped at 2 so the summary stays a
+        // couple of sentences, not a repeat of the full metrics grid below it.
+        var cautions = new List<string>();
+        if (!IsFinancialSector && GetMScoreIndication().Label == "High Risk")
+            cautions.Add("a formula that checks for overstated profits flags this company for a closer look");
+        if (!IsFinancialSector && GetAltmanZIndication().Label == "Distress Risk")
+            cautions.Add("it shows signs of financial distress risk");
+        if (GetPromoterPledgeIndication().Label == "High Risk")
+            cautions.Add("a large share of promoter holding is pledged against loans, which adds risk");
+        if (PromoterHoldingTrend == "Declining")
+            cautions.Add("promoter holding has been declining over time");
+        if (!IsFinancialSector && (GetDebtToEquityIndication().Label == "Risky" || GetInterestCoverageIndication().Label == "Risky"))
+            cautions.Add("debt levels look elevated relative to earnings");
+        if (!IsFinancialSector && GetFcfConversionIndication().Label == "Weak")
+            cautions.Add("profit isn't fully converting into real cash");
+        cautions = cautions.Take(2).ToList();
+
+        var positives = new List<string>();
+        if (cautions.Count < 2)
+        {
+            if (!IsFinancialSector && GetPiotroskiIndication().Label == "Strong")
+                positives.Add("it scores well on a standard checklist of financial strength");
+            else if (IsDividendConsistent)
+                positives.Add("it has a consistent track record of paying dividends");
+            else if (PromoterHoldingTrend == "Improving")
+                positives.Add("promoter holding has been rising, a sign of insider confidence");
+        }
+
+        var sentences = new List<string> { $"{CompanyName} {valuationPhrase}, and {healthPhrase}." };
+        if (cautions.Count > 0)
+            sentences.Add("One thing to watch: " + string.Join(", and ", cautions) + ".");
+        if (positives.Count > 0)
+            sentences.Add("On the positive side, " + positives[0] + ".");
+
+        string sentiment =
+            (Verdict is "STRONG BUY" or "BUY") && (SoundScoreRating is "STRONG SOUND" or "SOUND") ? "Positive"
+            : (Verdict == "OVERVALUED" || SoundScoreRating == "UNSOUND") ? "Negative"
+            : "Caution";
+
+        return (string.Join(" ", sentences), sentiment);
+    }
 }
 
 public class ErrorViewModel

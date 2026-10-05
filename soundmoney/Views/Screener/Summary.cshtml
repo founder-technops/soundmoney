@@ -1,0 +1,186 @@
+@model SoundMoney.Models.StockDetailsViewModel
+@{
+    ViewData["Title"] = $"{Model.Symbol} - Simple Summary";
+    var (bottomLine, sentiment) = Model.GetBottomLineSummary();
+    var tally = Model.GetSignalTally();
+    var sentimentBorder = sentiment == "Positive" ? "border-success" : sentiment == "Negative" ? "border-danger" : "border-warning";
+    var sentimentBg = sentiment == "Positive" ? "bg-success-subtle" : sentiment == "Negative" ? "bg-danger-subtle" : "bg-warning-subtle";
+    var peInd = Model.GetPeIndication();
+    var debtInd = Model.GetDebtToEquityIndication();
+    var roeInd = Model.GetRoeIndication();
+}
+
+<style>
+    .extra-small { font-size: 0.8rem !important; }
+    .signal-count { font-size: 1.75rem; font-weight: 700; line-height: 1; }
+    .headline-card { background-color: #f8f9fa; border-radius: 0.5rem; padding: 1rem; height: 100%; }
+</style>
+
+<div class="container px-2 px-md-4 py-3" style="max-width: 900px;">
+    <!-- Navigation -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a asp-action="Index" class="btn btn-outline-secondary btn-sm">&larr; Back to Screener</a>
+        <a asp-action="Details" asp-route-symbol="@Model.Symbol" class="btn btn-outline-primary btn-sm">
+            View Full Technical Analysis &rarr;
+        </a>
+    </div>
+
+    <!-- Header -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge bg-dark text-white font-monospace fs-6">@Model.Symbol</span>
+                        <span class="badge bg-light text-secondary border">@Model.Sector</span>
+                    </div>
+                    <h3 class="fw-bold mb-0">@Model.CompanyName</h3>
+                </div>
+                <div class="text-md-end">
+                    <span class="text-muted small d-block">Current Price</span>
+                    <h2 class="fw-bold text-primary mb-0">₹@Model.CurrentPrice.ToString("N2")</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottom Line -->
+    <div class="card border-2 @sentimentBorder shadow-sm mb-3">
+        <div class="card-body p-3 p-md-4 @sentimentBg bg-opacity-25">
+            <h5 class="fw-bold mb-2">In Plain English</h5>
+            <p class="mb-3" style="font-size: 1.05rem;">@bottomLine</p>
+
+            <div class="row g-2 text-center mb-2">
+                <div class="col-4">
+                    <div class="signal-count text-success">@tally.Positive</div>
+                    <span class="extra-small text-muted">Look Good</span>
+                </div>
+                <div class="col-4">
+                    <div class="signal-count text-warning-emphasis">@tally.Caution</div>
+                    <span class="extra-small text-muted">Worth a Look</span>
+                </div>
+                <div class="col-4">
+                    <div class="signal-count text-danger">@tally.Negative</div>
+                    <span class="extra-small text-muted">A Concern</span>
+                </div>
+            </div>
+            <p class="extra-small text-muted mb-0 text-center">
+                Based on @tally.Total signals checked on this stock@(tally.NotApplicable > 0 ? $" ({tally.NotApplicable} don't apply to this company)" : "").
+            </p>
+        </div>
+    </div>
+
+    <!-- Verdict + Score -->
+    <div class="row g-3 mb-3">
+        <div class="col-6">
+            <div class="card border-0 shadow-sm text-center p-3 h-100">
+                <span class="text-muted small">Is it cheap or expensive?</span>
+                <span class="badge fs-5 mt-2 @(Model.Verdict == "STRONG BUY" || Model.Verdict == "BUY" ? "bg-success" : Model.Verdict == "OVERVALUED" ? "bg-danger" : "bg-warning text-dark")">
+                    @Model.Verdict
+                </span>
+                <span class="extra-small text-muted mt-2">
+                    Estimated to be worth about ₹@Model.IntrinsicValue.ToString("N2") per share
+                </span>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="card border-0 shadow-sm text-center p-3 h-100">
+                <span class="text-muted small">How financially healthy is it?</span>
+                <span class="badge fs-5 mt-2 @(Model.SoundScoreRating == "STRONG SOUND" || Model.SoundScoreRating == "SOUND" ? "bg-primary" : Model.SoundScoreRating == "UNSOUND" ? "bg-danger" : "bg-secondary")">
+                    @Model.SoundScoreRating
+                </span>
+                <span class="extra-small text-muted mt-2">Score: @Model.SoundScore / 100</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Buy / Fair / Sell zone -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-body p-3">
+            <span class="small fw-bold text-muted d-block mb-2">What price would make this a good deal?</span>
+            <div class="row text-center g-2">
+                <div class="col-4">
+                    <span class="badge bg-success mb-1">Attractive Below</span>
+                    <div class="fw-bold fs-5">₹@Model.StrongBuyBelowPrice.ToString("N2")</div>
+                </div>
+                <div class="col-4">
+                    <span class="badge bg-info text-dark mb-1">Fair Value</span>
+                    <div class="fw-bold fs-5">₹@Model.IntrinsicValue.ToString("N2")</div>
+                </div>
+                <div class="col-4">
+                    <span class="badge bg-danger mb-1">Pricey Above</span>
+                    <div class="fw-bold fs-5">₹@Model.SellAbovePrice.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Headline facts, not the full 24-metric breakdown -->
+    <div class="card border-0 shadow-sm mb-3">
+        <div class="card-header bg-white border-0 py-3">
+            <h6 class="fw-bold mb-0">A Few Key Facts</h6>
+        </div>
+        <div class="card-body pt-0">
+            <div class="row g-3">
+                <div class="col-6 col-md-4">
+                    <div class="headline-card">
+                        <span class="text-muted extra-small d-block">Price vs. Earnings (P/E)</span>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <strong>@Model.PE.ToString("N1")</strong>
+                            <span class="badge badge-sm @peInd.CssClass">@peInd.Label</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="headline-card">
+                        <span class="text-muted extra-small d-block">Debt Level</span>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <strong>@Model.DebtToEquity.ToString("N2")</strong>
+                            <span class="badge badge-sm @debtInd.CssClass">@debtInd.Label</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="headline-card">
+                        <span class="text-muted extra-small d-block">Return on Equity (ROE)</span>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <strong>@Model.ROEPercent.ToString("N1")%</strong>
+                            <span class="badge badge-sm @roeInd.CssClass">@roeInd.Label</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="headline-card">
+                        <span class="text-muted extra-small d-block">Dividend Paid (per share)</span>
+                        <strong class="d-block mt-1">₹@Model.DividendPerShareRupees.ToString("N2")</strong>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="headline-card">
+                        <span class="text-muted extra-small d-block">
+                            Promoter Holding
+                            @if (!string.IsNullOrEmpty(Model.PromoterHoldingTrend))
+                            {
+                                <span class="ms-1">@(Model.PromoterHoldingTrend == "Improving" ? "↑" : Model.PromoterHoldingTrend == "Declining" ? "↓" : "→")</span>
+                            }
+                        </span>
+                        <strong class="d-block mt-1">@Model.PromoterHoldingPercent.ToString("N1")%</strong>
+                    </div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="headline-card">
+                        <span class="text-muted extra-small d-block">Last Updated</span>
+                        <strong class="d-block mt-1">@(Model.LastAnalyzed.HasValue ? Model.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="card border-0 bg-light p-3 mb-3">
+        <p class="text-muted extra-small mb-0">
+            This page summarizes the same data and calculations shown on the Full Technical Analysis page, in plain language, for general education only - it is not investment advice. Always verify independently before making any investment decision.
+        </p>
+    </div>
+</div>

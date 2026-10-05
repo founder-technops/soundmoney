@@ -69,6 +69,23 @@ public class ScreenerController : Controller
         return View(model);
     }
 
+    // Plain-English companion to Details, for common-man/retail investors rather than
+    // readers comfortable with ratios and jargon. Reuses the exact same service call (and
+    // therefore the exact same underlying numbers) as Details - only the view differs -
+    // so the two pages can never show inconsistent figures for the same stock.
+    [HttpGet("Screener/Summary/{symbol}")]
+    public async Task<IActionResult> Summary(string symbol, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(symbol))
+        {
+            return BadRequest("Stock symbol is required.");
+        }
+
+        var model = await _screener.RunScreenDetailsAsync(symbol);
+
+        return View(model);
+    }
+
     [HttpGet]
     public IActionResult Error() => View();
 }

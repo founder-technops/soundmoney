@@ -137,8 +137,8 @@
                                         <strong>₹@row.IntrinsicValue.ToString("N2")</strong>
                                     </div>
                                     <div class="col-3 border-end">
-                                        <span class="text-muted d-block extra-small">Div. Yield</span>
-                                        <strong>@row.DividendYieldPercent.ToString("N2")%</strong>
+                                        <span class="text-muted d-block extra-small">Dividend/Share</span>
+                                        <strong>₹@row.DividendPerShareRupees.ToString("N2")</strong>
                                     </div>
                                     <div class="col-3">
                                         <span class="text-muted d-block extra-small">MoS</span>
@@ -163,8 +163,8 @@
                                     }
                                 </div>
 
-                                <a asp-controller="Screener" asp-action="Details" asp-route-symbol="@row.Symbol" class="btn btn-outline-primary btn-sm px-4">
-                                    Deep Analysis
+                                <a asp-controller="Screener" asp-action="Summary" asp-route-symbol="@row.Symbol" class="btn btn-outline-primary btn-sm px-4">
+                                    View Summary
                                 </a>
                             </div>
                         </div>
@@ -206,8 +206,8 @@
                                     <strong>₹@row.IntrinsicValue.ToString("N2")</strong>
                                 </div>
                                 <div class="col-6 border-end pt-1">
-                                    <span class="text-muted d-block extra-small">Div. Yield</span>
-                                    <strong>@row.DividendYieldPercent.ToString("N2")%</strong>
+                                    <span class="text-muted d-block extra-small">Dividend/Share</span>
+                                    <strong>₹@row.DividendPerShareRupees.ToString("N2")</strong>
                                 </div>
                                 <div class="col-6 pt-1">
                                     <span class="text-muted d-block extra-small">MoS</span>
@@ -231,8 +231,8 @@
                                     }
                                 </div>
 
-                                <a asp-controller="Screener" asp-action="Details" asp-route-symbol="@row.Symbol" class="btn btn-outline-primary btn-sm w-100 text-center">
-                                    Deep Analysis
+                                <a asp-controller="Screener" asp-action="Summary" asp-route-symbol="@row.Symbol" class="btn btn-outline-primary btn-sm w-100 text-center">
+                                    View Summary
                                 </a>
                             </div>
                         </div>
