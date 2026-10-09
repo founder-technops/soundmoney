@@ -79,6 +79,13 @@ public record SignalTally(int Positive, int Caution, int Negative, int NotApplic
     public int Total => Positive + Caution + Negative;
 }
 
+/// <summary>
+/// One plain-English question about the company, its short answer, a badge colour, and an
+/// optional supporting fact (the underlying number, for anyone who wants it) - the Summary
+/// screen's alternative to showing a ratio name and a number first.
+/// </summary>
+public record QuestionAnswer(string Question, string Answer, string CssClass, string? SupportingFact = null);
+
 public class StockDetailsViewModel
 {
     // 1. Basic Information
@@ -331,13 +338,20 @@ public class StockDetailsViewModel
     // same threshold PoorCashConversionOrAccrualRule already uses internally to flag
     // high accrual risk, so this indicator always agrees with what's already factored
     // into that rule's decision.
+    // Gated on IsFinancialSector like the other three health scores (Altman Z, Piotroski,
+    // M-Score) - FinancialAlgorithms.CalculateSloanRatio already returns 0 for banks/NBFCs
+    // since the ratio isn't meaningful for them, but without this gate that 0 fell into
+    // the "<=5.0" branch and read as a false "Low Risk" (good) signal for every financial-
+    // sector stock, rather than correctly reading as not applicable.
     public (string Label, string CssClass) GetSloanRatioIndication() =>
-        SloanRatio switch
-        {
-            <= 5.0m => ("Low Risk", "bg-success"),
-            <= 12.0m => ("Some Risk", "bg-warning text-dark"),
-            _ => ("High Risk", "bg-danger")
-        };
+        IsFinancialSector
+            ? ("Not Applicable", "bg-secondary")
+            : SloanRatio switch
+            {
+                <= 5.0m => ("Low Risk", "bg-success"),
+                <= 12.0m => ("Some Risk", "bg-warning text-dark"),
+                _ => ("High Risk", "bg-danger")
+            };
 
     // FCF Conversion: what share of accounting profit actually showed up as real free
     // cash. A different lens on the same "is the profit real" question the Sloan Ratio
@@ -475,6 +489,170 @@ public class StockDetailsViewModel
     // clear pass or fail, so bg-secondary is counted as NotApplicable only when it isn't
     // already covered by Caution - in practice this only affects a handful of sector-gated
     // ratios, and errs toward NOT overstating the Negative count.
+    // Eleven plain-English questions, each answered entirely from fields/indications
+    // already computed elsewhere on this view model - nothing here is a new, independent
+    // judgment about the company. Order follows a simple narrative: growth, then debt
+    // safety, then cash-quality (two related questions back to back), then returns, then
+    // capital allocation (dividend + reinvestment, naturally paired), then insider signals.
+    public List<QuestionAnswer> GetKeyQuestions()
+    {
+        var qa = new List<QuestionAnswer>();
+
+        // 1. Revenue growth
+        {
+            string answer, css;
+            string? fact = null;
+            if (RevenueTrend == "Declining") { answer = "No, it's shrinking"; css = "bg-danger"; }
+            else if (RevenueCagr3Yr > 0m)
+            {
+                answer = $"Yes, about {RevenueCagr3Yr:N1}% a year";
+                css = RevenueCagr3Yr >= 15m ? "bg-success" : RevenueCagr3Yr >= 5m ? "bg-info text-dark" : "bg-warning text-dark";
+                fact = "Over the last 3 years";
+            }
+            else if (RevenueTrend == "Improving") { answer = "Growing, though not at a steady pace"; css = "bg-info text-dark"; }
+            else if (RevenueTrend == "Stable") { answer = "Roughly flat"; css = "bg-warning text-dark"; }
+            else { answer = "Not enough history to tell"; css = "bg-secondary"; }
+            qa.Add(new QuestionAnswer("Is revenue/sales growing well?", answer, css, fact));
+        }
+
+        // 2. Profit growth
+        {
+            string answer, css;
+            string? fact = null;
+            if (ProfitTrend == "Declining") { answer = "No, it's shrinking"; css = "bg-danger"; }
+            else if (ProfitCagr3Yr > 0m)
+            {
+                answer = $"Yes, about {ProfitCagr3Yr:N1}% a year";
+                css = ProfitCagr3Yr >= 15m ? "bg-success" : ProfitCagr3Yr >= 5m ? "bg-info text-dark" : "bg-warning text-dark";
+                fact = "Over the last 3 years";
+            }
+            else if (ProfitTrend == "Improving") { answer = "Growing, though not at a steady pace"; css = "bg-info text-dark"; }
+            else if (ProfitTrend == "Stable") { answer = "Roughly flat"; css = "bg-warning text-dark"; }
+            else { answer = "Not enough history to tell"; css = "bg-secondary"; }
+            qa.Add(new QuestionAnswer("How fast is profit actually growing?", answer, css, fact));
+        }
+
+        // 3. Debt safety
+        {
+            var debtInd = GetDebtToEquityIndication();
+            string answer = debtInd.Label switch
+            {
+                "Safe" => "Yes, debt is low",
+                "Moderate" => "Somewhat - debt is manageable but worth watching",
+                _ => "No, debt levels look high"
+            };
+            qa.Add(new QuestionAnswer("Is the company's debt under control?", answer, debtInd.CssClass,
+                $"Debt-to-Equity: {DebtToEquity:N2}"));
+        }
+
+        // 4. Short-term bill coverage (Current Ratio)
+        {
+            var crInd = GetCurrentRatioIndication();
+            string answer = crInd.Label switch
+            {
+                "Safe" => "Yes, comfortably",
+                "Fair" => "Just about",
+                _ => "No, this looks tight"
+            };
+            qa.Add(new QuestionAnswer("Can it cover bills due within a year?", answer, crInd.CssClass));
+        }
+
+        // 5. Interest coverage
+        {
+            var icInd = GetInterestCoverageIndication();
+            string answer = icInd.Label switch
+            {
+                "Safe" => "Yes, easily",
+                "Moderate" => "Yes, but without much room to spare",
+                "Not Applicable" => "Doesn't apply to this company",
+                _ => "No, this is a concern"
+            };
+            qa.Add(new QuestionAnswer("Can it pay its yearly interest from profit?", answer, icInd.CssClass));
+        }
+
+        // 6. FCF conversion
+        {
+            var fcfInd = GetFcfConversionIndication();
+            string answer = fcfInd.Label switch
+            {
+                "Excellent" => "Almost all of it",
+                "Fair" => "Most of it",
+                _ => "Only a small part"
+            };
+            qa.Add(new QuestionAnswer("How much of the profit became real cash?", answer, fcfInd.CssClass));
+        }
+
+        // 7. Sloan Ratio (profit quality)
+        {
+            var sloanInd = GetSloanRatioIndication();
+            string answer = sloanInd.Label switch
+            {
+                "Low Risk" => "Mostly real cash",
+                "Some Risk" => "Somewhat - worth a closer look",
+                "Not Applicable" => "Doesn't apply to this company",
+                _ => "A lot of it looks like paper profit"
+            };
+            qa.Add(new QuestionAnswer("Is profit real cash, or mostly accounting entries?", answer, sloanInd.CssClass));
+        }
+
+        // 8. ROE (use of shareholders' money)
+        {
+            var roeInd = GetRoeIndication();
+            string answer = roeInd.Label switch
+            {
+                "High Return" => "Yes, very efficiently",
+                "Fair" => "Reasonably well",
+                _ => "Not very efficiently"
+            };
+            qa.Add(new QuestionAnswer("Is it making good use of shareholders' money?", answer, roeInd.CssClass,
+                $"ROE: {ROEPercent:N1}%"));
+        }
+
+        // 9. Dividend consistency
+        {
+            string answer, css;
+            if (DividendPayoutPercent <= 0m) { answer = "No, it doesn't pay dividends"; css = "bg-info text-dark"; }
+            else if (IsDividendConsistent && ConsecutiveDividendYears >= 5) { answer = $"Yes, for {ConsecutiveDividendYears}+ years running"; css = "bg-success"; }
+            else if (IsDividendConsistent) { answer = "Yes, consistently"; css = "bg-success"; }
+            else { answer = "It pays dividends, but not consistently"; css = "bg-warning text-dark"; }
+            qa.Add(new QuestionAnswer("Are dividends paid consistently?", answer, css));
+        }
+
+        // 10. Reinvestment (inverse of payout)
+        {
+            var payoutInd = GetDividendPayoutIndication();
+            string answer = payoutInd.Label switch
+            {
+                "No Dividend" => "Yes, all the profit stays in the business",
+                "Balanced" => "Yes, most of the profit is reinvested",
+                "High Payout" => "A little - most profit is paid out instead",
+                _ => "Barely - nearly all profit is paid out as dividends"
+            };
+            string css = payoutInd.Label switch
+            {
+                "No Dividend" => "bg-info text-dark",
+                "Balanced" => "bg-success",
+                "High Payout" => "bg-warning text-dark",
+                _ => "bg-danger"
+            };
+            qa.Add(new QuestionAnswer("Are they reinvesting profit into the business?", answer, css));
+        }
+
+        // 11. Insider selling (promoter holding trend + pledge)
+        {
+            string answer, css;
+            var pledgeInd = GetPromoterPledgeIndication();
+            if (PromoterHoldingTrend == "Declining") { answer = "Yes, promoter holding has been falling"; css = "bg-danger"; }
+            else if (pledgeInd.Label is "High Risk" or "Moderate") { answer = "Holding looks steady, but some is pledged against loans"; css = "bg-warning text-dark"; }
+            else if (PromoterHoldingTrend == "Improving") { answer = "No - promoters have actually been buying more"; css = "bg-success"; }
+            else { answer = "No signs of that - holding has stayed steady"; css = "bg-info text-dark"; }
+            qa.Add(new QuestionAnswer("Any insider selling happening?", answer, css,
+                $"Promoter holding: {PromoterHoldingPercent:N1}%"));
+        }
+
+        return qa;
+    }
+
     public SignalTally GetSignalTally()
     {
         var ratioCssClasses = new List<string>

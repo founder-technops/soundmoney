@@ -5,9 +5,6 @@
     var tally = Model.GetSignalTally();
     var sentimentBorder = sentiment == "Positive" ? "border-success" : sentiment == "Negative" ? "border-danger" : "border-warning";
     var sentimentBg = sentiment == "Positive" ? "bg-success-subtle" : sentiment == "Negative" ? "bg-danger-subtle" : "bg-warning-subtle";
-    var peInd = Model.GetPeIndication();
-    var debtInd = Model.GetDebtToEquityIndication();
-    var roeInd = Model.GetRoeIndication();
 }
 
 <style>
@@ -115,65 +112,32 @@
         </div>
     </div>
 
-    <!-- Headline facts, not the full 24-metric breakdown -->
+    <!-- Key questions, answered in plain English instead of shown as raw ratios -->
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-0 py-3">
-            <h6 class="fw-bold mb-0">A Few Key Facts</h6>
+            <h6 class="fw-bold mb-0">Questions This Stock Answers</h6>
         </div>
         <div class="card-body pt-0">
-            <div class="row g-3">
-                <div class="col-6 col-md-4">
-                    <div class="headline-card">
-                        <span class="text-muted extra-small d-block">Price vs. Earnings (P/E)</span>
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <strong>@Model.PE.ToString("N1")</strong>
-                            <span class="badge badge-sm @peInd.CssClass">@peInd.Label</span>
+            <div class="row g-2">
+                @foreach (var qa in Model.GetKeyQuestions())
+                {
+                    <div class="col-12">
+                        <div class="headline-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                            <div>
+                                <span class="fw-semibold d-block">@qa.Question</span>
+                                @if (!string.IsNullOrEmpty(qa.SupportingFact))
+                                {
+                                    <span class="extra-small text-muted">@qa.SupportingFact</span>
+                                }
+                            </div>
+                            <span class="badge @qa.CssClass flex-shrink-0">@qa.Answer</span>
                         </div>
                     </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="headline-card">
-                        <span class="text-muted extra-small d-block">Debt Level</span>
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <strong>@Model.DebtToEquity.ToString("N2")</strong>
-                            <span class="badge badge-sm @debtInd.CssClass">@debtInd.Label</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="headline-card">
-                        <span class="text-muted extra-small d-block">Return on Equity (ROE)</span>
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <strong>@Model.ROEPercent.ToString("N1")%</strong>
-                            <span class="badge badge-sm @roeInd.CssClass">@roeInd.Label</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="headline-card">
-                        <span class="text-muted extra-small d-block">Dividend Paid (per share)</span>
-                        <strong class="d-block mt-1">₹@Model.DividendPerShareRupees.ToString("N2")</strong>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="headline-card">
-                        <span class="text-muted extra-small d-block">
-                            Promoter Holding
-                            @if (!string.IsNullOrEmpty(Model.PromoterHoldingTrend))
-                            {
-                                <span class="ms-1">@(Model.PromoterHoldingTrend == "Improving" ? "↑" : Model.PromoterHoldingTrend == "Declining" ? "↓" : "→")</span>
-                            }
-                        </span>
-                        <strong class="d-block mt-1">@Model.PromoterHoldingPercent.ToString("N1")%</strong>
-                    </div>
-                </div>
-                <div class="col-6 col-md-4">
-                    <div class="headline-card">
-                        <span class="text-muted extra-small d-block">Last Updated</span>
-                        <strong class="d-block mt-1">@(Model.LastAnalyzed.HasValue ? Model.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")</strong>
-                    </div>
-                </div>
+                }
             </div>
+            <p class="extra-small text-muted mt-2 mb-0">
+                Dividend paid: ₹@Model.DividendPerShareRupees.ToString("N2")/share &middot; Promoter holding: @Model.PromoterHoldingPercent.ToString("N1")% &middot; Last updated: @(Model.LastAnalyzed.HasValue ? Model.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
+            </p>
         </div>
     </div>
 

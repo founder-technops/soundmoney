@@ -492,10 +492,26 @@
                         <li class="list-group-item d-flex justify-content-between align-items-start px-0 py-2">
                             <div class="text-muted small">
                                 Earnings Quality (Sloan Ratio)
-                                <div class="extra-small text-muted">Checks if profit is real cash or mostly accounting entries - lower is better</div>
+                                <div class="extra-small text-muted">
+                                    @if (Model.IsFinancialSector)
+                                    {
+                                        <text>Doesn't apply to banks/NBFCs, whose balance sheets work differently from typical businesses.</text>
+                                    }
+                                    else
+                                    {
+                                        <text>Checks if profit is real cash or mostly accounting entries - lower is better</text>
+                                    }
+                                </div>
                             </div>
                             <div class="d-flex align-items-center gap-1">
-                                <strong>@Model.SloanRatio.ToString("N2")%</strong>
+                                @if (Model.IsFinancialSector)
+                                {
+                                    <strong class="text-muted">N/A</strong>
+                                }
+                                else
+                                {
+                                    <strong>@Model.SloanRatio.ToString("N2")%</strong>
+                                }
                                 <span class="badge badge-sm ms-1 @sloanInd.CssClass">@sloanInd.Label</span>
                             </div>
                         </li>
@@ -1267,4 +1283,3 @@
             </div>
         </div>
     </div>
-
