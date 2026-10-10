@@ -80,11 +80,12 @@ public record SignalTally(int Positive, int Caution, int Negative, int NotApplic
 }
 
 /// <summary>
-/// One plain-English question about the company, its short answer, a badge colour, and an
-/// optional supporting fact (the underlying number, for anyone who wants it) - the Summary
-/// screen's alternative to showing a ratio name and a number first.
+/// One plain-English question about the company, grouped under a Category for display,
+/// with its short Answer, a badge colour, and an optional supporting fact (the underlying
+/// number, for anyone who wants it) - the Summary screen's alternative to showing a ratio
+/// name and a number first.
 /// </summary>
-public record QuestionAnswer(string Question, string Answer, string CssClass, string? SupportingFact = null);
+public record QuestionAnswer(string Category, string Question, string Answer, string CssClass, string? SupportingFact = null);
 
 public class StockDetailsViewModel
 {
@@ -311,6 +312,13 @@ public class StockDetailsViewModel
             _ => ("Low Return", "bg-secondary")
         };
 
+    // Centralizes the ROCE badge that previously lived inline in Details.cshtml
+    // (`ROCEPercent >= 15.0m ? "Strong" : "Moderate"`) - same exact threshold and labels,
+    // just given a proper indication method like every other metric on this view model,
+    // so it can also be reused by the Key Questions list without duplicating logic.
+    public (string Label, string CssClass) GetRoceIndication() =>
+        ROCEPercent >= 15.0m ? ("Strong", "bg-success") : ("Moderate", "bg-secondary");
+
     // ROIC (Return on Invested Capital) uses the same bands as ROE - it's a stricter,
     // leverage-neutral version of the same "how well does this business turn money into
     // profit" question, so a consistent scale makes the three return metrics easy to
@@ -480,28 +488,39 @@ public class StockDetailsViewModel
             _ => ("High Margin", "bg-success")
         };
 
-    // Walks every existing ratio badge and trend arrow already shown on the Details
-    // screen and buckets each by its own CssClass/value, rather than curating a smaller
-    // hand-picked subset - a plain count of "how many look good" is honest precisely
-    // because it doesn't quietly decide which few metrics matter most for this reader.
-    // "bg-secondary" doubles as both "Not Applicable" (e.g. Altman Z for a bank) and
-    // "Thin Margin" on NetProfitMargin; both read as a caution-leaning fact rather than a
-    // clear pass or fail, so bg-secondary is counted as NotApplicable only when it isn't
-    // already covered by Caution - in practice this only affects a handful of sector-gated
-    // ratios, and errs toward NOT overstating the Negative count.
-    // Eleven plain-English questions, each answered entirely from fields/indications
-    // already computed elsewhere on this view model - nothing here is a new, independent
-    // judgment about the company. Order follows a simple narrative: growth, then debt
-    // safety, then cash-quality (two related questions back to back), then returns, then
-    // capital allocation (dividend + reinvestment, naturally paired), then insider signals.
+    // A broad, categorized checklist covering valuation, growth, profitability, cash and
+    // earnings quality, debt safety, shareholder treatment, and ownership/confidence
+    // signals - every question answered entirely from fields/indications already computed
+    // elsewhere on this view model. Category groups the list for display; nothing here is
+    // a new, independently-asserted judgment about the company.
     public List<QuestionAnswer> GetKeyQuestions()
     {
+        const string Growth = "Valuation & Growth";
+        const string Profitability = "Profitability";
+        const string CashQuality = "Cash & Earnings Quality";
+        const string Safety = "Debt & Financial Safety";
+        const string Shareholders = "Rewarding Shareholders";
+        const string Ownership = "Ownership & Confidence";
+        const string RiskProfile = "Size & Risk Profile";
+
         var qa = new List<QuestionAnswer>();
 
-        // 1. Revenue growth
+        // --- Valuation & Growth ---------------------------------------------------
+
         {
-            string answer, css;
-            string? fact = null;
+            var pegInd = GetPegIndication();
+            string answer = pegInd.Label switch
+            {
+                "Attractive" => "Yes, reasonable for how fast it's growing",
+                "Fair" => "Roughly fair for the growth rate",
+                "Expensive" => "No, pricey relative to its growth",
+                _ => "Not enough data to tell"
+            };
+            qa.Add(new QuestionAnswer(Growth, "Is the price reasonable given how fast profit is growing?", answer, pegInd.CssClass));
+        }
+
+        {
+            string answer, css; string? fact = null;
             if (RevenueTrend == "Declining") { answer = "No, it's shrinking"; css = "bg-danger"; }
             else if (RevenueCagr3Yr > 0m)
             {
@@ -512,13 +531,11 @@ public class StockDetailsViewModel
             else if (RevenueTrend == "Improving") { answer = "Growing, though not at a steady pace"; css = "bg-info text-dark"; }
             else if (RevenueTrend == "Stable") { answer = "Roughly flat"; css = "bg-warning text-dark"; }
             else { answer = "Not enough history to tell"; css = "bg-secondary"; }
-            qa.Add(new QuestionAnswer("Is revenue/sales growing well?", answer, css, fact));
+            qa.Add(new QuestionAnswer(Growth, "Is revenue/sales growing well?", answer, css, fact));
         }
 
-        // 2. Profit growth
         {
-            string answer, css;
-            string? fact = null;
+            string answer, css; string? fact = null;
             if (ProfitTrend == "Declining") { answer = "No, it's shrinking"; css = "bg-danger"; }
             else if (ProfitCagr3Yr > 0m)
             {
@@ -529,60 +546,53 @@ public class StockDetailsViewModel
             else if (ProfitTrend == "Improving") { answer = "Growing, though not at a steady pace"; css = "bg-info text-dark"; }
             else if (ProfitTrend == "Stable") { answer = "Roughly flat"; css = "bg-warning text-dark"; }
             else { answer = "Not enough history to tell"; css = "bg-secondary"; }
-            qa.Add(new QuestionAnswer("How fast is profit actually growing?", answer, css, fact));
+            qa.Add(new QuestionAnswer(Growth, "How fast is profit actually growing?", answer, css, fact));
         }
 
-        // 3. Debt safety
+        // --- Profitability -----------------------------------------------------------
+
         {
-            var debtInd = GetDebtToEquityIndication();
-            string answer = debtInd.Label switch
+            var roeInd = GetRoeIndication();
+            string answer = roeInd.Label switch
             {
-                "Safe" => "Yes, debt is low",
-                "Moderate" => "Somewhat - debt is manageable but worth watching",
-                _ => "No, debt levels look high"
+                "High Return" => "Yes, very efficiently",
+                "Fair" => "Reasonably well",
+                _ => "Not very efficiently"
             };
-            qa.Add(new QuestionAnswer("Is the company's debt under control?", answer, debtInd.CssClass,
-                $"Debt-to-Equity: {DebtToEquity:N2}"));
+            qa.Add(new QuestionAnswer(Profitability, "Is it making good use of shareholders' money?", answer, roeInd.CssClass, $"ROE: {ROEPercent:N1}%"));
         }
 
-        // 4. Short-term bill coverage (Current Ratio)
         {
-            var crInd = GetCurrentRatioIndication();
-            string answer = crInd.Label switch
-            {
-                "Safe" => "Yes, comfortably",
-                "Fair" => "Just about",
-                _ => "No, this looks tight"
-            };
-            qa.Add(new QuestionAnswer("Can it cover bills due within a year?", answer, crInd.CssClass));
+            var roceInd = GetRoceIndication();
+            string answer = roceInd.Label == "Strong" ? "Yes, strong returns on all the capital it employs" : "Moderate - there's room for improvement";
+            qa.Add(new QuestionAnswer(Profitability, "Is it generating good returns on all the capital it uses (own + borrowed)?", answer, roceInd.CssClass, $"ROCE: {ROCEPercent:N1}%"));
         }
 
-        // 5. Interest coverage
         {
-            var icInd = GetInterestCoverageIndication();
-            string answer = icInd.Label switch
+            var roicInd = GetRoicIndication();
+            string answer = roicInd.Label switch
             {
-                "Safe" => "Yes, easily",
-                "Moderate" => "Yes, but without much room to spare",
-                "Not Applicable" => "Doesn't apply to this company",
-                _ => "No, this is a concern"
+                "High Return" => "Yes, signs of a real competitive advantage",
+                "Fair" => "Some edge, but not a strong moat",
+                _ => "No clear competitive advantage visible"
             };
-            qa.Add(new QuestionAnswer("Can it pay its yearly interest from profit?", answer, icInd.CssClass));
+            qa.Add(new QuestionAnswer(Profitability, "Does it have a real edge over its competitors?", answer, roicInd.CssClass));
         }
 
-        // 6. FCF conversion
         {
-            var fcfInd = GetFcfConversionIndication();
-            string answer = fcfInd.Label switch
+            var marginInd = GetNetProfitMarginIndication();
+            string answer = marginInd.Label switch
             {
-                "Excellent" => "Almost all of it",
-                "Fair" => "Most of it",
-                _ => "Only a small part"
+                "High Margin" => "A lot - strong profitability per sale",
+                "Healthy" => "A fair amount",
+                "Thin Margin" => "Very little per sale",
+                _ => "It's currently losing money on sales"
             };
-            qa.Add(new QuestionAnswer("How much of the profit became real cash?", answer, fcfInd.CssClass));
+            qa.Add(new QuestionAnswer(Profitability, "How much profit does it keep from each rupee of sales?", answer, marginInd.CssClass, $"Net margin: {NetProfitMarginPercent:N1}%"));
         }
 
-        // 7. Sloan Ratio (profit quality)
+        // --- Cash & Earnings Quality ---------------------------------------------------
+
         {
             var sloanInd = GetSloanRatioIndication();
             string answer = sloanInd.Label switch
@@ -592,33 +602,111 @@ public class StockDetailsViewModel
                 "Not Applicable" => "Doesn't apply to this company",
                 _ => "A lot of it looks like paper profit"
             };
-            qa.Add(new QuestionAnswer("Is profit real cash, or mostly accounting entries?", answer, sloanInd.CssClass));
+            qa.Add(new QuestionAnswer(CashQuality, "Is profit real cash, or mostly accounting entries?", answer, sloanInd.CssClass));
         }
 
-        // 8. ROE (use of shareholders' money)
         {
-            var roeInd = GetRoeIndication();
-            string answer = roeInd.Label switch
+            var fcfInd = GetFcfConversionIndication();
+            string answer = fcfInd.Label switch
             {
-                "High Return" => "Yes, very efficiently",
-                "Fair" => "Reasonably well",
-                _ => "Not very efficiently"
+                "Excellent" => "Almost all of it",
+                "Fair" => "Most of it",
+                _ => "Only a small part"
             };
-            qa.Add(new QuestionAnswer("Is it making good use of shareholders' money?", answer, roeInd.CssClass,
-                $"ROE: {ROEPercent:N1}%"));
+            qa.Add(new QuestionAnswer(CashQuality, "How much of the profit became real cash?", answer, fcfInd.CssClass));
         }
 
-        // 9. Dividend consistency
+        {
+            string answer = FreeCashFlowCr > 0m
+                ? "Yes, there's real cash left over after running and investing in the business"
+                : "No, it's currently using up more cash than it generates";
+            string css = FreeCashFlowCr > 0m ? "bg-success" : "bg-danger";
+            qa.Add(new QuestionAnswer(CashQuality, "Does the business generate real spare cash?", answer, css, $"Free Cash Flow: {FreeCashFlowCr:N1} Cr"));
+        }
+
+        {
+            var mscoreInd = GetMScoreIndication();
+            string answer = mscoreInd.Label switch
+            {
+                "Low Risk" => "No clear signs of that",
+                "Some Risk" => "A little - worth a closer look",
+                "Not Applicable" => "Doesn't apply to this company",
+                _ => "Yes, this is a real red flag"
+            };
+            qa.Add(new QuestionAnswer(CashQuality, "Do the numbers suggest profits might be dressed up?", answer, mscoreInd.CssClass));
+        }
+
+        // --- Debt & Financial Safety ---------------------------------------------------
+
+        {
+            var debtInd = GetDebtToEquityIndication();
+            string answer = debtInd.Label switch
+            {
+                "Safe" => "Yes, debt is low",
+                "Moderate" => "Somewhat - debt is manageable but worth watching",
+                _ => "No, debt levels look high"
+            };
+            qa.Add(new QuestionAnswer(Safety, "Is the company's debt under control?", answer, debtInd.CssClass, $"Debt-to-Equity: {DebtToEquity:N2}"));
+        }
+
+        {
+            var crInd = GetCurrentRatioIndication();
+            string answer = crInd.Label switch
+            {
+                "Safe" => "Yes, comfortably",
+                "Fair" => "Just about",
+                _ => "No, this looks tight"
+            };
+            qa.Add(new QuestionAnswer(Safety, "Can it cover bills due within a year?", answer, crInd.CssClass));
+        }
+
+        {
+            var icInd = GetInterestCoverageIndication();
+            string answer = icInd.Label switch
+            {
+                "Safe" => "Yes, easily",
+                "Moderate" => "Yes, but without much room to spare",
+                "Not Applicable" => "Doesn't apply to this company",
+                _ => "No, this is a concern"
+            };
+            qa.Add(new QuestionAnswer(Safety, "Can it pay its yearly interest from profit?", answer, icInd.CssClass));
+        }
+
+        {
+            var altmanInd = GetAltmanZIndication();
+            string answer = altmanInd.Label switch
+            {
+                "Safe Zone" => "No, low risk of distress",
+                "Grey Zone" => "Some risk - not alarming, but worth monitoring",
+                "Not Applicable" => "Doesn't apply to this company",
+                _ => "Yes, meaningful distress risk"
+            };
+            qa.Add(new QuestionAnswer(Safety, "Is there a risk of serious financial trouble ahead?", answer, altmanInd.CssClass));
+        }
+
+        {
+            var piotroskiInd = GetPiotroskiIndication();
+            string answer = piotroskiInd.Label switch
+            {
+                "Strong" => $"Yes, scores {PiotroskiFScore}/9 on a standard checklist",
+                "Average" => $"Partly - scores {PiotroskiFScore}/9",
+                "Not Applicable" => "Doesn't apply to this company",
+                _ => $"No, scores only {PiotroskiFScore}/9"
+            };
+            qa.Add(new QuestionAnswer(Safety, "Does it pass a standard checklist of financial strength?", answer, piotroskiInd.CssClass));
+        }
+
+        // --- Rewarding Shareholders ---------------------------------------------------
+
         {
             string answer, css;
             if (DividendPayoutPercent <= 0m) { answer = "No, it doesn't pay dividends"; css = "bg-info text-dark"; }
             else if (IsDividendConsistent && ConsecutiveDividendYears >= 5) { answer = $"Yes, for {ConsecutiveDividendYears}+ years running"; css = "bg-success"; }
             else if (IsDividendConsistent) { answer = "Yes, consistently"; css = "bg-success"; }
             else { answer = "It pays dividends, but not consistently"; css = "bg-warning text-dark"; }
-            qa.Add(new QuestionAnswer("Are dividends paid consistently?", answer, css));
+            qa.Add(new QuestionAnswer(Shareholders, "Are dividends paid consistently?", answer, css, $"₹{DividendPerShareRupees:N2}/share"));
         }
 
-        // 10. Reinvestment (inverse of payout)
         {
             var payoutInd = GetDividendPayoutIndication();
             string answer = payoutInd.Label switch
@@ -635,10 +723,11 @@ public class StockDetailsViewModel
                 "High Payout" => "bg-warning text-dark",
                 _ => "bg-danger"
             };
-            qa.Add(new QuestionAnswer("Are they reinvesting profit into the business?", answer, css));
+            qa.Add(new QuestionAnswer(Shareholders, "Are they reinvesting profit into the business?", answer, css));
         }
 
-        // 11. Insider selling (promoter holding trend + pledge)
+        // --- Ownership & Confidence ---------------------------------------------------
+
         {
             string answer, css;
             var pledgeInd = GetPromoterPledgeIndication();
@@ -646,13 +735,61 @@ public class StockDetailsViewModel
             else if (pledgeInd.Label is "High Risk" or "Moderate") { answer = "Holding looks steady, but some is pledged against loans"; css = "bg-warning text-dark"; }
             else if (PromoterHoldingTrend == "Improving") { answer = "No - promoters have actually been buying more"; css = "bg-success"; }
             else { answer = "No signs of that - holding has stayed steady"; css = "bg-info text-dark"; }
-            qa.Add(new QuestionAnswer("Any insider selling happening?", answer, css,
-                $"Promoter holding: {PromoterHoldingPercent:N1}%"));
+            qa.Add(new QuestionAnswer(Ownership, "Any insider selling happening?", answer, css, $"Promoter holding: {PromoterHoldingPercent:N1}%"));
+        }
+
+        {
+            bool fiiUp = FiiHoldingTrend == "Improving", fiiDown = FiiHoldingTrend == "Declining";
+            bool diiUp = DiiHoldingTrend == "Improving", diiDown = DiiHoldingTrend == "Declining";
+            string answer, css;
+            if ((fiiUp || diiUp) && (fiiDown || diiDown)) { answer = "Mixed - one type of institution buying, another selling"; css = "bg-warning text-dark"; }
+            else if (fiiUp || diiUp) { answer = "Yes, institutional investors have been increasing their stake"; css = "bg-success"; }
+            else if (fiiDown || diiDown) { answer = "Some institutions have been reducing their stake"; css = "bg-warning text-dark"; }
+            else { answer = "No major change in institutional holding"; css = "bg-info text-dark"; }
+            qa.Add(new QuestionAnswer(Ownership, "Are big investors (institutions) buying or selling?", answer, css));
+        }
+
+        // --- Size & Risk Profile ---------------------------------------------------
+
+        {
+            // Approximate, commonly-used Cr thresholds for large/mid/small cap - not an
+            // official SEBI ranking-based classification, which ranks companies against
+            // each other rather than using fixed cutoffs. Good enough for a rough,
+            // plain-English sense of scale.
+            string answer = MarketCapCr switch
+            {
+                >= 20000m => "A large, well-established company",
+                >= 5000m => "A mid-sized company",
+                _ => "A smaller, less established company"
+            };
+            string css = MarketCapCr >= 20000m ? "bg-success" : MarketCapCr >= 5000m ? "bg-info text-dark" : "bg-warning text-dark";
+            qa.Add(new QuestionAnswer(RiskProfile, "How big and established is this company?", answer, css, $"Market Cap: {MarketCapCr:N0} Cr"));
+        }
+
+        {
+            var betaInd = GetBetaIndication();
+            string answer = betaInd.Label switch
+            {
+                "Low Volatility" => "Less than the market - relatively steady",
+                "Market-like" => "About the same as the market",
+                _ => "More than the market - expect bigger swings"
+            };
+            qa.Add(new QuestionAnswer(RiskProfile, "How much does the stock swing compared to the market?", answer, betaInd.CssClass, $"Beta: {Beta:N2}"));
         }
 
         return qa;
     }
 
+
+    // Walks every existing ratio badge and trend arrow already shown on the Details
+    // screen and buckets each by its own CssClass/value, rather than curating a smaller
+    // hand-picked subset - a plain count of "how many look good" is honest precisely
+    // because it doesn't quietly decide which few metrics matter most for this reader.
+    // "bg-secondary" doubles as both "Not Applicable" (e.g. Altman Z for a bank) and
+    // "Thin Margin" on NetProfitMargin; both read as a caution-leaning fact rather than a
+    // clear pass or fail, so bg-secondary is counted as NotApplicable only when it isn't
+    // already covered by Caution - in practice this only affects a handful of sector-gated
+    // ratios, and errs toward NOT overstating the Negative count.
     public SignalTally GetSignalTally()
     {
         var ratioCssClasses = new List<string>

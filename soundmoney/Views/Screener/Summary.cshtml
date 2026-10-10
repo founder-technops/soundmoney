@@ -1,4 +1,5 @@
 @model SoundMoney.Models.StockDetailsViewModel
+@using System.Linq
 @{
     ViewData["Title"] = $"{Model.Symbol} - Simple Summary";
     var (bottomLine, sentiment) = Model.GetBottomLineSummary();
@@ -116,27 +117,32 @@
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-0 py-3">
             <h6 class="fw-bold mb-0">Questions This Stock Answers</h6>
+            <span class="extra-small text-muted">A full stock-analysis checklist, in plain English</span>
         </div>
         <div class="card-body pt-0">
-            <div class="row g-2">
-                @foreach (var qa in Model.GetKeyQuestions())
-                {
-                    <div class="col-12">
-                        <div class="headline-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
-                            <div>
-                                <span class="fw-semibold d-block">@qa.Question</span>
-                                @if (!string.IsNullOrEmpty(qa.SupportingFact))
-                                {
-                                    <span class="extra-small text-muted">@qa.SupportingFact</span>
-                                }
+            @foreach (var group in Model.GetKeyQuestions().GroupBy(q => q.Category))
+            {
+                <h6 class="text-muted text-uppercase extra-small fw-bold mt-3 mb-2">@group.Key</h6>
+                <div class="row g-2 mb-2">
+                    @foreach (var qa in group)
+                    {
+                        <div class="col-12">
+                            <div class="headline-card d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-2">
+                                <div>
+                                    <span class="fw-semibold d-block">@qa.Question</span>
+                                    @if (!string.IsNullOrEmpty(qa.SupportingFact))
+                                    {
+                                        <span class="extra-small text-muted">@qa.SupportingFact</span>
+                                    }
+                                </div>
+                                <span class="badge @qa.CssClass flex-shrink-0">@qa.Answer</span>
                             </div>
-                            <span class="badge @qa.CssClass flex-shrink-0">@qa.Answer</span>
                         </div>
-                    </div>
-                }
-            </div>
+                    }
+                </div>
+            }
             <p class="extra-small text-muted mt-2 mb-0">
-                Dividend paid: ₹@Model.DividendPerShareRupees.ToString("N2")/share &middot; Promoter holding: @Model.PromoterHoldingPercent.ToString("N1")% &middot; Last updated: @(Model.LastAnalyzed.HasValue ? Model.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
+                Last updated: @(Model.LastAnalyzed.HasValue ? Model.LastAnalyzed.Value.ToString("dd MMM yyyy") : "N/A")
             </p>
         </div>
     </div>

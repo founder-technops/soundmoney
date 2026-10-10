@@ -66,6 +66,15 @@ public class ScreenerController : Controller
 
         var model = await _screener.RunScreenDetailsAsync(symbol);
 
+        // RunScreenDetailsAsync returns null when scraping/valuation fails (invalid or
+        // delisted symbol, Screener.in has no page for it, a parsing failure, etc.) -
+        // passing that straight to View() crashed the page with a NullReferenceException
+        // the moment the view touched Model.Symbol. Fail with a clear message instead.
+        if (model is null)
+        {
+            return NotFound($"Could not retrieve or analyze data for symbol '{symbol}'. It may be an invalid symbol, delisted, or temporarily unavailable from the data source.");
+        }
+
         return View(model);
     }
 
@@ -82,6 +91,12 @@ public class ScreenerController : Controller
         }
 
         var model = await _screener.RunScreenDetailsAsync(symbol);
+
+        // Same null guard as Details, for the same reason - see comment there.
+        if (model is null)
+        {
+            return NotFound($"Could not retrieve or analyze data for symbol '{symbol}'. It may be an invalid symbol, delisted, or temporarily unavailable from the data source.");
+        }
 
         return View(model);
     }
