@@ -8,7 +8,11 @@ namespace SoundMoney.Services
 {
     public interface IScraperService
     {
-        Task<(StockValuation?, Financial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
+        // 4th element is non-null only on failure - a short, user-safe description of WHY
+        // (a network/connectivity problem reaching Screener.in, an HTTP error status, or a
+        // parsing failure), distinct from a transient network issue being indistinguishable
+        // from "this symbol has no data". Null on success.
+        Task<(StockValuation?, Financial?, List<Financial>?, string? ErrorMessage)> ScrapeStockAsync(string symbol, CancellationToken ct = default);
     }
 
     public class ScraperService : IScraperService
@@ -33,18 +37,18 @@ namespace SoundMoney.Services
             }
         }
 
-        public async Task<(StockValuation?, Financial?, List<Financial>?)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
+        public async Task<(StockValuation?, Financial?, List<Financial>?, string? ErrorMessage)> ScrapeStockAsync(string symbol, CancellationToken ct = default)
         {
             string cleanSymbol = symbol.Trim().ToUpperInvariant();
             _logger.LogInformation("Starting scraping for symbol: {Symbol}", cleanSymbol);
 
             try
             {
-                string html = await FetchHtmlContentAsync(cleanSymbol, ct);
+                var (html, fetchError) = await FetchHtmlContentAsync(cleanSymbol, ct);
                 if (string.IsNullOrWhiteSpace(html))
                 {
-                    _logger.LogWarning("Failed to retrieve HTML for symbol: {Symbol}", cleanSymbol);
-                    return (null, null, null);
+                    _logger.LogWarning("Failed to retrieve HTML for symbol: {Symbol}. Reason: {Reason}", cleanSymbol, fetchError);
+                    return (null, null, null, fetchError ?? "Screener.in did not return usable data for this symbol.");
                 }
 
                 var doc = new HtmlDocument();
@@ -106,18 +110,39 @@ namespace SoundMoney.Services
                     || cashHistoryCoversFullReportedWindow;
 
                 _logger.LogInformation("Successfully scraped financial data for {Symbol}. Extracted {Count} historical records.", cleanSymbol, historical.Count);
-                return (stockValuation, current, historical);
+                return (stockValuation, current, historical, null);
+            }
+            // Covers connection failures, DNS failures, TLS failures, and - the specific
+            // case this was added for - the socket-level "connected host has failed to
+            // respond" timeout when Screener.in doesn't answer in time. Logged as a
+            // Warning, not an Error: this is an expected, transient operating condition
+            // (the remote site being slow or briefly unreachable), not a bug in this app.
+            catch (HttpRequestException ex)
+            {
+                string msg = $"Could not reach Screener.in: {ex.Message}";
+                _logger.LogWarning(ex, "Network error while scraping {Symbol}: {Message}", cleanSymbol, ex.Message);
+                return (null, null, null, msg);
+            }
+            // HttpClient surfaces its own Timeout (HttpClient.Timeout elapsing) as a
+            // TaskCanceledException, not a TimeoutException - distinguished here from the
+            // caller's own CancellationToken firing (which should keep propagating as
+            // cancellation, not be reported as a scrape failure).
+            catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+            {
+                string msg = "Could not reach Screener.in: the request timed out.";
+                _logger.LogWarning(ex, "Timeout while scraping {Symbol}", cleanSymbol);
+                return (null, null, null, msg);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error occurred while scraping data for symbol: {Symbol}", cleanSymbol);
-                return (null, null, null);
+                return (null, null, null, $"Scraping failed: {ex.Message}");
             }
         }
 
         #region HTTP Parsing Logic
 
-        private async Task<string> FetchHtmlContentAsync(string symbol, CancellationToken ct)
+        private async Task<(string Html, string? ErrorMessage)> FetchHtmlContentAsync(string symbol, CancellationToken ct)
         {
             string consolidatedUrl = $"https://www.screener.in/company/{symbol}/consolidated/";
             var response = await _httpClient.GetAsync(consolidatedUrl, ct);
@@ -128,8 +153,12 @@ namespace SoundMoney.Services
                 response = await _httpClient.GetAsync(standaloneUrl, ct);
             }
 
-            if (!response.IsSuccessStatusCode) return string.Empty;
-            return await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return (string.Empty, $"Screener.in returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}) for this symbol.");
+            }
+
+            return (await response.Content.ReadAsStringAsync(ct), null);
         }
 
         private string ExtractCompanyName(HtmlDocument doc, string fallbackSymbol)
@@ -262,10 +291,6 @@ namespace SoundMoney.Services
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
             }
 
-            df.PromoterHoldingPercent = ExtractCurrentShareholdingPercent(doc, "Promoters");
-            df.FiiHoldingPercent = ExtractCurrentShareholdingPercent(doc, "FII");
-            df.DiiHoldingPercent = ExtractCurrentShareholdingPercent(doc, "DII");
-
             // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             if (pnlSection != null)
@@ -344,55 +369,6 @@ namespace SoundMoney.Services
             }
 
             return 0m;
-        }
-
-        // Generalized versions of the two Promoter-specific methods below: Screener's
-        // shareholding table has one row each for Promoters, FIIs and DIIs, all in the
-        // same table/shape, so a single row-name-parameterized pair of methods covers all
-        // three rather than three near-identical copy-pasted extractors. Row names use
-        // GetLastCellRowValue/GetRowValuesByColumn's existing case-insensitive substring
-        // match, so "FII" matches Screener's actual "FIIs +" row label, "DII" matches
-        // "DIIs +", and "Promoters" matches "Promoters +".
-        private decimal ExtractCurrentShareholdingPercent(HtmlDocument doc, string rowName)
-        {
-            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
-            return shareholdingSection == null ? 0m : GetLastCellRowValue(shareholdingSection, rowName);
-        }
-
-        // Screener's shareholding table is scraped quarterly (Jun/Sep/Dec/Mar), unlike the
-        // P&L/balance-sheet/cash-flow tables this file otherwise reads, which are annual.
-        // Every other Year-by-Year metric (Sales, Profit, ROE...) compares one value per
-        // fiscal year, so mixing in Jun/Sep/Dec columns would compare a DIFFERENT quarter
-        // each year - not a fair year-over-year trend. Keeping only the Mar (fiscal
-        // year-end) columns lines this metric up on the same annual grain as the rest of
-        // the Year-by-Year Trend Analysis section. Keyed by YEAR (not column index),
-        // because the shareholding table has a different column count/shape than the
-        // P&L table that ExtractHistoricalFinancials otherwise indexes by column.
-        private Dictionary<int, decimal> ExtractShareholdingByFiscalYear(HtmlDocument doc, string rowName)
-        {
-            var result = new Dictionary<int, decimal>();
-
-            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
-            if (shareholdingSection == null) return result;
-
-            var headerCells = shareholdingSection.SelectNodes(".//thead//th");
-            if (headerCells == null || headerCells.Count <= 1) return result;
-
-            var byColumn = GetRowValuesByColumn(shareholdingSection, rowName);
-
-            for (int i = 1; i < headerCells.Count; i++)
-            {
-                string headerText = headerCells[i].InnerText.Trim();
-                if (!headerText.Contains("Mar", StringComparison.OrdinalIgnoreCase)) continue;
-
-                int year = ExtractYearFromHeader(headerText);
-                if (year > 0 && byColumn.TryGetValue(i, out decimal value))
-                {
-                    result[year] = value;
-                }
-            }
-
-            return result;
         }
 
         private decimal ExtractPromoterPledgeFromProsAndCons(HtmlDocument doc)
@@ -497,11 +473,6 @@ namespace SoundMoney.Services
             //ratios
             var dicCashConversionCycleDays = GetRowValuesByColumn(ratiosSection, "Cash Conversion Cycle");
 
-            //shareholding (year-keyed, not column-index-keyed - see method comment)
-            var dicPromoterHoldingPercent = ExtractShareholdingByFiscalYear(doc, "Promoters");
-            var dicFiiHoldingPercent = ExtractShareholdingByFiscalYear(doc, "FII");
-            var dicDiiHoldingPercent = ExtractShareholdingByFiscalYear(doc, "DII");
-
             foreach (var header in yearHeaderList)
             {
                 historyList.Add(new Financial
@@ -540,10 +511,6 @@ namespace SoundMoney.Services
                     FreeCashFlowCr = dicFreeCashFlowCr.TryGetValue(header.ColumnIndex, out decimal freecashflowcr) ? freecashflowcr : 0m,
                     //ratios
                     CashConversionCycleDays = dicCashConversionCycleDays.TryGetValue(header.ColumnIndex, out decimal cashconversioncycledays) ? cashconversioncycledays : 0m,
-                    //shareholding - keyed by header.Year, not header.ColumnIndex (see dicPromoterHoldingPercent above)
-                    PromoterHoldingPercent = dicPromoterHoldingPercent.TryGetValue(header.Year, out decimal promoterholdingpercent) ? promoterholdingpercent : 0m,
-                    FiiHoldingPercent = dicFiiHoldingPercent.TryGetValue(header.Year, out decimal fiiholdingpercent) ? fiiholdingpercent : 0m,
-                    DiiHoldingPercent = dicDiiHoldingPercent.TryGetValue(header.Year, out decimal diiholdingpercent) ? diiholdingpercent : 0m,
                 });
             }
 

@@ -64,15 +64,16 @@ public class ScreenerController : Controller
             return BadRequest("Stock symbol is required.");
         }
 
-        var model = await _screener.RunScreenDetailsAsync(symbol);
+        var (model, errorMessage) = await _screener.RunScreenDetailsAsync(symbol);
 
-        // RunScreenDetailsAsync returns null when scraping/valuation fails (invalid or
-        // delisted symbol, Screener.in has no page for it, a parsing failure, etc.) -
-        // passing that straight to View() crashed the page with a NullReferenceException
-        // the moment the view touched Model.Symbol. Fail with a clear message instead.
+        // RunScreenDetailsAsync returns a null model when scraping/valuation fails
+        // (invalid or delisted symbol, a network error reaching Screener.in, a parsing
+        // failure, etc.) - passing that straight to View() crashed the page with a
+        // NullReferenceException the moment the view touched Model.Symbol. Render the
+        // same Error view used for unhandled exceptions, but with the specific reason.
         if (model is null)
         {
-            return NotFound($"Could not retrieve or analyze data for symbol '{symbol}'. It may be an invalid symbol, delisted, or temporarily unavailable from the data source.");
+            return RenderScrapeError(symbol, errorMessage);
         }
 
         return View(model);
@@ -90,15 +91,30 @@ public class ScreenerController : Controller
             return BadRequest("Stock symbol is required.");
         }
 
-        var model = await _screener.RunScreenDetailsAsync(symbol);
+        var (model, errorMessage) = await _screener.RunScreenDetailsAsync(symbol);
 
         // Same null guard as Details, for the same reason - see comment there.
         if (model is null)
         {
-            return NotFound($"Could not retrieve or analyze data for symbol '{symbol}'. It may be an invalid symbol, delisted, or temporarily unavailable from the data source.");
+            return RenderScrapeError(symbol, errorMessage);
         }
 
         return View(model);
+    }
+
+    // Shared by Details and Summary: renders the same Error view
+    // (Views/Screener/Error.cshtml) that app.UseExceptionHandler("/Screener/Error") shows
+    // for a genuinely unhandled exception, but with the specific, user-safe reason this
+    // particular symbol's scrape failed (e.g. "Could not reach Screener.in: ...") rather
+    // than that view's generic "something went wrong" text. The view falls back to its
+    // original generic wording whenever ViewData["ErrorMessage"] isn't set, so the
+    // unhandled-exception path (which never sets it) is unaffected by this reuse.
+    private IActionResult RenderScrapeError(string symbol, string? errorMessage)
+    {
+        ViewData["ErrorMessage"] = errorMessage ?? $"Could not retrieve or analyze data for symbol '{symbol}'.";
+        ViewData["ErrorSymbol"] = symbol;
+        Response.StatusCode = 404;
+        return View("Error");
     }
 
     [HttpGet]

@@ -60,7 +60,7 @@ namespace SoundMoney.Services
 
             _logger.LogInformation("Stock Automation Service fully stopped.");
         }
- 
+
         private async Task ProcessNextPendingValuationAsync(CancellationToken cancellationToken)
         {
             using var scope = _serviceProvider.CreateScope();
@@ -97,10 +97,21 @@ namespace SoundMoney.Services
                 FetchedAt = DateTime.UtcNow
             };
 
+            // Set when ScrapeStockAsync reports a connectivity-level failure (Screener.in
+            // unreachable, DNS failure, connection timeout - the "connected host has failed
+            // to respond" case) rather than a genuine data problem (bad/delisted symbol,
+            // page structure Screener.in itself returned but this app couldn't parse). A
+            // transient failure shouldn't cost this symbol a full day's wait before the next
+            // attempt (see the finally block below) the way a real data problem should.
+            bool isTransientNetworkError = false;
+
             try
             {
-                var (stockValuation, current, historical) =
+                var (stockValuation, current, historical, scrapeError) =
                     await scraperService.ScrapeStockAsync(pendingSymbol.Symbol, cancellationToken);
+
+                isTransientNetworkError = scrapeError != null
+                    && scrapeError.StartsWith("Could not reach Screener.in", StringComparison.OrdinalIgnoreCase);
 
                 if (stockValuation is not null && current is not null && historical is not null)
                 {
@@ -108,11 +119,37 @@ namespace SoundMoney.Services
                     valuation = valuationService.Evaluate(pendingSymbol, current, historical);
                     valuation.ErrorMessage = $"Successfully analyzed and persisted: {pendingSymbol.Symbol}";
                     _logger.LogInformation("Successfully processed symbol: {Symbol}", pendingSymbol.Symbol);
+
+                    // Also populate the full-scrape cache ScreenerService.RunScreenDetailsAsync
+                    // reads from, so a user opening Details/Summary for this symbol later
+                    // today gets an instant cache hit instead of a second, redundant scrape -
+                    // the two pipelines (this background pass and on-demand page views) end
+                    // up sharing one "once per stock per day" guarantee instead of each
+                    // separately hitting Screener.in for the same symbol on the same day.
+                    try
+                    {
+                        await valuationRepo.SaveScrapedCacheAsync(pendingSymbol.Symbol, stockValuation, current, historical, cancellationToken);
+                    }
+                    catch (Exception cacheEx)
+                    {
+                        // Don't let a cache-write failure undo an otherwise-successful
+                        // valuation - ScreenerService will just fall back to its own live
+                        // scrape later today if this write didn't land.
+                        _logger.LogError(cacheEx, "Failed to write scrape cache for symbol: {Symbol}", pendingSymbol.Symbol);
+                    }
                 }
                 else
                 {
-                    valuation.ErrorMessage = $"Incomplete data retrieved for symbol: {pendingSymbol.Symbol}. Skipping valuation calculation.";
-                    _logger.LogWarning("Incomplete data for symbol: {Symbol}", pendingSymbol.Symbol);
+                    valuation.ErrorMessage = scrapeError ?? $"Incomplete data retrieved for symbol: {pendingSymbol.Symbol}. Skipping valuation calculation.";
+
+                    if (isTransientNetworkError)
+                    {
+                        _logger.LogWarning("Transient network error scraping {Symbol}, will retry on the next cycle: {Error}", pendingSymbol.Symbol, scrapeError);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Incomplete data for symbol: {Symbol}. Reason: {Error}", pendingSymbol.Symbol, scrapeError);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -130,7 +167,13 @@ namespace SoundMoney.Services
             {
                 try
                 {
-                    valuation.UpdatedAt = DateTime.Now;
+                    // On a transient network failure, deliberately do NOT bump UpdatedAt:
+                    // GetPendingValuationsAsync selects rows where UpdatedAt is null or
+                    // before today, so touching it here would push this symbol's next
+                    // attempt to tomorrow even though the failure had nothing to do with
+                    // this symbol's data - preserving the prior value keeps it eligible for
+                    // the very next polling cycle (every 5-10 seconds) instead.
+                    valuation.UpdatedAt = isTransientNetworkError ? pendingSymbol.UpdatedAt : DateTime.Now;
                     await valuationRepo.SaveValuationAsync(valuation);
                 }
                 catch (Exception ex)

@@ -1,16 +1,30 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using SoundMoney.Models;
+using System.Text.Json;
 
 namespace SoundMoney.Data
 {
+    /// <summary>
+    /// A cached scrape result, deserialized back into usable objects, plus when it was
+    /// scraped - the caller decides what counts as "fresh" from ScrapedAt. All four are
+    /// null when there is no cache row for the symbol yet.
+    /// </summary>
+    public record CachedScrape(Financial? Current, List<Financial>? Historical, StockValuation? Summary, DateTime? ScrapedAt);
+
     public interface IFinancialRepository
     {
         // Save / Upsert Methods
         Task SaveValuationAsync(StockValuation valuation, CancellationToken ct = default);
-        
+
+        // Full-scrape cache (current + historical Financial, not just the lightweight
+        // StockValuation summary above) - see ScrapedFinancialCache for why this is a
+        // separate table/pipeline from SaveValuationAsync/StockValuations.
+        Task<CachedScrape> GetCachedScrapeAsync(string symbol, CancellationToken ct = default);
+        Task SaveScrapedCacheAsync(string symbol, StockValuation stockValuation, Financial current, List<Financial> historical, CancellationToken ct = default);
+
         // Retrieval Methods - Single Entities
         Task<StockValuation?> GetValuationBySymbolAsync(string symbol, CancellationToken ct = default);
-       
+
         // Retrieval Methods - Bulk / Querying
         Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default);
         Task<List<StockValuation>> GetValuationsByVerdictAsync(string verdict, CancellationToken ct = default);
@@ -18,7 +32,7 @@ namespace SoundMoney.Data
         Task<StockValuation> GetPendingValuationsAsync(CancellationToken ct = default);
         // Delete Methods
         Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
-         
+
     }
     public class FinancialRepository : IFinancialRepository
     {
@@ -48,6 +62,34 @@ namespace SoundMoney.Data
             await _context.SaveChangesAsync(ct);
         }
 
+        public async Task SaveScrapedCacheAsync(string symbol, StockValuation stockValuation, Financial current, List<Financial> historical, CancellationToken ct = default)
+        {
+            string cleanSymbol = symbol.ToUpperInvariant();
+
+            var entity = new ScrapedFinancialCache
+            {
+                Symbol = cleanSymbol,
+                StockValuationJson = JsonSerializer.Serialize(stockValuation),
+                CurrentFinancialJson = JsonSerializer.Serialize(current),
+                HistoricalFinancialsJson = JsonSerializer.Serialize(historical),
+                ScrapedAt = DateTime.Now
+            };
+
+            var existing = await _context.ScrapedFinancialCaches
+                .FirstOrDefaultAsync(c => c.Symbol == cleanSymbol, ct);
+
+            if (existing == null)
+            {
+                await _context.ScrapedFinancialCaches.AddAsync(entity, ct);
+            }
+            else
+            {
+                _context.Entry(existing).CurrentValues.SetValues(entity);
+            }
+
+            await _context.SaveChangesAsync(ct);
+        }
+
         #endregion
 
         #region Retrieval Operations
@@ -59,7 +101,35 @@ namespace SoundMoney.Data
                 .FirstOrDefaultAsync(v => v.Symbol == symbol.ToUpperInvariant(), ct);
         }
 
-        
+        public async Task<CachedScrape> GetCachedScrapeAsync(string symbol, CancellationToken ct = default)
+        {
+            var entity = await _context.ScrapedFinancialCaches
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.Symbol == symbol.ToUpperInvariant(), ct);
+
+            if (entity == null)
+            {
+                return new CachedScrape(null, null, null, null);
+            }
+
+            try
+            {
+                var stockValuation = JsonSerializer.Deserialize<StockValuation>(entity.StockValuationJson);
+                var current = JsonSerializer.Deserialize<Financial>(entity.CurrentFinancialJson);
+                var historical = JsonSerializer.Deserialize<List<Financial>>(entity.HistoricalFinancialsJson);
+                return new CachedScrape(current, historical, stockValuation, entity.ScrapedAt);
+            }
+            catch (JsonException)
+            {
+                // A cache row that doesn't deserialize cleanly (e.g. written by an older
+                // version of Financial/StockValuation before a field was added/renamed)
+                // should be treated as a cache miss, not a crash - the caller falls back
+                // to a live scrape exactly as if this symbol had never been cached.
+                return new CachedScrape(null, null, null, null);
+            }
+        }
+
+
 
         public async Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default)
         {
@@ -135,6 +205,6 @@ namespace SoundMoney.Data
 
         #endregion
 
-       
+
     }
 }

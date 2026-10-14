@@ -9,7 +9,11 @@ namespace SoundMoney.Services
     public interface IScreenerService
     {
         Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
-        Task<StockDetailsViewModel> RunScreenDetailsAsync(string symbol);
+
+        // ErrorMessage is non-null only when Model is null - carries the specific reason
+        // scraping/valuation failed (e.g. a network error reaching Screener.in) up to the
+        // controller, instead of the caller only ever seeing a bare null.
+        Task<(StockDetailsViewModel? Model, string? ErrorMessage)> RunScreenDetailsAsync(string symbol);
     }
     public class ScreenerService : IScreenerService
     {
@@ -35,27 +39,78 @@ namespace SoundMoney.Services
             return screenRows;
         }
 
-        public async Task<StockDetailsViewModel> RunScreenDetailsAsync(string symbol)
+        public async Task<(StockDetailsViewModel? Model, string? ErrorMessage)> RunScreenDetailsAsync(string symbol)
         {
-            // Scrape live financial records
-            var (stockValuation, current, historical) =
-                await _scraperService.ScrapeStockAsync(symbol.ToUpper());
+            string cleanSymbol = symbol.ToUpper();
+
+            StockValuation? stockValuation;
+            Financial? current;
+            List<Financial>? historical;
+            string? scrapeError = null;
+            DateTime dataAsOf = DateTime.Now; // overwritten below when data actually came from cache
+
+            // Serve today's cached scrape if we have one, rather than hitting Screener.in
+            // again - this is the "once per stock per day" cache. Calendar-day boundary
+            // (not a rolling 24h window), matching the convention GetPendingValuationsAsync
+            // already uses (UpdatedAt < DateTime.Today) elsewhere in this codebase.
+            var cached = await _repo.GetCachedScrapeAsync(cleanSymbol);
+            bool cacheIsFreshToday = cached.ScrapedAt.HasValue && cached.ScrapedAt.Value.Date == DateTime.Today
+                && cached.Current != null && cached.Historical != null && cached.Summary != null;
+
+            if (cacheIsFreshToday)
+            {
+                stockValuation = cached.Summary;
+                current = cached.Current;
+                historical = cached.Historical;
+                dataAsOf = cached.ScrapedAt!.Value;
+            }
+            else
+            {
+                var (freshValuation, freshCurrent, freshHistorical, freshError) =
+                    await _scraperService.ScrapeStockAsync(cleanSymbol);
+
+                if (freshValuation != null && freshCurrent != null && freshHistorical != null)
+                {
+                    stockValuation = freshValuation;
+                    current = freshCurrent;
+                    historical = freshHistorical;
+                    dataAsOf = DateTime.Now;
+
+                    // Fire-and-forget would risk a failed write going unnoticed and
+                    // unretried; awaiting it keeps this simple and correct at the cost of
+                    // a little request latency on cache-miss days - acceptable since this
+                    // only happens once per symbol per day instead of every page view.
+                    await _repo.SaveScrapedCacheAsync(cleanSymbol, freshValuation, freshCurrent, freshHistorical);
+                }
+                else if (cached.Current != null && cached.Historical != null && cached.Summary != null)
+                {
+                    // Live scrape failed (e.g. the transient network timeouts Screener.in
+                    // sometimes returns) but we have a stale cache from an earlier day -
+                    // better to show slightly-stale data than fail the page outright.
+                    stockValuation = cached.Summary;
+                    current = cached.Current;
+                    historical = cached.Historical;
+                    dataAsOf = cached.ScrapedAt!.Value;
+                    _logger.LogWarning("Live scrape failed for {Symbol}, serving cache from {ScrapedAt}: {Error}", cleanSymbol, cached.ScrapedAt, freshError);
+                }
+                else
+                {
+                    stockValuation = null;
+                    current = null;
+                    historical = null;
+                    scrapeError = freshError;
+                }
+            }
 
             if (stockValuation is null || current is null || historical is null)
             {
-                return null;
+                return (null, scrapeError ?? $"Could not retrieve or analyze data for symbol '{symbol}'.");
             }
 
             // Calculate intrinsic value & score rating
             var valuationResult = _valuationService.Evaluate(stockValuation, current, historical);
 
             DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
-
-            // Same inputs ValuationService used for the score, re-run only to get the
-            // breakdown (raw score + why it was capped). Skipped when there's no valuation.
-            var scoreDetail = valuationResult.Verdict == "INSUFFICIENT DATA"
-                ? null
-                : FinancialAlgorithms.CalculateSoundScoreDetailed(valuationResult.MarginOfSafety, current, historical);
 
             // Prepare historical data for trend analysis
             var historicalList = historical.OrderBy(h => h.Year).ToList();
@@ -67,12 +122,6 @@ namespace SoundMoney.Services
             var roceByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateRoce(f), isPercentageMetric: true);
             var debtToEquityByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateDebtToEquity(f), isPercentageMetric: false);
             var fcfByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FreeCashFlowCr, isPercentageMetric: false);
-            // Promoter Holding moves far more slowly year-to-year than ROE/ROCE, so it
-            // needs a much tighter Up/Down threshold than those metrics' default 5 points -
-            // otherwise a real, worth-flagging decline reads as "Flat" (see FinancialAlgorithms.CalculateYearlyMetrics).
-            var promoterHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.PromoterHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
-            var fiiHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FiiHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
-            var diiHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.DiiHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
 
             // Determine trend directions
             string revenueTrend = FinancialAlgorithms.DetermineTrendDirection(revenueByYear);
@@ -81,9 +130,6 @@ namespace SoundMoney.Services
             string roceTrend = FinancialAlgorithms.DetermineTrendDirection(roceByYear);
             string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining" : FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
             string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
-            string promoterHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(promoterHoldingByYear);
-            string fiiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(fiiHoldingByYear);
-            string diiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(diiHoldingByYear);
 
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
@@ -93,7 +139,7 @@ namespace SoundMoney.Services
                 CompanyName = stockValuation.CompanyName,
                 Sector = stockValuation.Sector,
                 CurrentPrice = stockValuation.CurrentPrice,
-                LastAnalyzed = DateTime.Now,
+                LastAnalyzed = dataAsOf,
                 IsFinancialSector = current.IsFinancialSector,
 
                 // 2. Core Valuation Output
@@ -101,9 +147,6 @@ namespace SoundMoney.Services
                 MarginOfSafetyPercent = valuationResult.MarginOfSafety,
                 Verdict = valuationResult.Verdict,
                 SoundScoreRating = valuationResult.SoundScoreRating,
-                SoundScore = (int)valuationResult.SoundScore,
-                SoundScoreRaw = scoreDetail?.RawScore ?? (int)valuationResult.SoundScore,
-                ScoreCapReasons = scoreDetail?.CapReasons.ToList() ?? new List<string>(),
                 PrimaryMethod = valuationResult.PrimaryMethod,
                 SecondaryMethod = valuationResult.SecondaryMethod,
                 MarketCapCr = current.MarketCapCr,
@@ -112,13 +155,6 @@ namespace SoundMoney.Services
                 FaceValue = FinancialAlgorithms.CalculateFaceValue(current),
                 Beta = current.Beta,
                 CashConversionCycleDays = current.CashConversionCycleDays,
-                PromoterHoldingPercent = current.PromoterHoldingPercent,
-                PromoterHoldingTrend = promoterHoldingTrend,
-                FiiHoldingPercent = current.FiiHoldingPercent,
-                FiiHoldingTrend = fiiHoldingTrend,
-                DiiHoldingPercent = current.DiiHoldingPercent,
-                DiiHoldingTrend = diiHoldingTrend,
-                PromoterPledgePercent = FinancialAlgorithms.NormalizePromoterPledgePercent(current),
 
                 // 3. Deep Financial Indicators
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
@@ -162,9 +198,6 @@ namespace SoundMoney.Services
                 RoceByYear = roceByYear,
                 DebtToEquityByYear = debtToEquityByYear,
                 FreeCashFlowByYear = fcfByYear,
-                PromoterHoldingByYear = promoterHoldingByYear,
-                FiiHoldingByYear = fiiHoldingByYear,
-                DiiHoldingByYear = diiHoldingByYear,
 
                 // 6. Trend Summary Indicators
                 RevenueTrend = revenueTrend,
@@ -174,7 +207,7 @@ namespace SoundMoney.Services
                 DebtTrend = debtTrend,
                 CashFlowTrend = cashFlowTrend
             };
-            return model;
+            return (model, null);
         }
 
 

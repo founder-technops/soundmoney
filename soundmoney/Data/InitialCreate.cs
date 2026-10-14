@@ -12,56 +12,6 @@ namespace SoundMoney.Data
         protected override void Up(MigrationBuilder builder)
         {
             builder.CreateTable(
-                name: "Financials",
-                columns: table => new
-                {
-                    Symbol = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
-                    CurrentPrice = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    MarketCapCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    BookValuePerShare = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    TotalSharesCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    ReportedRoePercent = table.Column<decimal>(type: "decimal(8,4)", precision: 8, scale: 4, nullable: false),
-                    DividendYieldPercent = table.Column<decimal>(type: "decimal(8,4)", precision: 8, scale: 4, nullable: false),
-                    RevenueCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    OperatingProfitEbitdaCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    DepreciationCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    NetProfitCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    DividendPayoutPercent = table.Column<decimal>(type: "decimal(8,4)", precision: 8, scale: 4, nullable: false),
-                    ShareCapitalCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    ReservesCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    TotalEquityCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    TotalBorrowingsCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    NetFixedAssetsCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    CwipCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    CashAndEquivalentsCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    IntangibleAssetsCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    TotalLiabilitiesCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    TotalAssetsCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    CashFromOperationsCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    GrossCapexCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    FreeCashFlowCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Financials", x => x.Symbol);
-                });
-
-            builder.CreateTable(
-                name: "Financials",
-                columns: table => new
-                {
-                    Symbol = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
-                    Year = table.Column<int>(type: "int", nullable: false),
-                    HistoricalOcfCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    HistoricalCapexCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false),
-                    HistoricalRevenueCr = table.Column<decimal>(type: "decimal(18,4)", precision: 18, scale: 4, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Financials", x => new { x.Symbol, x.Year });
-                });
-
-            builder.CreateTable(
                 name: "StockValuations",
                 columns: table => new
                 {
@@ -82,16 +32,22 @@ namespace SoundMoney.Data
                     table.PrimaryKey("PK_StockValuations", x => x.Symbol);
                 });
 
-            // Indexes
-            builder.CreateIndex(
-                name: "IX_Financials_Symbol",
-                table: "Financials",
-                column: "Symbol");
+            builder.CreateTable(
+                name: "ScrapedFinancialCaches",
+                columns: table => new
+                {
+                    Symbol = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
+                    StockValuationJson = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CurrentFinancialJson = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    HistoricalFinancialsJson = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ScrapedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ScrapedFinancialCaches", x => x.Symbol);
+                });
 
-            builder.CreateIndex(
-                name: "IX_Financials_Year",
-                table: "Financials",
-                column: "Year");
+            // Indexes
 
             builder.CreateIndex(
                 name: "IX_StockValuations_FetchedAt",
@@ -102,14 +58,18 @@ namespace SoundMoney.Data
                 name: "IX_StockValuations_Symbol",
                 table: "StockValuations",
                 column: "Symbol");
+
+            builder.CreateIndex(
+               name: "IX_ScrapedFinancialCaches_ScrapedAt",
+               table: "ScrapedFinancialCaches",
+               column: "ScrapedAt");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder builder)
         {
-            builder.DropTable(name: "Financials");
-            builder.DropTable(name: "Financials");
             builder.DropTable(name: "StockValuations");
+            builder.DropTable(name: "ScrapedFinancialCaches");
         }
     }
 }

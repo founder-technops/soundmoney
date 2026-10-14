@@ -20,6 +20,33 @@ CREATE TABLE [dbo].[StockValuations] (
     PRIMARY KEY CLUSTERED ([Symbol] ASC)
 ); 
 
+-- Create the ScrapedFinancialCaches table
+CREATE TABLE dbo.ScrapedFinancialCaches (
+    Symbol                    VARCHAR(20) NOT NULL,
+    StockValuationJson        NVARCHAR(MAX) NOT NULL,
+    CurrentFinancialJson      NVARCHAR(MAX) NOT NULL,
+    HistoricalFinancialsJson  NVARCHAR(MAX) NOT NULL,
+    ScrapedAt                 DATETIME2 NOT NULL,
+    
+    CONSTRAINT PK_ScrapedFinancialCaches PRIMARY KEY CLUSTERED (Symbol)
+);
+GO
+
+-- Create the index on the ScrapedAt column
+CREATE INDEX IX_ScrapedFinancialCaches_ScrapedAt 
+ON dbo.ScrapedFinancialCaches (ScrapedAt);
+GO
+
+-- Create index on the FetchedAt column
+CREATE INDEX IX_StockValuations_FetchedAt 
+ON dbo.StockValuations (FetchedAt);
+GO
+
+-- Create index on the Symbol column
+CREATE INDEX IX_StockValuations_Symbol 
+ON dbo.StockValuations (Symbol);
+GO
+
 UPDATE StockValuations 
  SET currentprice=0, intrinsicvalue=0,MarginOfSafety=0, Verdict='',
  SoundScore=0,SoundScoreRating='', UpdatedAt = NULL where symbol ='ARCHIES';
@@ -41,6 +68,6 @@ Select distinct sector from stockvaluations;
  
  select SYSDATETIME(), GETUTCDATE();
 
-
+ select * from ScrapedFinancialCaches;
  */
 

@@ -14,12 +14,13 @@ public class DataContext : DbContext
     {
     }
     public DbSet<StockValuation> StockValuations { get; set; } = null!;
-    
+    public DbSet<ScrapedFinancialCache> ScrapedFinancialCaches { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfiguration(new StockValuationConfiguration());
-        
+        modelBuilder.ApplyConfiguration(new ScrapedFinancialCacheConfiguration());
     }
     public class StockValuationConfiguration : IEntityTypeConfiguration<StockValuation>
     {
@@ -91,6 +92,35 @@ public class DataContext : DbContext
                 .IsUnique(false);
 
             builder.HasIndex(e => e.FetchedAt);
+        }
+    }
+
+    public class ScrapedFinancialCacheConfiguration : IEntityTypeConfiguration<ScrapedFinancialCache>
+    {
+        public void Configure(EntityTypeBuilder<ScrapedFinancialCache> builder)
+        {
+            builder.ToTable("ScrapedFinancialCaches");
+
+            builder.HasKey(e => e.Symbol);
+
+            builder.Property(e => e.Symbol)
+                .IsRequired()
+                .HasMaxLength(20)
+                .IsUnicode(false);
+
+            // JSON payloads deliberately left without HasMaxLength - a full year-by-year
+            // Financial history serializes to several KB, and capping it risks silent
+            // truncation. No HasMaxLength maps to nvarchar(max) on SQL Server.
+            builder.Property(e => e.StockValuationJson).IsRequired();
+            builder.Property(e => e.CurrentFinancialJson).IsRequired();
+            builder.Property(e => e.HistoricalFinancialsJson).IsRequired();
+
+            builder.Property(e => e.ScrapedAt).IsRequired();
+
+            // Looked up by Symbol (the key) on every Details/Summary request, and the
+            // "is it from today" check reads ScrapedAt - index it the same way
+            // StockValuations indexes FetchedAt, for the same kind of lookup.
+            builder.HasIndex(e => e.ScrapedAt);
         }
     }
 }
