@@ -48,6 +48,7 @@ namespace SoundMoney.Services
             List<Financial>? historical;
             string? scrapeError = null;
             DateTime dataAsOf = DateTime.Now; // overwritten below when data actually came from cache
+            bool needsCacheWrite = false; // set once fresh data is selected; written after Evaluate() below
 
             // Serve today's cached scrape if we have one, rather than hitting Screener.in
             // again - this is the "once per stock per day" cache. Calendar-day boundary
@@ -76,11 +77,17 @@ namespace SoundMoney.Services
                     historical = freshHistorical;
                     dataAsOf = DateTime.Now;
 
-                    // Fire-and-forget would risk a failed write going unnoticed and
-                    // unretried; awaiting it keeps this simple and correct at the cost of
-                    // a little request latency on cache-miss days - acceptable since this
-                    // only happens once per symbol per day instead of every page view.
-                    await _repo.SaveScrapedCacheAsync(cleanSymbol, freshValuation, freshCurrent, freshHistorical);
+                    // Deliberately NOT cached here yet: freshValuation is the raw scrape
+                    // result, which only ever has Symbol/CompanyName/Sector/CurrentPrice
+                    // populated (see ScraperService.ScrapeStockAsync) - IntrinsicValue/
+                    // MarginOfSafety/Verdict/SoundScore/etc. are all still at their C#
+                    // defaults (0/""/false) at this point. The actual cache write happens
+                    // below, once valuationResult (the Evaluate() output) exists, so the
+                    // persisted StockValuationJson reflects real computed numbers instead
+                    // of a half-populated stub - the same mistake this is avoiding was
+                    // originally made (and then fixed) in AutomationService's own cache
+                    // write for exactly this reason.
+                    needsCacheWrite = true;
                 }
                 else if (cached.Current != null && cached.Historical != null && cached.Summary != null)
                 {
@@ -109,6 +116,17 @@ namespace SoundMoney.Services
 
             // Calculate intrinsic value & score rating
             var valuationResult = _valuationService.Evaluate(stockValuation, current, historical);
+
+            if (needsCacheWrite)
+            {
+                // Fire-and-forget would risk a failed write going unnoticed and unretried;
+                // awaiting it keeps this simple and correct at the cost of a little request
+                // latency on cache-miss days - acceptable since this only happens once per
+                // symbol per day instead of every page view. Caches valuationResult (the
+                // fully-evaluated StockValuation), not the raw scrape stub - see the
+                // comment where needsCacheWrite is set, above.
+                await _repo.SaveScrapedCacheAsync(cleanSymbol, valuationResult, current, historical);
+            }
 
             DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
 

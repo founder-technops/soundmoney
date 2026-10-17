@@ -126,9 +126,16 @@ namespace SoundMoney.Services
                     // the two pipelines (this background pass and on-demand page views) end
                     // up sharing one "once per stock per day" guarantee instead of each
                     // separately hitting Screener.in for the same symbol on the same day.
+                    //
+                    // Deliberately caches `valuation` (the Evaluate() result), NOT the raw
+                    // `stockValuation` from the scraper - ScraperService only ever sets
+                    // Symbol/CompanyName/Sector/CurrentPrice on that raw object, so
+                    // IntrinsicValue/MarginOfSafety/Verdict/SoundScore/SoundScoreRating/
+                    // DividendYieldPercent/IsDividendConsistent would all be cached as their
+                    // C# defaults (0 / "" / false) if `stockValuation` were cached instead.
                     try
                     {
-                        await valuationRepo.SaveScrapedCacheAsync(pendingSymbol.Symbol, stockValuation, current, historical, cancellationToken);
+                        await valuationRepo.SaveScrapedCacheAsync(pendingSymbol.Symbol, valuation, current, historical, cancellationToken);
                     }
                     catch (Exception cacheEx)
                     {
