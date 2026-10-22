@@ -110,6 +110,53 @@ public class ValuationStrategyTests
         Assert.False(rule.IsMatch(ctx));
     }
 
+    [Fact]
+    public void SoundScore_OneValueTrapWarning_ShouldNotCrushAnOtherwiseStrongCompany()
+    {
+        var current = new Financial
+        {
+            Symbol = "GOODCO",
+            Sector = "Capital Goods",
+            IsFinancialSector = false,
+            CurrentPrice = 120m,
+            MarketCapCr = 350m,
+            SalesCr = 1200m,
+            OperatingProfitCr = 260m,
+            OtherIncomeCr = 30m,
+            DepreciationCr = 35m,
+            NetProfitCr = 180m,
+            InterestExpenseCr = 18m,
+            CashFromOperationsCr = 200m,
+            FreeCashFlowCr = 150m,
+            ShareCapitalCr = 120m,
+            ReservesCr = 150m,
+            TotalBorrowingsCr = 280m,
+            OtherLiabilitiesCr = 60m,
+            FixedAssetsCr = 180m,
+            CwipCr = 22m,
+            InvestmentsCr = 70m,
+            OtherAssetsCr = 50m,
+            CashAndEquivalentsCr = 25m,
+            DividendPayoutPercent = 30m,
+            FaceValue = 1m,
+            Beta = 1.1m,
+            IsCashEstimateReliable = true
+        };
+
+        var history = new List<Financial>
+        {
+            new() { Year = 2021, SalesCr = 980m, NetProfitCr = 130m, CashFromOperationsCr = 145m, FreeCashFlowCr = 100m, ShareCapitalCr = 100m, ReservesCr = 130m, TotalBorrowingsCr = 220m, OtherLiabilitiesCr = 50m, FixedAssetsCr = 170m, CwipCr = 20m, InvestmentsCr = 62m, OtherAssetsCr = 46m, CashAndEquivalentsCr = 22m, DepreciationCr = 28m, InterestExpenseCr = 15m, OperatingProfitCr = 200m, OtherIncomeCr = 22m, DividendPayoutPercent = 28m },
+            new() { Year = 2022, SalesCr = 1040m, NetProfitCr = 145m, CashFromOperationsCr = 160m, FreeCashFlowCr = 110m, ShareCapitalCr = 105m, ReservesCr = 137m, TotalBorrowingsCr = 245m, OtherLiabilitiesCr = 55m, FixedAssetsCr = 173m, CwipCr = 21m, InvestmentsCr = 64m, OtherAssetsCr = 48m, CashAndEquivalentsCr = 23m, DepreciationCr = 30m, InterestExpenseCr = 16m, OperatingProfitCr = 220m, OtherIncomeCr = 24m, DividendPayoutPercent = 29m },
+            new() { Year = 2023, SalesCr = 1100m, NetProfitCr = 160m, CashFromOperationsCr = 175m, FreeCashFlowCr = 120m, ShareCapitalCr = 110m, ReservesCr = 145m, TotalBorrowingsCr = 260m, OtherLiabilitiesCr = 58m, FixedAssetsCr = 176m, CwipCr = 21m, InvestmentsCr = 66m, OtherAssetsCr = 49m, CashAndEquivalentsCr = 24m, DepreciationCr = 32m, InterestExpenseCr = 17m, OperatingProfitCr = 235m, OtherIncomeCr = 27m, DividendPayoutPercent = 29m },
+            new() { Year = 2024, SalesCr = 1200m, NetProfitCr = 180m, CashFromOperationsCr = 200m, FreeCashFlowCr = 150m, ShareCapitalCr = 120m, ReservesCr = 150m, TotalBorrowingsCr = 280m, OtherLiabilitiesCr = 60m, FixedAssetsCr = 180m, CwipCr = 22m, InvestmentsCr = 70m, OtherAssetsCr = 50m, CashAndEquivalentsCr = 25m, DepreciationCr = 35m, InterestExpenseCr = 18m, OperatingProfitCr = 260m, OtherIncomeCr = 30m, DividendPayoutPercent = 30m }
+        };
+
+        var result = FinancialAlgorithms.CalculateSoundScoreDetailed(18m, current, history);
+
+        Assert.True(result.Score >= 60, $"Expected a strong score, but got {result.Score} with reasons: {string.Join(", ", result.CapReasons)}");
+        Assert.True(result.CapReasons.Count <= 1, $"A single warning should not crush the score: {string.Join(", ", result.CapReasons)}");
+    }
+
     [Theory]
     [InlineData("ITC")]
     [InlineData("TCS")]

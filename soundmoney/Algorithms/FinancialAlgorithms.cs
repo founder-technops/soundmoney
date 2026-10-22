@@ -689,16 +689,23 @@ namespace SoundMoney.Algorithms
                 : (salesGrowth < 0m || (hasValidProfitGrowth && profitGrowth < 0m)));
             bool isSeverePledge = pledgePercent >= 35.0m;
 
+            decimal cfoToNetProfit = current.NetProfitCr > 0m ? current.CashFromOperationsCr / current.NetProfitCr : 0m;
+            decimal fcfToNetProfit = current.NetProfitCr > 0m ? fcfCr / current.NetProfitCr : 0m;
+
             bool isPaperProfitTrap = !current.IsFinancialSector
                 && current.NetProfitCr > 0m
-                && (current.CashFromOperationsCr <= 0m || (current.CashFromOperationsCr / current.NetProfitCr) < 0.20m);
+                && (current.CashFromOperationsCr <= 0m || cfoToNetProfit < 0.20m)
+                && (roePercent < 15m || roicPercent < 12m || opmPercent < 12m || salesGrowth <= 0m);
 
             bool isFcfDrainTrap = !current.IsFinancialSector
                 && current.NetProfitCr > 0m
                 && fcfCr < 0m
-                && (current.CashFromOperationsCr / current.NetProfitCr) < 0.50m;
+                && cfoToNetProfit < 0.50m
+                && (roePercent < 12m || opmPercent < 10m || salesGrowth <= 0m);
 
-            bool isAggressiveAccrualTrap = !current.IsFinancialSector && sloanRatio > 18.0m;
+            bool isAggressiveAccrualTrap = !current.IsFinancialSector
+                && sloanRatio > 18.0m
+                && (roePercent < 12m || roicPercent < 10m || cfoToNetProfit < 0.50m);
 
             decimal altmanZ = CalculateAltmanZScore(current);
             int piotroskiF = CalculatePiotroskiFScore(current, historicals);
@@ -733,10 +740,15 @@ namespace SoundMoney.Algorithms
             if (isBeneishManipulator) trapReasons.Add("reported profit looks possibly manipulated");
 
             int finalScore = (int)Math.Clamp(Math.Round(score), 0, 100);
-            bool isValueTrap = trapReasons.Count > 0;
-            int cappedScore = isValueTrap ? Math.Min(finalScore, 40) : finalScore;
+            bool isSevereValueTrap = trapReasons.Count >= 2
+                || trapReasons.Any(reason => reason.Contains("loss-making", StringComparison.OrdinalIgnoreCase)
+                    || reason.Contains("possibly manipulated", StringComparison.OrdinalIgnoreCase)
+                    || reason.Contains("draining cash", StringComparison.OrdinalIgnoreCase)
+                    || reason.Contains("heavy debt with thin margins", StringComparison.OrdinalIgnoreCase));
+            int cappedScore = isSevereValueTrap ? Math.Min(finalScore, 40) : finalScore;
 
-            // Only report reasons when the cap actually lowered the score.
+            // A single weak indicator should not collapse a fundamentally healthy company.
+            // Reserve the cap for genuine value-trap conditions or multiple simultaneous red flags.
             return new SoundScoreResult(
                 cappedScore,
                 finalScore,
