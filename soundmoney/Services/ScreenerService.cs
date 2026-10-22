@@ -130,6 +130,12 @@ namespace SoundMoney.Services
 
             DividendAnalysisResult dividendAnalysis = FinancialAlgorithms.CalculateDividend(current, historical);
 
+            // Same inputs ValuationService used for the score, re-run only to get the
+            // breakdown (raw score + why it was capped). Skipped when there's no valuation.
+            var scoreDetail = valuationResult.Verdict == "INSUFFICIENT DATA"
+                ? null
+                : FinancialAlgorithms.CalculateSoundScoreDetailed(valuationResult.MarginOfSafety, current, historical);
+
             // Prepare historical data for trend analysis
             var historicalList = historical.OrderBy(h => h.Year).ToList();
 
@@ -159,10 +165,6 @@ namespace SoundMoney.Services
             string fiiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(fiiHoldingByYear);
             string diiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(diiHoldingByYear);
 
-            var soundScoreDetails = valuationResult.Verdict == "INSUFFICIENT DATA"
-                ? new SoundScoreResult(0, 0, Array.Empty<string>())
-                : FinancialAlgorithms.CalculateSoundScoreDetailed(valuationResult.MarginOfSafety, current, historicalList);
-
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
             {
@@ -180,8 +182,8 @@ namespace SoundMoney.Services
                 Verdict = valuationResult.Verdict,
                 SoundScoreRating = valuationResult.SoundScoreRating,
                 SoundScore = (int)valuationResult.SoundScore,
-                SoundScoreRaw = soundScoreDetails.RawScore,
-                ScoreCapReasons = soundScoreDetails.CapReasons.ToList(),
+                SoundScoreRaw = scoreDetail?.RawScore ?? (int)valuationResult.SoundScore,
+                ScoreCapReasons = scoreDetail?.CapReasons.ToList() ?? new List<string>(),
                 PrimaryMethod = valuationResult.PrimaryMethod,
                 SecondaryMethod = valuationResult.SecondaryMethod,
                 MarketCapCr = current.MarketCapCr,
