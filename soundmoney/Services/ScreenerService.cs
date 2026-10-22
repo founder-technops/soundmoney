@@ -159,6 +159,10 @@ namespace SoundMoney.Services
             string fiiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(fiiHoldingByYear);
             string diiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(diiHoldingByYear);
 
+            var soundScoreDetails = valuationResult.Verdict == "INSUFFICIENT DATA"
+                ? new SoundScoreResult(0, 0, Array.Empty<string>())
+                : FinancialAlgorithms.CalculateSoundScoreDetailed(valuationResult.MarginOfSafety, current, historicalList);
+
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
             {
@@ -175,6 +179,9 @@ namespace SoundMoney.Services
                 MarginOfSafetyPercent = valuationResult.MarginOfSafety,
                 Verdict = valuationResult.Verdict,
                 SoundScoreRating = valuationResult.SoundScoreRating,
+                SoundScore = (int)valuationResult.SoundScore,
+                SoundScoreRaw = soundScoreDetails.RawScore,
+                ScoreCapReasons = soundScoreDetails.CapReasons.ToList(),
                 PrimaryMethod = valuationResult.PrimaryMethod,
                 SecondaryMethod = valuationResult.SecondaryMethod,
                 MarketCapCr = current.MarketCapCr,
