@@ -604,8 +604,40 @@ namespace SoundMoney.Models
     public class DistressTurnaroundRule : IValuationRule
     {
         public int Priority => RulePriority.DistressTurnaround;
-        public bool IsMatch(EvaluationContext ctx) =>
-            ctx.Current.NetProfitCr <= 0 || (ctx.InterestCoverage < 1.8m && !ctx.Current.IsFinancialSector);
+        public bool IsMatch(EvaluationContext ctx)
+        {
+            if (ctx.Current.IsFinancialSector) return false;
+
+            bool hasNegativeProfit = ctx.Current.NetProfitCr <= 0m;
+            bool hasWeakCoverage = ctx.InterestCoverage < 1.8m;
+            if (!hasNegativeProfit && !hasWeakCoverage)
+            {
+                return false;
+            }
+
+            // One-off coverage stress is not the same as a structurally-distressed
+            // business. If the recent multi-year trend still shows strong operating cash
+            // generation and consistent profitability, do not force the company into an
+            // NAV / asset-floor valuation just because the latest year happened to be a
+            // temporary liquidity squeeze.
+            if (ctx.Historicals.Count >= 3)
+            {
+                var recentYears = ctx.Historicals.TakeLast(3).ToList();
+                bool recentCashQualityStrong = recentYears.Count == 3
+                    && recentYears.All(h => h.NetProfitCr > 0m)
+                    && recentYears.All(h => h.CashFromOperationsCr > 0m)
+                    && recentYears.All(h => h.FreeCashFlowCr > 0m)
+                    && recentYears.Average(h => h.CashFromOperationsCr / Math.Max(h.NetProfitCr, 1m)) >= 0.80m
+                    && recentYears.Average(h => h.FreeCashFlowCr / Math.Max(h.NetProfitCr, 1m)) >= 0.50m;
+
+                if (recentCashQualityStrong)
+                {
+                    return false;
+                }
+            }
+
+            return hasNegativeProfit || hasWeakCoverage;
+        }
 
         public ValuationMethodology Result(EvaluationContext ctx) => new()
         {

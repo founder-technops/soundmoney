@@ -1,6 +1,8 @@
 using SoundMoney.Algorithms;
+using SoundMoney.Data;
 using SoundMoney.Models;
 using SoundMoney.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace soundmoney.Tests;
@@ -52,8 +54,96 @@ public class ValuationStrategyTests
 
         var methodology = ValuationStrategyResolver.ResolveMethodology(current, historical);
 
-        Assert.Equal("2-Stage Discounted Cash Flow (DCF)", methodology.PrimaryMethod);
+        Assert.Equal("Discounted Cash Flow (DCF)", methodology.PrimaryMethod);
         Assert.Equal("Price-to-Earnings (P/E) Multiple", methodology.SecondaryMethod);
+    }
+
+    [Fact]
+    public void DistressTurnaroundRule_IgnoresOneOffLowInterestCoverage_WhenRecentCashQualityIsStrong()
+    {
+        var current = new Financial
+        {
+            Symbol = "HEALTHY",
+            Sector = "Capital Goods",
+            IsFinancialSector = false,
+            NetProfitCr = 30m,
+            InterestExpenseCr = 20m,
+            CashFromOperationsCr = 35m,
+            FreeCashFlowCr = 22m,
+            ShareCapitalCr = 80m,
+            ReservesCr = 90m,
+            TotalBorrowingsCr = 120m,
+            OtherLiabilitiesCr = 50m,
+            FixedAssetsCr = 120m,
+            CwipCr = 20m,
+            InvestmentsCr = 40m,
+            OtherAssetsCr = 30m,
+            CashAndEquivalentsCr = 15m,
+            SalesCr = 300m,
+            OperatingProfitCr = 55m,
+            OtherIncomeCr = 10m,
+            DepreciationCr = 16m,
+            DividendPayoutPercent = 25m,
+            FaceValue = 1m
+        };
+
+        var history = new List<Financial>
+        {
+            new() { Year = 2021, NetProfitCr = 26m, CashFromOperationsCr = 30m, FreeCashFlowCr = 20m, InterestExpenseCr = 14m },
+            new() { Year = 2022, NetProfitCr = 28m, CashFromOperationsCr = 34m, FreeCashFlowCr = 21m, InterestExpenseCr = 15m },
+            new() { Year = 2023, NetProfitCr = 33m, CashFromOperationsCr = 39m, FreeCashFlowCr = 25m, InterestExpenseCr = 16m },
+            new() { Year = 2024, NetProfitCr = 35m, CashFromOperationsCr = 42m, FreeCashFlowCr = 27m, InterestExpenseCr = 17m }
+        };
+
+        var ctx = new EvaluationContext
+        {
+            Current = current,
+            Historicals = history,
+            OcfToNetProfit = 35m / 30m,
+            FcfToNetProfit = 22m / 30m,
+            InterestCoverage = 2.5m,
+            IsCashPredictable = true,
+            IsCyclical = false
+        };
+
+        var rule = new DistressTurnaroundRule();
+        Assert.False(rule.IsMatch(ctx));
+    }
+
+    [Theory]
+    [InlineData("ITC")]
+    [InlineData("TCS")]
+    [InlineData("RELIANCE")]
+    [InlineData("HDFCBANK")]
+    [InlineData("360ONE")]
+    [InlineData("NTPC")]
+    [InlineData("ASIANPAINT")]
+    [InlineData("TATASTEEL")]
+    public async Task LiveScreenerData_ProducesValidValuationOutcome(string symbol)
+    {
+        var scraper = new ScraperService(new HttpClient(), NullLogger<ScraperService>.Instance);
+        var valuationService = new ValuationService(new NoopFinancialRepository(), NullLogger<ValuationService>.Instance);
+
+        var (stockValuation, current, historical, error) = await scraper.ScrapeStockAsync(symbol);
+
+        Assert.True(error == null, $"Scrape failed for {symbol}: {error}");
+        Assert.NotNull(stockValuation);
+        Assert.NotNull(current);
+        Assert.NotEmpty(historical!);
+
+        var result = valuationService.Evaluate(stockValuation!, current!, historical!);
+
+        Console.WriteLine($"Symbol: {result.Symbol}");
+        Console.WriteLine($"Primary: {result.PrimaryMethod}");
+        Console.WriteLine($"Secondary: {result.SecondaryMethod}");
+        Console.WriteLine($"Intrinsic: {result.IntrinsicValue}");
+        Console.WriteLine($"MarginOfSafety: {result.MarginOfSafety}");
+        Console.WriteLine($"Verdict: {result.Verdict}");
+
+        Assert.Equal(symbol, result.Symbol);
+        Assert.True(result.IntrinsicValue > 0m, $"Intrinsic value should be > 0 for live symbol {symbol}.");
+        Assert.False(string.IsNullOrWhiteSpace(result.PrimaryMethod));
+        Assert.False(string.IsNullOrWhiteSpace(result.SecondaryMethod));
     }
 
     [Fact]
@@ -153,5 +243,18 @@ public class ValuationStrategyTests
         Assert.Equal("Price-to-Book (P/B)", MethodNames.PriceToBook.ToDisplayString());
         Assert.Equal("2-Stage FCFE DCF", MethodNames.TwoStageFcfeDcf.ToDisplayString());
         Assert.Equal("Price-to-Earnings-to-Growth (PEG)", MethodNames.PriceToEarningsToGrowth.ToDisplayString());
+    }
+
+    private sealed class NoopFinancialRepository : IFinancialRepository
+    {
+        public Task SaveValuationAsync(StockValuation valuation, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<CachedScrape> GetCachedScrapeAsync(string symbol, CancellationToken ct = default) => Task.FromResult(new CachedScrape(null, null, null, null));
+        public Task SaveScrapedCacheAsync(string symbol, StockValuation stockValuation, Financial current, List<Financial> historical, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<StockValuation?> GetValuationBySymbolAsync(string symbol, CancellationToken ct = default) => Task.FromResult<StockValuation?>(null);
+        public Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default) => Task.FromResult(new List<StockValuation>());
+        public Task<List<StockValuation>> GetValuationsByVerdictAsync(string verdict, CancellationToken ct = default) => Task.FromResult(new List<StockValuation>());
+        public Task<List<StockValuation>> GetAllValuationsAsync(CancellationToken ct = default) => Task.FromResult(new List<StockValuation>());
+        public Task<StockValuation> GetPendingValuationsAsync(CancellationToken ct = default) => Task.FromResult(new StockValuation());
+        public Task<List<StockValuation>> GetByFilterAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score) => Task.FromResult(new List<StockValuation>());
     }
 }

@@ -144,21 +144,67 @@ namespace SoundMoney.Services
 
         private async Task<(string Html, string? ErrorMessage)> FetchHtmlContentAsync(string symbol, CancellationToken ct)
         {
-            string consolidatedUrl = $"https://www.screener.in/company/{symbol}/consolidated/";
-            var response = await _httpClient.GetAsync(consolidatedUrl, ct);
+            string[] candidateUrls =
+            [
+                $"https://www.screener.in/company/{symbol}/consolidated/",
+                $"https://www.screener.in/company/{symbol}/"
+            ];
 
-            if (!response.IsSuccessStatusCode)
+            HttpResponseMessage? lastResponse = null;
+
+            foreach (var url in candidateUrls)
             {
-                string standaloneUrl = $"https://www.screener.in/company/{symbol}/";
-                response = await _httpClient.GetAsync(standaloneUrl, ct);
+                for (int attempt = 1; attempt <= 3; attempt++)
+                {
+                    try
+                    {
+                        using var response = await _httpClient.GetAsync(url, ct);
+                        lastResponse = response;
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            return (await response.Content.ReadAsStringAsync(ct), null);
+                        }
+
+                        bool isTransientFailure = (int)response.StatusCode == 429 || (int)response.StatusCode >= 500;
+                        if (!isTransientFailure || attempt >= 3)
+                        {
+                            break;
+                        }
+
+                        var retryDelay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1) + 1);
+                        _logger.LogWarning(
+                            "Screener.in rate-limited symbol {Symbol} at {Url} (attempt {Attempt}/3). Retrying in {DelaySeconds}s.",
+                            symbol,
+                            url,
+                            attempt,
+                            retryDelay.TotalSeconds);
+
+                        await Task.Delay(retryDelay, ct);
+                    }
+                    catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+                    {
+                        if (attempt >= 3)
+                            throw;
+
+                        var retryDelay = TimeSpan.FromSeconds(Math.Pow(2, attempt - 1) + 1);
+                        _logger.LogWarning(
+                            "Request to Screener.in timed out for {Symbol} at attempt {Attempt}/3. Retrying in {DelaySeconds}s.",
+                            symbol,
+                            attempt,
+                            retryDelay.TotalSeconds);
+
+                        await Task.Delay(retryDelay, ct);
+                    }
+                }
             }
 
-            if (!response.IsSuccessStatusCode)
+            if (lastResponse != null)
             {
-                return (string.Empty, $"Screener.in returned HTTP {(int)response.StatusCode} ({response.ReasonPhrase}) for this symbol.");
+                return (string.Empty, $"Screener.in returned HTTP {(int)lastResponse.StatusCode} ({lastResponse.ReasonPhrase}) for this symbol.");
             }
 
-            return (await response.Content.ReadAsStringAsync(ct), null);
+            return (string.Empty, "Screener.in did not return a usable response for this symbol.");
         }
 
         private string ExtractCompanyName(HtmlDocument doc, string fallbackSymbol)
