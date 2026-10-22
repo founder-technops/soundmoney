@@ -140,6 +140,13 @@ namespace SoundMoney.Services
             var roceByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateRoce(f), isPercentageMetric: true);
             var debtToEquityByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => FinancialAlgorithms.CalculateDebtToEquity(f), isPercentageMetric: false);
             var fcfByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FreeCashFlowCr, isPercentageMetric: false);
+            // Promoter/FII/DII Holding move far more slowly year-to-year than ROE/ROCE, so
+            // they need a much tighter Up/Down threshold than those metrics' default 5
+            // points - otherwise a real, worth-flagging change reads as "Flat" (see
+            // FinancialAlgorithms.CalculateYearlyMetrics).
+            var promoterHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.PromoterHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
+            var fiiHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.FiiHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
+            var diiHoldingByYear = FinancialAlgorithms.CalculateYearlyMetrics(current, historicalList, f => f.DiiHoldingPercent, isPercentageMetric: true, upDownThresholdPercent: 0.5m);
 
             // Determine trend directions
             string revenueTrend = FinancialAlgorithms.DetermineTrendDirection(revenueByYear);
@@ -148,6 +155,9 @@ namespace SoundMoney.Services
             string roceTrend = FinancialAlgorithms.DetermineTrendDirection(roceByYear);
             string debtTrend = FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Improving" ? "Declining" : FinancialAlgorithms.DetermineTrendDirection(debtToEquityByYear) == "Declining" ? "Improving" : "Stable";
             string cashFlowTrend = FinancialAlgorithms.DetermineTrendDirection(fcfByYear);
+            string promoterHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(promoterHoldingByYear);
+            string fiiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(fiiHoldingByYear);
+            string diiHoldingTrend = FinancialAlgorithms.DetermineTrendDirection(diiHoldingByYear);
 
             // Map scraped metrics to Details ViewModel
             var model = new StockDetailsViewModel
@@ -173,6 +183,13 @@ namespace SoundMoney.Services
                 FaceValue = FinancialAlgorithms.CalculateFaceValue(current),
                 Beta = current.Beta,
                 CashConversionCycleDays = current.CashConversionCycleDays,
+                PromoterHoldingPercent = current.PromoterHoldingPercent,
+                PromoterHoldingTrend = promoterHoldingTrend,
+                FiiHoldingPercent = current.FiiHoldingPercent,
+                FiiHoldingTrend = fiiHoldingTrend,
+                DiiHoldingPercent = current.DiiHoldingPercent,
+                DiiHoldingTrend = diiHoldingTrend,
+                PromoterPledgePercent = FinancialAlgorithms.NormalizePromoterPledgePercent(current),
 
                 // 3. Deep Financial Indicators
                 PE = FinancialAlgorithms.CalculatePeRatio(current),
@@ -216,6 +233,9 @@ namespace SoundMoney.Services
                 RoceByYear = roceByYear,
                 DebtToEquityByYear = debtToEquityByYear,
                 FreeCashFlowByYear = fcfByYear,
+                PromoterHoldingByYear = promoterHoldingByYear,
+                FiiHoldingByYear = fiiHoldingByYear,
+                DiiHoldingByYear = diiHoldingByYear,
 
                 // 6. Trend Summary Indicators
                 RevenueTrend = revenueTrend,

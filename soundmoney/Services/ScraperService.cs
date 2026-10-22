@@ -291,6 +291,10 @@ namespace SoundMoney.Services
                 df.PromoterPledgePercent = ExtractPromoterPledgeFromProsAndCons(doc);
             }
 
+            df.PromoterHoldingPercent = ExtractCurrentShareholdingPercent(doc, "Promoters");
+            df.FiiHoldingPercent = ExtractCurrentShareholdingPercent(doc, "FII");
+            df.DiiHoldingPercent = ExtractCurrentShareholdingPercent(doc, "DII");
+
             // B. Profit & Loss Section
             var pnlSection = doc.DocumentNode.SelectSingleNode("//section[@id='profit-loss']");
             if (pnlSection != null)
@@ -313,7 +317,7 @@ namespace SoundMoney.Services
                 df.TaxPercent = GetLastCellRowValue(pnlSection, "Tax %");
                 df.NetProfitCr = GetLastCellRowValue(pnlSection, "Net Profit");
                 df.Eps = GetLastCellRowValue(pnlSection, "EPS in Rs");
-                df.DividendPayoutPercent = GetLastCellRowValue(pnlSection, "Dividend Payout");
+                df.DividendPayoutPercent = GetLastCellRowValueWithAnnualFallback(pnlSection, "Dividend Payout");
             }
 
             // C. Balance Sheet Section
@@ -395,6 +399,54 @@ namespace SoundMoney.Services
             return 0m;
         }
 
+        // Generalized row-name-parameterized extractors for Screener's shareholding
+        // table: one row each for Promoters, FIIs and DIIs, all in the same table/shape,
+        // so a single pair of methods covers all three rather than three near-identical
+        // copy-pasted extractors. Row names use GetLastCellRowValue/GetRowValuesByColumn's
+        // existing case-insensitive substring match, so "FII" matches Screener's actual
+        // "FIIs +" row label, "DII" matches "DIIs +", and "Promoters" matches "Promoters +".
+        private decimal ExtractCurrentShareholdingPercent(HtmlDocument doc, string rowName)
+        {
+            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
+            return shareholdingSection == null ? 0m : GetLastCellRowValue(shareholdingSection, rowName);
+        }
+
+        // Screener's shareholding table is scraped quarterly (Jun/Sep/Dec/Mar), unlike the
+        // P&L/balance-sheet/cash-flow tables this file otherwise reads, which are annual.
+        // Every other Year-by-Year metric (Sales, Profit, ROE...) compares one value per
+        // fiscal year, so mixing in Jun/Sep/Dec columns would compare a DIFFERENT quarter
+        // each year - not a fair year-over-year trend. Keeping only the Mar (fiscal
+        // year-end) columns lines this metric up on the same annual grain as the rest of
+        // the Year-by-Year Trend Analysis section. Keyed by YEAR (not column index),
+        // because the shareholding table has a different column count/shape than the
+        // P&L table that ExtractHistoricalFinancials otherwise indexes by column.
+        private Dictionary<int, decimal> ExtractShareholdingByFiscalYear(HtmlDocument doc, string rowName)
+        {
+            var result = new Dictionary<int, decimal>();
+
+            var shareholdingSection = doc.DocumentNode.SelectSingleNode("//section[@id='shareholding']");
+            if (shareholdingSection == null) return result;
+
+            var headerCells = shareholdingSection.SelectNodes(".//thead//th");
+            if (headerCells == null || headerCells.Count <= 1) return result;
+
+            var byColumn = GetRowValuesByColumn(shareholdingSection, rowName);
+
+            for (int i = 1; i < headerCells.Count; i++)
+            {
+                string headerText = headerCells[i].InnerText.Trim();
+                if (!headerText.Contains("Mar", StringComparison.OrdinalIgnoreCase)) continue;
+
+                int year = ExtractYearFromHeader(headerText);
+                if (year > 0 && byColumn.TryGetValue(i, out decimal value))
+                {
+                    result[year] = value;
+                }
+            }
+
+            return result;
+        }
+
         private List<Financial> ExtractHistoricalFinancials(
             HtmlDocument doc,
             Financial current,
@@ -473,6 +525,11 @@ namespace SoundMoney.Services
             //ratios
             var dicCashConversionCycleDays = GetRowValuesByColumn(ratiosSection, "Cash Conversion Cycle");
 
+            //shareholding (year-keyed, not column-index-keyed - see method comment)
+            var dicPromoterHoldingPercent = ExtractShareholdingByFiscalYear(doc, "Promoters");
+            var dicFiiHoldingPercent = ExtractShareholdingByFiscalYear(doc, "FII");
+            var dicDiiHoldingPercent = ExtractShareholdingByFiscalYear(doc, "DII");
+
             foreach (var header in yearHeaderList)
             {
                 historyList.Add(new Financial
@@ -511,6 +568,10 @@ namespace SoundMoney.Services
                     FreeCashFlowCr = dicFreeCashFlowCr.TryGetValue(header.ColumnIndex, out decimal freecashflowcr) ? freecashflowcr : 0m,
                     //ratios
                     CashConversionCycleDays = dicCashConversionCycleDays.TryGetValue(header.ColumnIndex, out decimal cashconversioncycledays) ? cashconversioncycledays : 0m,
+                    //shareholding - keyed by header.Year, not header.ColumnIndex (see dicPromoterHoldingPercent above)
+                    PromoterHoldingPercent = dicPromoterHoldingPercent.TryGetValue(header.Year, out decimal promoterholdingpercent) ? promoterholdingpercent : 0m,
+                    FiiHoldingPercent = dicFiiHoldingPercent.TryGetValue(header.Year, out decimal fiiholdingpercent) ? fiiholdingpercent : 0m,
+                    DiiHoldingPercent = dicDiiHoldingPercent.TryGetValue(header.Year, out decimal diiholdingpercent) ? diiholdingpercent : 0m,
                 });
             }
 
@@ -532,6 +593,40 @@ namespace SoundMoney.Services
             {
                 string text = lastCell.InnerText.Trim().Replace(",", "").Replace("%", "");
                 return ParseDecimal(text);
+            }
+
+            return 0m;
+        }
+
+        // Variant of GetLastCellRowValue for P&L rows that don't reliably populate
+        // Screener's TTM column - confirmed for "Dividend Payout %" specifically, which
+        // Screener often leaves blank there (dividends are declared per fiscal year, not
+        // meaningfully computable on a rolling trailing-twelve-months basis the way
+        // Sales/Profit are). GetLastCellRowValue would silently read that blank cell as
+        // 0 - indistinguishable from "this company pays no dividend" - which is wrong
+        // for a real, consistently-paying company and skews every downstream consumer of
+        // this field (MatureHighPayoutRule's routing, the DDM-family valuation methods'
+        // dividend estimates, and the growth-rate retention-ratio calculation). Scans
+        // backward from the last column for the first cell that actually parses, rather
+        // than trusting the last column unconditionally. Deliberately NOT applied to
+        // GetLastCellRowValue generally - every other field using it (Sales, Net Profit,
+        // EPS, etc.) does populate its TTM column reliably, and silently falling back
+        // there could mask a genuine data problem instead of surfacing it.
+        private decimal GetLastCellRowValueWithAnnualFallback(HtmlNode? sectionNode, string rowName)
+        {
+            if (sectionNode == null) return 0m;
+
+            var rowNode = sectionNode.SelectSingleNode($".//tr[td[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{rowName.ToLowerInvariant()}')]]");
+            var cells = rowNode?.SelectNodes("td");
+            if (cells == null || cells.Count <= 1) return 0m;
+
+            for (int i = cells.Count - 1; i >= 1; i--)
+            {
+                string text = cells[i].InnerText.Trim().Replace(",", "").Replace("%", "");
+                if (decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal result))
+                {
+                    return result;
+                }
             }
 
             return 0m;
