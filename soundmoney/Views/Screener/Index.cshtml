@@ -22,8 +22,8 @@
     <!-- Page Header -->
     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center mb-4 gap-2">
         <div>
-            <h3 class="h4 fw-bold mb-1">Screener</h3>
-            <p class="text-muted small mb-0">Screen stocks based on margin of safety and fundamentals.</p>
+            <h3 class="h4 fw-bold mb-1">Price Trend & Entry Screener</h3>
+            <p class="text-muted small mb-0">Find stocks with an upward medium-term trend, then review their fundamentals and entry valuation.</p>
         </div>
     </div>
 
@@ -31,58 +31,39 @@
     <div class="card border-0 shadow-sm mb-4 bg-light">
         <div class="card-body p-3">
             <form method="get" class="row g-2 g-md-3 align-items-end">
-                <div class="col-12 col-sm-6 col-md-4">
-                    <label class="form-label small text-muted font-weight-bold">Search Symbol or Company</label>
-                    <input type="text" name="searchQuery" value="@Model.SearchQuery" class="form-control form-control-sm" placeholder="e.g. INFY, TCS, Wipro..." />
+                <div class="col-12 col-sm-6 col-lg-5">
+                    <label class="form-label small text-muted fw-semibold">Search symbol or company</label>
+                    <input type="text" name="searchQuery" value="@Model.SearchQuery" class="form-control" placeholder="e.g. INFY, TCS, Wipro" />
                 </div>
-                <div class="col-12 col-sm-6 col-md-3">
-                    <label class="form-label small text-muted font-weight-bold">Min. Margin of Safety (%)</label>
-                    <input type="number" name="minMarginOfSafety" value="@Model.MinMarginOfSafety" class="form-control form-control-sm" step="1" />
+                <div class="col-6 col-sm-3 col-lg-2">
+                    <label class="form-label small text-muted fw-semibold">MoS ranking reference (%)</label>
+                    <input type="number" name="minimumEntryMarginOfSafety" value="@Model.MinimumEntryMarginOfSafety" class="form-control" step="1" min="0" max="100" />
                 </div>
-
-                <!-- Score Filter Dropdown -->
-                <div class="col-12 col-sm-6 col-md-3">
-                    <label class="form-label small text-muted font-weight-bold d-block">Score Filter</label>
-                    <details class="custom-multi-select position-relative">
-                        <summary class="btn btn-white border bg-white text-start text-truncate btn-sm d-flex justify-content-between align-items-center w-100">
-                            <span id="scoreDropdownLabel">
-                                @(Model.SelectedScores != null && Model.SelectedScores.Any()
-                                                                ? string.Join(", ", Model.SelectedScores)
-                                                                : "All scores")
-                            </span>
-                            <span class="ms-2 text-muted small">▼</span>
-                        </summary>
-                        <div class="card border shadow-sm p-2 position-absolute start-0 w-100 mt-1 bg-white" style="z-index: 1050; max-height: 200px; overflow-y: auto;">
-                            @foreach (var s in new List<string>() { "STRONG SOUND", "SOUND", "NEUTRAL", "UNSOUND" })
-                            {
-                                bool isChecked = Model.SelectedScores != null && Model.SelectedScores.Contains(s);
-                                <div class="form-check my-1">
-                                    <input class="form-check-input score-checkbox"
-                                           type="checkbox"
-                                           name="scores"
-                                           value="@s"
-                                           id="score_@s.Replace(" ", "_")"
-                                           @(isChecked ? "checked" : "") />
-                                    <label class="form-check-label small w-100 cursor-pointer" for="score_@s.Replace(" ", "_")">
-                                        @s
-                                    </label>
-                                </div>
-                            }
-                        </div>
-                    </details>
+                <div class="col-6 col-sm-3 col-lg-3">
+                    <label class="form-label small text-muted fw-semibold">Show candidates</label>
+                    <select name="trendStatus" class="form-select">
+                        <option value="all" selected="@(Model.TrendStatusFilter == "all")">Confirmed + Watch</option>
+                        <option value="confirmed" selected="@(Model.TrendStatusFilter == "confirmed")">Confirmed trend only</option>
+                        <option value="watch" selected="@(Model.TrendStatusFilter == "watch")">Watch candidates</option>
+                    </select>
                 </div>
-
-                <div class="col-12 col-md-2 d-grid">
-                    <button type="submit" class="btn btn-primary btn-sm">Run Screen</button>
+                <div class="col-12 col-lg-2 d-grid">
+                    <button type="submit" class="btn btn-primary">Find candidates</button>
                 </div>
             </form>
         </div>
     </div>
 
+    @if (!string.IsNullOrWhiteSpace(Model.PotentialEntryNotice))
+    {
+        <div class="alert alert-info border-0 shadow-sm small">@Model.PotentialEntryNotice</div>
+    }
+    <p class="small text-muted mb-3">For a 20–40 trading-session horizon, only the price-trend rules determine trend setup status. Fundamentals, Sound Score, and margin of safety are shown and used to rank candidates, not as hard gates. An exact symbol search bypasses those quality and valuation filters so you can inspect that stock directly.</p>
+
     @if (!Model.Results.Any())
     {
         <div class="alert alert-info border-0 shadow-sm">
-            No stocks matched your search criteria. Try adjusting your search parameters.
+            No candidates are available for this filter yet. Try “Confirmed + Watch,” lower the minimum margin of safety, or search for a specific symbol. More stocks may appear after their fundamental cache has been populated.
         </div>
     }
     else
@@ -97,18 +78,14 @@
                         <!-- 1. DESKTOP VIEW (Visible on medium screens and up)        -->
                         <!-- ========================================================= -->
                         <div class="card-body p-4 d-none d-md-block">
-                            <!-- Line 1: Symbol Badge + Verdict Badges -->
+                            <!-- Symbol, price-trend status, and fundamental score -->
                             <div class="d-flex justify-content-between align-items-start mb-1">
                                 <div>
                                     <span class="badge bg-light text-dark border font-monospace fs-6">@row.Symbol</span>
                                 </div>
                                 <div class="d-flex align-items-center gap-1">
-                                    <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary")">
-                                        @row.Verdict
-                                    </span>
-                                    <span class="badge bg-primary">
-                                        @row.SoundScoreRating
-                                    </span>
+                                    <span class="badge @(row.IsPotentialEntry ? "bg-success" : row.PriceTrendStatus.StartsWith("Downtrend", StringComparison.Ordinal) ? "bg-danger" : row.TechnicalDataStatus == "Unavailable" ? "bg-secondary" : "bg-warning text-dark")">@row.PriceTrendStatus</span>
+                                    <span class="badge bg-primary">Fundamental @row.SoundScoreRating</span>
                                 </div>
                             </div>
 
@@ -125,29 +102,48 @@
                                 </span>
                             </div>
 
-                            <!-- Financial Metrics Grid for Desktop (4-column row with 3 vertical dividers) -->
-                            <div class="bg-light rounded p-2 mb-3 font-monospace small">
-                                <div class="row g-0 text-center align-items-center">
-                                    <div class="col-3 border-end">
-                                        <span class="text-muted d-block extra-small">Price</span>
-                                        <strong>₹@row.CurrentPrice.ToString("N2")</strong>
+                            <!-- Trend-first market metrics -->
+                            <div class="bg-light rounded p-3 mb-3">
+                                <div class="row g-3 text-center">
+                                    <div class="col">
+                                        <span class="text-muted d-block small">Latest close</span>
+                                        <strong>₹@row.TechnicalClose?.ToString("N2")</strong>
                                     </div>
-                                    <div class="col-3 border-end">
-                                        <span class="text-muted d-block extra-small">Intrinsic Value</span>
-                                        <strong>₹@row.IntrinsicValue.ToString("N2")</strong>
+                                    <div class="col">
+                                        <span class="text-muted d-block small">DMA 50</span>
+                                        <strong>₹@row.Dma50?.ToString("N2")</strong>
                                     </div>
-                                    <div class="col-3 border-end">
-                                        <span class="text-muted d-block extra-small">Dividend/Share</span>
-                                        <strong>₹@row.DividendPerShareRupees.ToString("N2")</strong>
+                                    <div class="col">
+                                        <span class="text-muted d-block small">DMA 200</span>
+                                        <strong>₹@row.Dma200?.ToString("N2")</strong>
                                     </div>
-                                    <div class="col-3">
-                                        <span class="text-muted d-block extra-small">MoS</span>
-                                        <strong class="@(row.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
-                                            @row.MarginOfSafetyPercent.ToString("N2")%
-                                        </strong>
+                                    <div class="col">
+                                        <span class="text-muted d-block small">20-session return</span>
+                                        <strong class="@(row.TwentySessionReturnPercent >= 0 ? "text-success" : "text-danger")">@(row.TwentySessionReturnPercent?.ToString("N1") ?? "N/A")%</strong>
+                                    </div>
+                                    <div class="col">
+                                        <span class="text-muted d-block small">40-session return</span>
+                                        <strong class="@(row.FortySessionReturnPercent >= 0 ? "text-success" : "text-danger")">@(row.FortySessionReturnPercent?.ToString("N1") ?? "N/A")%</strong>
+                                    </div>
+                                    <div class="col">
+                                        <span class="text-muted d-block small">Volume / 20-day avg.</span>
+                                        <strong>@(row.VolumeRatio?.ToString("N2") ?? "N/A")x</strong>
+                                    </div>
+                                    <div class="col">
+                                        <span class="text-muted d-block small">Entry MoS</span>
+                                        <strong class="@(row.PotentialEntryMarginOfSafety >= 0 ? "text-success" : "text-danger")">@(row.PotentialEntryMarginOfSafety?.ToString("N1") ?? "N/A")%</strong>
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="small text-muted mb-3">
+                                Price trend checks: @row.TrendChecksPassed/@row.TrendChecksTotal · @row.EntryChecksSummary · Intrinsic value ₹@row.IntrinsicValue.ToString("N2") ·
+                                @(row.IsTechnicalDataStale ? "Technical data is stale" : $"Price session: {row.TechnicalSessionDate?.ToString("dd MMM yyyy") ?? "N/A"}")
+                            </div>
+                            @if (row.TechnicalClose.HasValue)
+                            {
+                                <div class="small mb-3">Illustrative targets from latest close: +30% ₹@row.TargetPrice30Percent?.ToString("N2") · +40% ₹@row.TargetPrice40Percent?.ToString("N2") <span class="text-muted">(not forecasts)</span></div>
+                            }
 
                             <!-- Desktop Card Footer -->
                             <div class="d-flex justify-content-between align-items-center">
@@ -173,16 +169,12 @@
                         <!-- 2. MOBILE VIEW (Visible on small screens)                 -->
                         <!-- ========================================================= -->
                         <div class="card-body p-3 d-block d-md-none">
-                            <!-- Header: Symbol & Badges -->
+                            <!-- Header: Symbol, trend status, and fundamental score -->
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <span class="badge bg-light text-dark border font-monospace fs-6">@row.Symbol</span>
                                 <div class="d-flex gap-1">
-                                    <span class="badge @(row.Verdict == "Undervalued" ? "bg-success" : row.Verdict == "Overvalued" ? "bg-danger" : "bg-secondary")">
-                                        @row.Verdict
-                                    </span>
-                                    <span class="badge bg-primary">
-                                        @row.SoundScoreRating
-                                    </span>
+                                    <span class="badge @(row.IsPotentialEntry ? "bg-success" : row.PriceTrendStatus.StartsWith("Downtrend", StringComparison.Ordinal) ? "bg-danger" : row.TechnicalDataStatus == "Unavailable" ? "bg-secondary" : "bg-warning text-dark")">@row.PriceTrendStatus</span>
+                                    <span class="badge bg-primary">@row.SoundScoreRating</span>
                                 </div>
                             </div>
 
@@ -195,27 +187,16 @@
                                 </span>
                             </div>
 
-                            <!-- Financial Metrics 2x2 Grid for Mobile -->
-                            <div class="row g-2 text-center bg-light p-2 rounded mb-3 font-monospace small">
-                                <div class="col-6 border-end border-bottom pb-2">
-                                    <span class="text-muted d-block extra-small">Price</span>
-                                    <strong>₹@row.CurrentPrice.ToString("N2")</strong>
-                                </div>
-                                <div class="col-6 border-bottom pb-2">
-                                    <span class="text-muted d-block extra-small">Intrinsic Value</span>
-                                    <strong>₹@row.IntrinsicValue.ToString("N2")</strong>
-                                </div>
-                                <div class="col-6 border-end pt-1">
-                                    <span class="text-muted d-block extra-small">Dividend/Share</span>
-                                    <strong>₹@row.DividendPerShareRupees.ToString("N2")</strong>
-                                </div>
-                                <div class="col-6 pt-1">
-                                    <span class="text-muted d-block extra-small">MoS</span>
-                                    <strong class="@(row.MarginOfSafetyPercent >= 0 ? "text-success" : "text-danger")">
-                                        @row.MarginOfSafetyPercent.ToString("N2")%
-                                    </strong>
-                                </div>
+                            <div class="row g-2 text-center bg-light p-2 rounded mb-2 small">
+                                <div class="col-6"><span class="text-muted d-block extra-small">Latest close</span><strong>₹@row.TechnicalClose?.ToString("N2")</strong></div>
+                                <div class="col-6"><span class="text-muted d-block extra-small">DMA 50 / 200</span><strong>₹@row.Dma50?.ToString("N2") / ₹@row.Dma200?.ToString("N2")</strong></div>
+                                <div class="col-6"><span class="text-muted d-block extra-small">20-session return</span><strong class="@(row.TwentySessionReturnPercent >= 0 ? "text-success" : "text-danger")">@(row.TwentySessionReturnPercent?.ToString("N1") ?? "N/A")%</strong></div>
+                                <div class="col-6"><span class="text-muted d-block extra-small">40-session return</span><strong class="@(row.FortySessionReturnPercent >= 0 ? "text-success" : "text-danger")">@(row.FortySessionReturnPercent?.ToString("N1") ?? "N/A")%</strong></div>
+                                <div class="col-6"><span class="text-muted d-block extra-small">Volume / avg.</span><strong>@(row.VolumeRatio?.ToString("N2") ?? "N/A")x</strong></div>
+                                <div class="col-6"><span class="text-muted d-block extra-small">Entry MoS</span><strong>@(row.PotentialEntryMarginOfSafety?.ToString("N1") ?? "N/A")%</strong></div>
+                                <div class="col-6"><span class="text-muted d-block extra-small">Checks</span><strong>@row.EntryChecksPassed/@row.EntryChecksTotal</strong></div>
                             </div>
+                            <div class="extra-small text-muted mb-2">Trend checks @row.TrendChecksPassed/@row.TrendChecksTotal · Entry checks @row.EntryChecksPassed/@row.EntryChecksTotal · Intrinsic ₹@row.IntrinsicValue.ToString("N2") · Session @(row.TechnicalSessionDate?.ToString("dd MMM yyyy") ?? "N/A")@(row.IsTechnicalDataStale ? " · stale technical cache" : string.Empty)</div>
 
                             <!-- Mobile Card Footer -->
                             <div class="d-flex flex-column gap-2">
@@ -246,25 +227,10 @@
     <!-- Methodology Disclosure -->
     <div class="card border-0 bg-light p-3">
         <p class="text-muted small mb-2">
-            <strong>Methodology & Disclaimer:</strong> Intrinsic value is calculated dynamically using sector-specific valuation models, applying a justified Price-to-Book or Excess Returns approach for financial institutions and cash-flow or growth-adjusted models like Owner Earnings, DCF, and relative multiples for non-financial sectors.
+            <strong>Trend methodology:</strong> For the 20–40-session holding horizon, the primary checks are positive 20- and 40-session returns, latest close above DMA 50, and a rising DMA 50. A volume spike is read together with price direction: high volume on an up day supports demand; high volume on a down or flat day is caution/disagreement. Volume and DMA 200 are context, not hard gates. Fundamental ratios and margin of safety are additional entry-quality checks.
         </p>
-
-        <!-- Formula Wrapper -->
-        <div class="d-flex align-items-center flex-wrap my-2 p-2 bg-white rounded border font-monospace text-dark small" style="line-height: 1.2;">
-            <span class="fw-bold me-2">Margin of Safety % =</span>
-            <div class="d-inline-flex align-items-center me-2">
-                <span class="fs-4 fw-light me-1">(</span>
-                <div class="d-inline-flex flex-column text-center px-1">
-                    <span class="border-bottom border-dark pb-1 mb-1">Intrinsic Value - Current Price</span>
-                    <span>Current Price</span>
-                </div>
-                <span class="fs-4 fw-light ms-1">)</span>
-            </div>
-            <span class="fw-bold">× 100%</span>
-        </div>
-
         <p class="text-muted small mb-0">
-            Designed strictly for educational and screening purposes—always verify inputs before making investment decisions.
+            Data comes from cached daily bars and fundamental snapshots; it can be delayed or stale. This page identifies research candidates only—not a buy/sell recommendation or promise of a 30–40% return. Verify the latest data and manage downside risk independently.
         </p>
     </div>
 </div>

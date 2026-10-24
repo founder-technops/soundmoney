@@ -12,8 +12,83 @@ namespace SoundMoney.Algorithms
         public bool IsCapped => CapReasons.Count > 0;
     }
 
+    public sealed record BuyTodaySellTomorrowSignal(
+        bool IsBuyTodaySellTomorrow,
+        bool IsValueEntryOnly,
+        string Decision,
+        string Reason)
+    {
+        public bool IsActionable => IsBuyTodaySellTomorrow || IsValueEntryOnly;
+    }
+
     public static class FinancialAlgorithms
     {
+        public static BuyTodaySellTomorrowSignal EvaluateBuyTodaySellTomorrow(
+            string verdict,
+            decimal marginOfSafetyPercent,
+            string soundScoreRating,
+            decimal pe,
+            decimal pb,
+            decimal roePercent,
+            decimal rocePercent,
+            decimal netProfitMarginPercent,
+            decimal fcfConversionPercent,
+            decimal debtToEquity,
+            decimal interestCoverage,
+            decimal currentPrice,
+            decimal intrinsicValue)
+        {
+            bool valuationGate = marginOfSafetyPercent >= 15m;
+            bool qualityGate = soundScoreRating is "STRONG SOUND" or "SOUND"
+                && roePercent >= 12m
+                && rocePercent >= 10m
+                && netProfitMarginPercent >= 8m
+                && fcfConversionPercent >= 50m
+                && debtToEquity <= 1m
+                && interestCoverage >= 4m;
+            bool valuationMultipleGate = pe > 0m && pe <= 18m && pb > 0m && pb <= 2.5m;
+            bool priceGate = intrinsicValue > 0m && currentPrice <= intrinsicValue * 0.95m;
+
+            bool isBuyTodaySellTomorrow = verdict is "STRONG BUY" or "BUY"
+                && valuationGate
+                && qualityGate
+                && valuationMultipleGate
+                && priceGate;
+
+            bool isValueEntryOnly = verdict is "STRONG BUY" or "BUY"
+                && marginOfSafetyPercent > 0m
+                && soundScoreRating is not "UNSOUND"
+                && roePercent >= 10m
+                && rocePercent >= 8m
+                && netProfitMarginPercent > 0m
+                && debtToEquity <= 1.5m
+                && interestCoverage >= 2m;
+
+            if (isBuyTodaySellTomorrow)
+            {
+                return new BuyTodaySellTomorrowSignal(
+                    true,
+                    false,
+                    "BUY_TODAY_SELL_TOMORROW",
+                    "The valuation, quality, and cash-generation ratios all line up for a short-term buy today with a near-term exit.");
+            }
+
+            if (isValueEntryOnly)
+            {
+                return new BuyTodaySellTomorrowSignal(
+                    false,
+                    true,
+                    "VALUE_ENTRY_ONLY",
+                    "The stock looks like a value entry, but the ratio stack does not justify a buy-today/sell-tomorrow flip.");
+            }
+
+            return new BuyTodaySellTomorrowSignal(
+                false,
+                false,
+                "NO",
+                "The value, quality, and balance-sheet ratios do not support a buy-today/sell-tomorrow setup.");
+        }
+
         public static decimal CalculateOperatingProfitMargin(Financial current) =>
             current.SalesCr > 0m ? Math.Round((current.OperatingProfitCr / current.SalesCr) * 100m, 2) : 0m;
 

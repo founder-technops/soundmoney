@@ -20,6 +20,7 @@ namespace SoundMoney.Data
         // StockValuation summary above) - see ScrapedFinancialCache for why this is a
         // separate table/pipeline from SaveValuationAsync/StockValuations.
         Task<CachedScrape> GetCachedScrapeAsync(string symbol, CancellationToken ct = default);
+        Task<List<CachedFinancialEntry>> GetRecentCachedFinancialEntriesAsync(DateTime scrapedSince, CancellationToken ct = default);
         Task SaveScrapedCacheAsync(string symbol, StockValuation stockValuation, Financial current, List<Financial> historical, CancellationToken ct = default);
 
         // Retrieval Methods - Single Entities
@@ -127,6 +128,36 @@ namespace SoundMoney.Data
                 // to a live scrape exactly as if this symbol had never been cached.
                 return new CachedScrape(null, null, null, null);
             }
+        }
+
+        public async Task<List<CachedFinancialEntry>> GetRecentCachedFinancialEntriesAsync(DateTime scrapedSince, CancellationToken ct = default)
+        {
+            var cacheRows = await _context.ScrapedFinancialCaches
+                .AsNoTracking()
+                .Where(row => row.ScrapedAt >= scrapedSince)
+                .OrderByDescending(row => row.ScrapedAt)
+                .ToListAsync(ct);
+
+            var entries = new List<CachedFinancialEntry>(cacheRows.Count);
+            foreach (var row in cacheRows)
+            {
+                try
+                {
+                    var summary = JsonSerializer.Deserialize<StockValuation>(row.StockValuationJson);
+                    var current = JsonSerializer.Deserialize<Financial>(row.CurrentFinancialJson);
+                    var historical = JsonSerializer.Deserialize<List<Financial>>(row.HistoricalFinancialsJson);
+                    if (summary is not null && current is not null && historical is not null)
+                    {
+                        entries.Add(new CachedFinancialEntry(row.Symbol, current, historical, summary, row.ScrapedAt));
+                    }
+                }
+                catch (JsonException)
+                {
+                    // A malformed or older cache row is excluded from the candidate set.
+                }
+            }
+
+            return entries;
         }
 
 

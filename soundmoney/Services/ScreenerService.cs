@@ -9,26 +9,33 @@ namespace SoundMoney.Services
     public interface IScreenerService
     {
         Task<List<ScreenerResultRow>> RunScreenAsync(decimal minMarginOfSafety, string? searchQuery, List<string>? score);
+        Task<(List<ScreenerResultRow> Results, int Scanned, string Notice)> RunPotentialEntryScreenAsync(
+            decimal minimumMarginOfSafety,
+            string? searchQuery,
+            CancellationToken cancellationToken = default);
 
         // ErrorMessage is non-null only when Model is null - carries the specific reason
         // scraping/valuation failed (e.g. a network error reaching Screener.in) up to the
         // controller, instead of the caller only ever seeing a bare null.
-        Task<(StockDetailsViewModel? Model, string? ErrorMessage)> RunScreenDetailsAsync(string symbol);
+        Task<(StockDetailsViewModel? Model, string? ErrorMessage)> RunScreenDetailsAsync(string symbol, CancellationToken cancellationToken = default);
     }
     public class ScreenerService : IScreenerService
     {
         private readonly ILogger<ScreenerService> _logger;
         private readonly IScraperService _scraperService;
+        private readonly IBtstTechnicalService _btstTechnicalService;
         private readonly IValuationService _valuationService;
         private readonly IFinancialRepository _repo;
         public ScreenerService(
         IFinancialRepository repo,
         IScraperService scraperService,
+        IBtstTechnicalService btstTechnicalService,
         IValuationService valuationService,
         ILogger<ScreenerService> logger)
         {
             _repo = repo;
             _scraperService = scraperService;
+            _btstTechnicalService = btstTechnicalService;
             _valuationService = valuationService;
             _logger = logger;
         }
@@ -39,7 +46,130 @@ namespace SoundMoney.Services
             return screenRows;
         }
 
-        public async Task<(StockDetailsViewModel? Model, string? ErrorMessage)> RunScreenDetailsAsync(string symbol)
+        public async Task<(List<ScreenerResultRow> Results, int Scanned, string Notice)> RunPotentialEntryScreenAsync(
+            decimal minimumMarginOfSafety,
+            string? searchQuery,
+            CancellationToken cancellationToken = default)
+        {
+            const int maxMarketDataCandidates = 500;
+            const int fundamentalCacheDays = 90;
+            var cachedEntries = await _repo.GetRecentCachedFinancialEntriesAsync(DateTime.Today.AddDays(-fundamentalCacheDays), cancellationToken);
+            string? normalizedSearch = string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery.Trim();
+            bool exactSymbolSearch = normalizedSearch is not null
+                && cachedEntries.Any(entry => entry.Symbol.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase));
+
+            if (normalizedSearch is not null && !exactSymbolSearch)
+            {
+                var cachedMatch = await _repo.GetCachedScrapeAsync(normalizedSearch, cancellationToken);
+                if (cachedMatch.Current is not null && cachedMatch.Historical is not null && cachedMatch.Summary is not null)
+                {
+                    cachedEntries.Add(new CachedFinancialEntry(
+                        normalizedSearch.ToUpperInvariant(),
+                        cachedMatch.Current,
+                        cachedMatch.Historical,
+                        cachedMatch.Summary,
+                        cachedMatch.ScrapedAt ?? DateTime.MinValue));
+                    exactSymbolSearch = true;
+                }
+            }
+
+            var fundamentalCandidates = cachedEntries
+                .Where(entry => normalizedSearch is null
+                    || (exactSymbolSearch
+                        ? entry.Symbol.Equals(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+                        : entry.Symbol.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)
+                            || entry.Summary.CompanyName.Contains(normalizedSearch, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(entry => BtstTechnicalService.EvaluateFundamentalChecks(entry.Current, entry.Historical).Count(check => check.Passed))
+                .ThenByDescending(entry => entry.Summary.SoundScore)
+                .ThenByDescending(entry => entry.Summary.MarginOfSafety)
+                .Take(exactSymbolSearch ? 1 : maxMarketDataCandidates)
+                .ToList();
+
+            var screenedRows = new System.Collections.Concurrent.ConcurrentBag<ScreenerResultRow>();
+            using var concurrencyLimit = new SemaphoreSlim(3, 3);
+            await Task.WhenAll(fundamentalCandidates.Select(async entry =>
+            {
+                await concurrencyLimit.WaitAsync(cancellationToken);
+                try
+                {
+                    var signal = await _btstTechnicalService.GetSignalAsync(
+                        entry.Symbol,
+                        entry.Current,
+                        entry.Historical,
+                        entry.Summary.IntrinsicValue,
+                        minimumMarginOfSafety,
+                        cancellationToken);
+
+                    screenedRows.Add(new ScreenerResultRow
+                    {
+                            Symbol = entry.Symbol,
+                            CompanyName = entry.Summary.CompanyName,
+                            Sector = SectorClassifier.GetMacroSector(entry.Summary.Sector),
+                            CurrentPrice = signal.LatestClose ?? entry.Summary.CurrentPrice,
+                            IntrinsicValue = entry.Summary.IntrinsicValue,
+                            SoundScore = entry.Summary.SoundScore,
+                            MarginOfSafetyPercent = signal.PotentialEntryMarginOfSafety ?? 0m,
+                            Verdict = entry.Summary.Verdict,
+                            SoundScoreRating = entry.Summary.SoundScoreRating,
+                            LastAnalyzed = entry.ScrapedAt,
+                            DividendYieldPercent = entry.Summary.DividendYieldPercent,
+                            IsDividendConsistent = entry.Summary.IsDividendConsistent,
+                            IsPotentialEntry = signal.IsSetup == true,
+                            PotentialEntryStatus = signal.IsSetup == true ? "Trend setup" : signal.IsSetup is null ? "Trend check unavailable" : "Trend gates not met",
+                            EntryChecksPassed = signal.ChecksPassed,
+                            EntryChecksTotal = signal.ChecksTotal,
+                            TrendChecksPassed = signal.TrendChecksPassed,
+                            TrendChecksTotal = signal.TrendChecksTotal,
+                            PriceTrendStatus = signal.IsTechnicalSetup == true
+                                ? "Uptrend confirmed"
+                                : signal.TwentySessionReturnPercent < 0m
+                                    ? "Downtrend — not a trend entry"
+                                    : signal.IsTechnicalSetup is null
+                                        ? signal.Status == "Unavailable" ? "Trend data unavailable" : "Not enough trend data"
+                                        : "Trend not fully confirmed",
+                            EntryChecksSummary = signal.ChecksSummary,
+                            IsTechnicalDataStale = signal.DataIsStale,
+                            TechnicalClose = signal.LatestClose,
+                            Dma50 = signal.Dma50,
+                            Dma200 = signal.Dma200,
+                            PriceAboveDma50Percent = signal.PriceAboveDma50Percent,
+                            TwentySessionReturnPercent = signal.TwentySessionReturnPercent,
+                            FortySessionReturnPercent = signal.FortySessionReturnPercent,
+                            VolumeRatio = signal.VolumeRatio,
+                            TechnicalDataStatus = signal.Status,
+                            PotentialEntryMarginOfSafety = signal.PotentialEntryMarginOfSafety,
+                            TargetPrice30Percent = signal.TargetPrice30Percent,
+                            TargetPrice40Percent = signal.TargetPrice40Percent,
+                            TechnicalSessionDate = signal.SessionDate
+                    });
+                }
+                finally
+                {
+                    concurrencyLimit.Release();
+                }
+            }));
+
+            var results = screenedRows
+                .OrderByDescending(row => row.TrendChecksPassed)
+                .ThenByDescending(row => row.FortySessionReturnPercent ?? decimal.MinValue)
+                .ThenByDescending(row => row.TwentySessionReturnPercent ?? decimal.MinValue)
+                .ThenByDescending(row => row.PriceAboveDma50Percent ?? decimal.MinValue)
+                .ThenByDescending(row => row.IsPotentialEntry)
+                .ThenByDescending(row => row.SoundScore)
+                .ThenByDescending(row => row.MarginOfSafetyPercent)
+                .ToList();
+            string notice = cachedEntries.Count == 0
+                ? "No recent cached fundamental data is available yet. Analyze stocks first, then rerun this screen."
+                : fundamentalCandidates.Count == 0
+                    ? "No cached fundamental snapshots matched this search. Analyze the stock first, then rerun this screen."
+                    : exactSymbolSearch
+                        ? "Showing the requested symbol without applying fundamental-quality or margin-of-safety gates. Price-trend gates still determine its trend status; fundamentals and valuation are shown as context."
+                        : $"Showing trend setups and near-miss watch candidates. Technical trend rules are the only setup gates; fundamentals, Sound Score, and margin of safety rank candidates only. Technical history refreshes every 8 hours; fundamental snapshots use SQL cache up to {fundamentalCacheDays} days old. At most {maxMarketDataCandidates} candidates are evaluated per run.";
+
+            return (results, fundamentalCandidates.Count, notice);
+        }
+
+        public async Task<(StockDetailsViewModel? Model, string? ErrorMessage)> RunScreenDetailsAsync(string symbol, CancellationToken cancellationToken = default)
         {
             string cleanSymbol = symbol.ToUpper();
 
@@ -114,8 +244,36 @@ namespace SoundMoney.Services
                 return (null, scrapeError ?? $"Could not retrieve or analyze data for symbol '{symbol}'.");
             }
 
-            // Calculate intrinsic value & score rating
+            // Calculate intrinsic value before combining it with the latest market close.
             var valuationResult = _valuationService.Evaluate(stockValuation, current, historical);
+
+            // Technical BTST data is an independent, optional signal. A provider failure
+            // must not prevent the fundamental valuation page from rendering.
+            BtstTechnicalSignal technicalBtstSignal;
+            try
+            {
+                technicalBtstSignal = await _btstTechnicalService.GetSignalAsync(
+                    cleanSymbol,
+                    current,
+                    historical,
+                    valuationResult.IntrinsicValue,
+                    cancellationToken: cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Combined fundamental/technical setup analysis failed for {Symbol}", cleanSymbol);
+                technicalBtstSignal = new BtstTechnicalSignal
+                {
+                    Status = "Unavailable",
+                    IsSetup = null,
+                    Message = "Daily market data is unavailable; the technical BTST screen could not be evaluated.",
+                    DataSource = "Yahoo Finance chart data (unofficial)"
+                };
+            }
 
             if (needsCacheWrite)
             {
@@ -175,6 +333,7 @@ namespace SoundMoney.Services
                 CurrentPrice = stockValuation.CurrentPrice,
                 LastAnalyzed = dataAsOf,
                 IsFinancialSector = current.IsFinancialSector,
+                TechnicalBtstSignal = technicalBtstSignal,
 
                 // 2. Core Valuation Output
                 IntrinsicValue = valuationResult.IntrinsicValue,

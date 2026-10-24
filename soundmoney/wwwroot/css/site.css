@@ -37,6 +37,20 @@ body {
 .cursor-pointer {
     cursor: pointer;
 }
+
+.summary-answer-badge {
+    max-width: min(100%, 32rem);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+    flex: 0 1 auto;
+}
+
+.short-term-trade-answer {
+    width: 100%;
+    max-width: 100%;
+}
+
 /* Desktop Table - Rounded Floating Rectangle Rows */
 .table-rounded-rows {
     border-collapse: separate !important;

@@ -6,6 +6,7 @@
     var tally = Model.GetSignalTally();
     var sentimentBorder = sentiment == "Positive" ? "border-success" : sentiment == "Negative" ? "border-danger" : "border-warning";
     var sentimentBg = sentiment == "Positive" ? "bg-success-subtle" : sentiment == "Negative" ? "bg-danger-subtle" : "bg-warning-subtle";
+    var keyQuestions = Model.GetKeyQuestions();
 }
 
 <style>
@@ -113,6 +114,87 @@
         </div>
     </div>
 
+    @if (Model.TechnicalBtstSignal is not null)
+    {
+        var btst = Model.TechnicalBtstSignal;
+        var btstBadgeClass = btst.IsSetup == true ? "bg-success" : btst.IsSetup == false ? "bg-warning text-dark" : "bg-secondary";
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-header bg-white border-0 py-3">
+                <h6 class="fw-bold mb-0">Fundamentals + Medium-Term Price Trend</h6>
+                <span class="extra-small text-muted">Designed as a candidate screen for a multi-week/month holding period; not a forecast or trade recommendation</span>
+            </div>
+            <div class="card-body pt-0">
+                <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-start gap-2 mb-3">
+                    <p class="mb-0">@btst.Message</p>
+                    <span class="badge @btstBadgeClass flex-shrink-0">
+                        @(btst.IsSetup == true ? "Fundamentals + trend pass" : btst.IsSetup == false ? "Combined conditions not met" : btst.Status)
+                    </span>
+                </div>
+
+                @if (btst.Checks.Count > 0)
+                {
+                    var categoryOrder = new[] { "Technical", "Fundamental", "Valuation", "Confirmation", "Context" };
+                    var categoryLabels = new Dictionary<string, string>
+                    {
+                        ["Technical"] = "Price trend gates",
+                        ["Fundamental"] = "Fundamental quality context (not a gate)",
+                        ["Valuation"] = "Entry valuation context (not a gate)",
+                        ["Confirmation"] = "Trend confirmation context (not a gate)",
+                        ["Context"] = "Ownership context (not a gate)"
+                    };
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-2">
+                            <thead>
+                                <tr><th scope="col">Condition</th><th scope="col">Observed</th><th scope="col">Rule</th><th scope="col">Result</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var group in btst.Checks
+                                    .GroupBy(check => check.Category)
+                                    .OrderBy(group => Array.IndexOf(categoryOrder, group.Key) < 0 ? int.MaxValue : Array.IndexOf(categoryOrder, group.Key)))
+                                {
+                                    bool isContext = group.Key is "Confirmation" or "Context" or "Fundamental" or "Valuation";
+                                    <tr class="table-light">
+                                        <th colspan="4" scope="rowgroup">@(categoryLabels.TryGetValue(group.Key, out var categoryLabel) ? categoryLabel : group.Key)</th>
+                                    </tr>
+                                    @foreach (var check in group)
+                                    {
+                                        <tr>
+                                            <td>@check.Name</td>
+                                            <td>@check.Observed</td>
+                                            <td>@check.Requirement</td>
+                                            <td>
+                                                @if (isContext)
+                                                {
+                                                    <span class="badge bg-info text-dark">Context</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge @(check.Passed ? "bg-success" : "bg-secondary")">@(check.Passed ? "Pass" : "Not met")</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                <p class="extra-small text-muted mb-0">
+                    Close: @(btst.LatestClose?.ToString("N2") ?? "N/A") · DMA 50: @(btst.Dma50?.ToString("N2") ?? "N/A") · DMA 200 (context): @(btst.Dma200?.ToString("N2") ?? "N/A") ·
+                    Session: @(btst.SessionDate?.ToString("dd MMM yyyy") ?? "N/A") · Source: @btst.DataSource
+                </p>
+                <p class="extra-small text-muted mb-0">20-session return: @(btst.TwentySessionReturnPercent?.ToString("N1") ?? "N/A")% · 40-session return: @(btst.FortySessionReturnPercent?.ToString("N1") ?? "N/A")% · Price vs DMA 50: @(btst.PriceAboveDma50Percent?.ToString("N1") ?? "N/A")%</p>
+                @if (btst.LatestClose.HasValue)
+                {
+                    <p class="small fw-semibold mt-3 mb-1">Illustrative targets from the latest market-data close (not forecasts)</p>
+                    <p class="extra-small mb-1">+30%: ₹@btst.TargetPrice30Percent?.ToString("N2") · +40%: ₹@btst.TargetPrice40Percent?.ToString("N2")</p>
+                }
+                <p class="extra-small text-muted mt-1 mb-0">Uses provider daily closes (split-adjusted as supplied); DMA 200 and volume are context, not hard gates for a 20–40-session horizon. A volume spike on an up day supports demand; on a down or flat day it can indicate selling pressure or disagreement. Volume alone does not prove who is buying or selling. A 30–40% target is not guaranteed; review valuation, business performance, and downside risk during the holding period. Provider data may be delayed or unavailable.</p>
+            </div>
+        </div>
+    }
+
     <!-- Key questions, answered in plain English instead of shown as raw ratios -->
     <div class="card border-0 shadow-sm mb-3">
         <div class="card-header bg-white border-0 py-3">
@@ -120,7 +202,7 @@
             <span class="extra-small text-muted">A full stock-analysis checklist, in plain English</span>
         </div>
         <div class="card-body pt-0">
-            @foreach (var group in Model.GetKeyQuestions().GroupBy(q => q.Category))
+            @foreach (var group in keyQuestions.Where(q => q.Question != "Does valuation support a potential value entry?").GroupBy(q => q.Category))
             {
                 <h6 class="text-muted text-uppercase extra-small fw-bold mt-3 mb-2">@group.Key</h6>
                 <div class="row g-2 mb-2">
@@ -135,7 +217,7 @@
                                         <span class="extra-small text-muted">@qa.SupportingFact</span>
                                     }
                                 </div>
-                                <span class="badge @qa.CssClass flex-shrink-0">@qa.Answer</span>
+                                <span class="badge summary-answer-badge @qa.CssClass">@qa.Answer</span>
                             </div>
                         </div>
                     }

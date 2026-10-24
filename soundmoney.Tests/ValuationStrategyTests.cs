@@ -157,6 +157,221 @@ public class ValuationStrategyTests
         Assert.True(result.CapReasons.Count <= 1, $"A single warning should not crush the score: {string.Join(", ", result.CapReasons)}");
     }
 
+    [Fact]
+    public void BuyTodaySellTomorrow_UsesRatioGateInsteadOfVerdictOnly()
+    {
+        var signal = FinancialAlgorithms.EvaluateBuyTodaySellTomorrow(
+            verdict: "STRONG BUY",
+            marginOfSafetyPercent: 27m,
+            soundScoreRating: "STRONG SOUND",
+            pe: 12.5m,
+            pb: 1.5m,
+            roePercent: 18m,
+            rocePercent: 17m,
+            netProfitMarginPercent: 12m,
+            fcfConversionPercent: 68m,
+            debtToEquity: 0.7m,
+            interestCoverage: 7m,
+            currentPrice: 120m,
+            intrinsicValue: 180m);
+
+        Assert.True(signal.IsBuyTodaySellTomorrow, $"Expected a valid buy-today/sell-tomorrow setup, but got: {signal.Reason}");
+        Assert.Contains("buy today", signal.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CombinedSetup_PassesWhenFundamentalsAndTrendBothPass()
+    {
+        var bars = Enumerable.Range(0, 220)
+            .Select(day => new DailyMarketBar(
+                DateOnly.FromDateTime(new DateTime(2025, 1, 1).AddDays(day)),
+                day == 219 ? 110m : 100m,
+                day == 219 ? 1600m : 1000m))
+            .ToList();
+        var current = CreateStrongFundamentalCurrent();
+        var historical = CreateStrongFundamentalHistory();
+
+        var technical = BtstTechnicalService.Evaluate("TEST", current.MarketCapCr, bars, DateTimeOffset.UtcNow);
+        var signal = BtstTechnicalService.EvaluateCombined(technical, current, historical, intrinsicValue: 150m);
+
+        Assert.Equal("Available", signal.Status);
+        Assert.True(signal.IsSetup);
+        Assert.True(signal.IsFundamentallyStrong);
+        Assert.True(signal.IsTechnicalSetup);
+        Assert.All(signal.Checks, check => Assert.True(check.Passed, $"Expected {check.Name} to pass."));
+        Assert.Equal(10m, signal.OneDayReturnPercent);
+        Assert.Equal(1.6m, signal.VolumeRatio);
+        Assert.Equal(143m, signal.TargetPrice30Percent);
+        Assert.Equal(154m, signal.TargetPrice40Percent);
+        Assert.Contains(signal.Checks, check => check.Name == "DMA 50 trend" && check.Passed);
+        Assert.Contains(signal.Checks, check => check.Name == "20-session price trend" && check.Passed);
+        Assert.Contains(signal.Checks, check => check.Name == "40-session price trend" && check.Passed);
+        Assert.Contains(signal.Checks, check => check.Name == "DMA 50/200 alignment" && check.Category == "Confirmation");
+
+        var stricterEntry = BtstTechnicalService.EvaluateCombined(
+            technical,
+            current,
+            historical,
+            intrinsicValue: 150m,
+            minimumMarginOfSafety: 30m);
+        Assert.True(stricterEntry.IsSetup);
+        Assert.Contains(stricterEntry.Checks, check => check.Name == "Entry margin of safety" && !check.Passed && check.Category == "Context");
+    }
+
+    [Fact]
+    public void CombinedSetup_FundamentalMissesDoNotBlockTechnicalTrendSetup()
+    {
+        var bars = Enumerable.Range(0, 220)
+            .Select(day => new DailyMarketBar(
+                DateOnly.FromDateTime(new DateTime(2025, 1, 1).AddDays(day)),
+                day == 219 ? 110m : 100m,
+                day == 219 ? 1600m : 1000m))
+            .ToList();
+        var weakCurrent = CreateStrongFundamentalCurrent();
+        weakCurrent.NetProfitCr = 20m;
+        weakCurrent.ReportedRoePercent = 4m;
+        weakCurrent.ReportedRocePercent = 5m;
+        var weakHistory = CreateStrongFundamentalHistory();
+
+        var technical = BtstTechnicalService.Evaluate("TEST", weakCurrent.MarketCapCr, bars, DateTimeOffset.UtcNow);
+        var signal = BtstTechnicalService.EvaluateCombined(technical, weakCurrent, weakHistory, intrinsicValue: 150m);
+
+        Assert.True(signal.IsTechnicalSetup);
+        Assert.False(signal.IsFundamentallyStrong);
+        Assert.True(signal.IsSetup);
+        Assert.Contains(signal.Checks, check => check.Name == "Current ROE" && !check.Passed && check.Category == "Fundamental");
+    }
+
+    [Fact]
+    public void CombinedSetup_DoesNotRequireOneDayVolumeSpikeForMediumTermTrend()
+    {
+        var bars = Enumerable.Range(0, 220)
+            .Select(day => new DailyMarketBar(
+                DateOnly.FromDateTime(new DateTime(2025, 1, 1).AddDays(day)),
+                day < 199 ? 100m : 100m + ((day - 198) * 0.5m),
+                1000m))
+            .ToList();
+        var current = CreateStrongFundamentalCurrent();
+        var historical = CreateStrongFundamentalHistory();
+
+        var technical = BtstTechnicalService.Evaluate("TEST", current.MarketCapCr, bars, DateTimeOffset.UtcNow);
+        var signal = BtstTechnicalService.EvaluateCombined(technical, current, historical, intrinsicValue: 150m);
+
+        Assert.False(technical.Checks.Single(check => check.Name == "Volume-price confirmation").Passed);
+        Assert.True(signal.IsTechnicalSetup);
+        Assert.True(signal.IsSetup);
+    }
+
+    [Theory]
+    [InlineData(102d, true, "demand confirmation")]
+    [InlineData(98d, false, "selling pressure")]
+    [InlineData(100d, false, "disagreement")]
+    public void VolumePriceConfirmation_RequiresHighVolumeAndPositivePriceMove(
+        double latestClose,
+        bool expectedConfirmation,
+        string expectedInterpretation)
+    {
+        decimal close = (decimal)latestClose;
+        var bars = Enumerable.Range(0, 220)
+            .Select(day => new DailyMarketBar(
+                DateOnly.FromDateTime(new DateTime(2025, 1, 1).AddDays(day)),
+                day == 219 ? close : 100m,
+                day == 219 ? 2000m : 1000m))
+            .ToList();
+
+        var signal = BtstTechnicalService.Evaluate("VOLUME", 2000m, bars, DateTimeOffset.UtcNow);
+        var confirmation = signal.Checks.Single(check => check.Name == "Volume-price confirmation");
+
+        Assert.Equal(expectedConfirmation, confirmation.Passed);
+        Assert.Contains(expectedInterpretation, confirmation.Observed, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Confirmation", confirmation.Category);
+    }
+
+    [Fact]
+    public void CombinedSetup_DoesNotRequireDma200ForTwentyToFortySessionHorizon()
+    {
+        var bars = Enumerable.Range(0, 70)
+            .Select(day => new DailyMarketBar(
+                DateOnly.FromDateTime(new DateTime(2025, 1, 1).AddDays(day)),
+                100m + (day * 0.2m),
+                1000m))
+            .ToList();
+        var current = CreateStrongFundamentalCurrent();
+        var historical = CreateStrongFundamentalHistory();
+
+        var technical = BtstTechnicalService.Evaluate("TEST", current.MarketCapCr, bars, DateTimeOffset.UtcNow);
+        var signal = BtstTechnicalService.EvaluateCombined(technical, current, historical, intrinsicValue: 200m);
+
+        Assert.Null(technical.Dma200);
+        Assert.True(signal.IsTechnicalSetup);
+        Assert.True(signal.IsSetup);
+        Assert.Contains(signal.Checks, check => check.Name == "Close above DMA 200" && check.Category == "Confirmation" && !check.Passed);
+    }
+
+    [Fact]
+    public void TechnicalBtstSignal_ReportsInsufficientHistoryWithoutFailingSignal()
+    {
+        var bars = Enumerable.Range(0, 50)
+            .Select(day => new DailyMarketBar(DateOnly.FromDateTime(new DateTime(2025, 1, 1).AddDays(day)), 100m, 1000m))
+            .ToList();
+
+        var signal = BtstTechnicalService.Evaluate("TEST", 2000m, bars, DateTimeOffset.UtcNow);
+
+        Assert.Equal("InsufficientData", signal.Status);
+        Assert.Null(signal.IsSetup);
+        Assert.Empty(signal.Checks);
+    }
+
+    [Fact]
+    public void FundamentalWatchlistRanking_KeepsNearMissCandidatesVisible()
+    {
+        var strong = CreateStrongFundamentalCurrent();
+        var nearMiss = CreateStrongFundamentalCurrent();
+        nearMiss.ReportedRoePercent = 18m;
+        var strongChecks = BtstTechnicalService.EvaluateFundamentalChecks(strong, CreateStrongFundamentalHistory());
+        var nearMissChecks = BtstTechnicalService.EvaluateFundamentalChecks(nearMiss, CreateStrongFundamentalHistory());
+
+        Assert.All(strongChecks.Where(check => check.Category == "Fundamental"), check => Assert.True(check.Passed, check.Name));
+        Assert.Contains(nearMissChecks, check => check.Name == "Current ROE" && !check.Passed);
+        Assert.True(strongChecks.Count(check => check.Passed) > nearMissChecks.Count(check => check.Passed));
+    }
+
+    private static Financial CreateStrongFundamentalCurrent() => new()
+    {
+        Symbol = "TEST",
+        Year = 2025,
+        CurrentPrice = 110m,
+        MarketCapCr = 2000m,
+        IsFinancialSector = false,
+        ReportedRoePercent = 36m,
+        ReportedRocePercent = 30m,
+        PromoterHoldingPercent = 55m,
+        ShareCapitalCr = 100m,
+        ReservesCr = 400m,
+        TotalBorrowingsCr = 50m,
+        NetProfitCr = 180m,
+        SalesCr = 1200m,
+        OperatingProfitCr = 180m,
+        OtherIncomeCr = 10m,
+        DepreciationCr = 10m,
+        CashFromOperationsCr = 150m
+    };
+
+    private static List<Financial> CreateStrongFundamentalHistory() => Enumerable.Range(0, 5)
+        .Select(offset => new Financial
+        {
+            Year = 2020 + offset,
+            NetProfitCr = 100m + (offset * 12m),
+            SalesCr = 800m + (offset * 80m),
+            ShareCapitalCr = 100m,
+            ReservesCr = 350m + (offset * 10m),
+            TotalBorrowingsCr = 50m,
+            OperatingProfitCr = 150m + (offset * 5m),
+            OtherIncomeCr = 10m,
+            DepreciationCr = 10m
+        })
+        .ToList();
+
     [Theory]
     [InlineData("ITC")]
     [InlineData("TCS")]
@@ -296,6 +511,7 @@ public class ValuationStrategyTests
     {
         public Task SaveValuationAsync(StockValuation valuation, CancellationToken ct = default) => Task.CompletedTask;
         public Task<CachedScrape> GetCachedScrapeAsync(string symbol, CancellationToken ct = default) => Task.FromResult(new CachedScrape(null, null, null, null));
+        public Task<List<CachedFinancialEntry>> GetRecentCachedFinancialEntriesAsync(DateTime scrapedSince, CancellationToken ct = default) => Task.FromResult(new List<CachedFinancialEntry>());
         public Task SaveScrapedCacheAsync(string symbol, StockValuation stockValuation, Financial current, List<Financial> historical, CancellationToken ct = default) => Task.CompletedTask;
         public Task<StockValuation?> GetValuationBySymbolAsync(string symbol, CancellationToken ct = default) => Task.FromResult<StockValuation?>(null);
         public Task<List<StockValuation>> GetValuationsBySectorAsync(string sector, CancellationToken ct = default) => Task.FromResult(new List<StockValuation>());

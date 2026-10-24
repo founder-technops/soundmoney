@@ -28,11 +28,13 @@ builder.Services.AddTransient<IValuationService, ValuationService>();
 
 builder.Services.AddTransient<IScreenerService, ScreenerService>();
 builder.Services.AddTransient<IScreenerComparisonService, ScreenerComparisonService>();
+builder.Services.AddMemoryCache();
 
 // Use Gemini API for all stock screener data
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();
 
 builder.Services.AddHttpClient<IScraperService, ScraperService>();
+builder.Services.AddHttpClient<IBtstTechnicalService, BtstTechnicalService>();
 
 builder.Services.AddHttpClient<NseStockSeederService>();
 

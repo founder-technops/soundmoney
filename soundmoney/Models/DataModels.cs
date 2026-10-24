@@ -44,3 +44,10 @@ public class ScrapedFinancialCache
     public string HistoricalFinancialsJson { get; set; } = "";
     public DateTime ScrapedAt { get; set; }
 }
+
+public sealed record CachedFinancialEntry(
+    string Symbol,
+    Financial Current,
+    List<Financial> Historical,
+    StockValuation Summary,
+    DateTime ScrapedAt);

@@ -16,41 +16,36 @@ public class ScreenerController : Controller
     [HttpGet]
     public async Task<IActionResult> Index(
         string? searchQuery = null,
-        decimal minMarginOfSafety = 0m,
-        List<string>? scores = null)
+        decimal minimumEntryMarginOfSafety = 0m,
+        string trendStatus = "all",
+        CancellationToken cancellationToken = default)
     {
-        bool hasScoreFilter = scores != null && scores.Any();
+        minimumEntryMarginOfSafety = Math.Clamp(minimumEntryMarginOfSafety, 0m, 100m);
+        trendStatus = trendStatus is "confirmed" or "watch" ? trendStatus : "all";
 
-        if (string.IsNullOrWhiteSpace(searchQuery) && minMarginOfSafety == 0m && !hasScoreFilter)
+        var (results, scanned, notice) = await _screener.RunPotentialEntryScreenAsync(
+            minimumEntryMarginOfSafety,
+            searchQuery,
+            cancellationToken);
+
+        if (trendStatus == "confirmed")
         {
-            return View(new ScreenerViewModel());
+            results = results.Where(row => row.IsPotentialEntry).ToList();
         }
-
-        // Run screen for the first score or pass null if no scores selected
-        var results = await _screener.RunScreenAsync(minMarginOfSafety, searchQuery, scores);
-
-        // Local filtering for multi-selected scores
-        if (hasScoreFilter && scores!.Count > 1)
+        else if (trendStatus == "watch")
         {
-            results = results.Where(r => scores.Contains(r.SoundScoreRating)).ToList();
-        }
-
-        // Local text search filter
-        if (!string.IsNullOrWhiteSpace(searchQuery))
-        {
-            var query = searchQuery.Trim().ToLowerInvariant();
-            results = results.Where(r =>
-                r.Symbol.ToLowerInvariant().Contains(query) ||
-                r.CompanyName.ToLowerInvariant().Contains(query)
-            ).ToList();
+            results = results.Where(row => !row.IsPotentialEntry).ToList();
         }
 
         var vm = new ScreenerViewModel
         {
             Results = results,
             SearchQuery = searchQuery,
-            MinMarginOfSafety = minMarginOfSafety,
-            SelectedScores = scores ?? new List<string>()
+            PotentialEntryMode = true,
+            MinimumEntryMarginOfSafety = minimumEntryMarginOfSafety,
+            TrendStatusFilter = trendStatus,
+            PotentialEntryUniverseScanned = scanned,
+            PotentialEntryNotice = notice
         };
 
         return View(vm);
@@ -64,7 +59,7 @@ public class ScreenerController : Controller
             return BadRequest("Stock symbol is required.");
         }
 
-        var (model, errorMessage) = await _screener.RunScreenDetailsAsync(symbol);
+        var (model, errorMessage) = await _screener.RunScreenDetailsAsync(symbol, cancellationToken);
 
         // RunScreenDetailsAsync returns a null model when scraping/valuation fails
         // (invalid or delisted symbol, a network error reaching Screener.in, a parsing
@@ -91,7 +86,7 @@ public class ScreenerController : Controller
             return BadRequest("Stock symbol is required.");
         }
 
-        var (model, errorMessage) = await _screener.RunScreenDetailsAsync(symbol);
+        var (model, errorMessage) = await _screener.RunScreenDetailsAsync(symbol, cancellationToken);
 
         // Same null guard as Details, for the same reason - see comment there.
         if (model is null)

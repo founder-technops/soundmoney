@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using SoundMoney.Algorithms;
 
 namespace SoundMoney.Models;
 
@@ -45,6 +46,7 @@ public class ScreenerResultRow
     public MacroSector Sector { get; set; }
     public decimal CurrentPrice { get; set; }
     public decimal IntrinsicValue { get; set; }
+    public decimal SoundScore { get; set; }
     public decimal MarginOfSafetyPercent { get; set; }
     public string Verdict { get; set; } = string.Empty;
     public string SoundScoreRating { get; set; } = string.Empty;
@@ -52,6 +54,27 @@ public class ScreenerResultRow
 
     public decimal DividendYieldPercent { get; set; }
     public bool IsDividendConsistent { get; set; }
+    public bool IsPotentialEntry { get; set; }
+    public string PotentialEntryStatus { get; set; } = string.Empty;
+    public int EntryChecksPassed { get; set; }
+    public int EntryChecksTotal { get; set; }
+    public int TrendChecksPassed { get; set; }
+    public int TrendChecksTotal { get; set; }
+    public string PriceTrendStatus { get; set; } = string.Empty;
+    public string EntryChecksSummary { get; set; } = string.Empty;
+    public bool IsTechnicalDataStale { get; set; }
+    public decimal? TechnicalClose { get; set; }
+    public decimal? Dma50 { get; set; }
+    public decimal? Dma200 { get; set; }
+    public decimal? PriceAboveDma50Percent { get; set; }
+    public decimal? TwentySessionReturnPercent { get; set; }
+    public decimal? FortySessionReturnPercent { get; set; }
+    public decimal? VolumeRatio { get; set; }
+    public string? TechnicalDataStatus { get; set; }
+    public decimal? PotentialEntryMarginOfSafety { get; set; }
+    public decimal? TargetPrice30Percent { get; set; }
+    public decimal? TargetPrice40Percent { get; set; }
+    public DateOnly? TechnicalSessionDate { get; set; }
 
     // Same derivation as StockDetailsViewModel.DividendPerShareRupees - kept here too
     // since the screener list card shows its own Dividend Yield figure independently of
@@ -65,6 +88,11 @@ public class ScreenerViewModel
     public string? SearchQuery { get; set; }
     public decimal MinMarginOfSafety { get; set; }
     public List<string> SelectedScores { get; set; } = new();
+    public bool PotentialEntryMode { get; set; }
+    public decimal MinimumEntryMarginOfSafety { get; set; }
+    public string TrendStatusFilter { get; set; } = "all";
+    public int PotentialEntryUniverseScanned { get; set; }
+    public string? PotentialEntryNotice { get; set; }
 }
 
 /// <summary>
@@ -109,6 +137,10 @@ public class StockDetailsViewModel
     public int SoundScoreRaw { get; set; }
     public List<string> ScoreCapReasons { get; set; } = new();
     public bool IsScoreCapped => ScoreCapReasons.Count > 0;
+
+    // Independent daily-price/volume BTST technical screen. Nullable rule metrics and
+    // explicit status distinguish missing provider data from a failed trading condition.
+    public BtstTechnicalSignal? TechnicalBtstSignal { get; set; }
 
     public string PrimaryMethod { get; set; } = string.Empty;
     public string SecondaryMethod { get; set; } = string.Empty;
@@ -516,7 +548,8 @@ public class StockDetailsViewModel
                 "Expensive" => "No, pricey relative to its growth",
                 _ => "Not enough data to tell"
             };
-            qa.Add(new QuestionAnswer(Growth, "Is the price reasonable given how fast profit is growing?", answer, pegInd.CssClass));
+            qa.Add(new QuestionAnswer(Growth, "Is the price reasonable given how fast profit is growing?", answer, pegInd.CssClass,
+                $"PEG: {PegRatio:N2}; P/E: {PE:N2}"));
         }
 
         {
@@ -531,7 +564,8 @@ public class StockDetailsViewModel
             else if (RevenueTrend == "Improving") { answer = "Growing, though not at a steady pace"; css = "bg-info text-dark"; }
             else if (RevenueTrend == "Stable") { answer = "Roughly flat"; css = "bg-warning text-dark"; }
             else { answer = "Not enough history to tell"; css = "bg-secondary"; }
-            qa.Add(new QuestionAnswer(Growth, "Is revenue/sales growing well?", answer, css, fact));
+            qa.Add(new QuestionAnswer(Growth, "Is revenue/sales growing well?", answer, css,
+                $"3-year revenue CAGR: {RevenueCagr3Yr:N1}%{(string.IsNullOrEmpty(fact) ? string.Empty : $" ({fact})")}"));
         }
 
         {
@@ -546,7 +580,52 @@ public class StockDetailsViewModel
             else if (ProfitTrend == "Improving") { answer = "Growing, though not at a steady pace"; css = "bg-info text-dark"; }
             else if (ProfitTrend == "Stable") { answer = "Roughly flat"; css = "bg-warning text-dark"; }
             else { answer = "Not enough history to tell"; css = "bg-secondary"; }
-            qa.Add(new QuestionAnswer(Growth, "How fast is profit actually growing?", answer, css, fact));
+            qa.Add(new QuestionAnswer(Growth, "How fast is profit actually growing?", answer, css,
+                $"3-year profit CAGR: {ProfitCagr3Yr:N1}%{(string.IsNullOrEmpty(fact) ? string.Empty : $" ({fact})")}"));
+        }
+
+        // This is a valuation-only check. The separate combined holding-period screen on
+        // the Summary page also requires fundamental history and a medium-term price trend.
+        {
+            var tradeSignal = FinancialAlgorithms.EvaluateBuyTodaySellTomorrow(
+                Verdict,
+                MarginOfSafetyPercent,
+                SoundScoreRating,
+                PE,
+                PB,
+                ROEPercent,
+                ROCEPercent,
+                NetProfitMarginPercent,
+                FcfConversionPercent,
+                DebtToEquity,
+                InterestCoverageRatio,
+                CurrentPrice,
+                IntrinsicValue);
+
+            string answer, css;
+            if (tradeSignal.IsBuyTodaySellTomorrow)
+            {
+                answer = "Yes, the valuation and quality ratios support a buy-today setup with a near-term exit; this is not a long-duration hold call.";
+                css = "bg-success";
+            }
+            else if (tradeSignal.IsValueEntryOnly)
+            {
+                answer = "Better as a value entry than a short-term flip. The stock is reasonably priced today, but this is not a reliable buy-today-and-sell-tomorrow setup.";
+                css = "bg-info text-dark";
+            }
+            else if (Verdict == "HOLD")
+            {
+                answer = "No. The valuation model does not show enough upside for a buy-today/sell-tomorrow trade.";
+                css = "bg-warning text-dark";
+            }
+            else
+            {
+                answer = "No. The current valuation and quality checks do not support a buy-today/sell-tomorrow trade.";
+                css = "bg-danger";
+            }
+
+            qa.Add(new QuestionAnswer(Growth, "Does valuation support a potential value entry?", answer, css,
+                $"Margin of safety: {MarginOfSafetyPercent:N1}%; P/E: {PE:N2}; P/B: {PB:N2}; ROE: {ROEPercent:N1}%; ROCE: {ROCEPercent:N1}%; FCF conversion: {FcfConversionPercent:N1}%; Debt/Equity: {DebtToEquity:N2}; Interest coverage: {InterestCoverageRatio:N2}x; Sound score: {SoundScore}/100; {tradeSignal.Decision}"));
         }
 
         // --- Profitability -----------------------------------------------------------
@@ -576,7 +655,8 @@ public class StockDetailsViewModel
                 "Fair" => "Some edge, but not a strong moat",
                 _ => "No clear competitive advantage visible"
             };
-            qa.Add(new QuestionAnswer(Profitability, "Does it have a real edge over its competitors?", answer, roicInd.CssClass));
+            qa.Add(new QuestionAnswer(Profitability, "Does it have a real edge over its competitors?", answer, roicInd.CssClass,
+                $"ROIC: {ROICPercent:N1}%"));
         }
 
         {
@@ -602,7 +682,8 @@ public class StockDetailsViewModel
                 "Not Applicable" => "Doesn't apply to this company",
                 _ => "A lot of it looks like paper profit"
             };
-            qa.Add(new QuestionAnswer(CashQuality, "Is profit real cash, or mostly accounting entries?", answer, sloanInd.CssClass));
+            qa.Add(new QuestionAnswer(CashQuality, "Is profit real cash, or mostly accounting entries?", answer, sloanInd.CssClass,
+                $"Sloan ratio: {SloanRatio:N1}%"));
         }
 
         {
@@ -613,7 +694,8 @@ public class StockDetailsViewModel
                 "Fair" => "Most of it",
                 _ => "Only a small part"
             };
-            qa.Add(new QuestionAnswer(CashQuality, "How much of the profit became real cash?", answer, fcfInd.CssClass));
+            qa.Add(new QuestionAnswer(CashQuality, "How much of the profit became real cash?", answer, fcfInd.CssClass,
+                $"FCF conversion: {FcfConversionPercent:N1}%"));
         }
 
         {
@@ -633,7 +715,8 @@ public class StockDetailsViewModel
                 "Not Applicable" => "Doesn't apply to this company",
                 _ => "Yes, this is a real red flag"
             };
-            qa.Add(new QuestionAnswer(CashQuality, "Do the numbers suggest profits might be dressed up?", answer, mscoreInd.CssClass));
+            qa.Add(new QuestionAnswer(CashQuality, "Do the numbers suggest profits might be dressed up?", answer, mscoreInd.CssClass,
+                $"Beneish M-Score: {MScore:N2}"));
         }
 
         // --- Debt & Financial Safety ---------------------------------------------------
@@ -657,7 +740,8 @@ public class StockDetailsViewModel
                 "Fair" => "Just about",
                 _ => "No, this looks tight"
             };
-            qa.Add(new QuestionAnswer(Safety, "Can it cover bills due within a year?", answer, crInd.CssClass));
+            qa.Add(new QuestionAnswer(Safety, "Can it cover bills due within a year?", answer, crInd.CssClass,
+                $"Current ratio: {CurrentRatio:N2}x"));
         }
 
         {
@@ -669,7 +753,8 @@ public class StockDetailsViewModel
                 "Not Applicable" => "Doesn't apply to this company",
                 _ => "No, this is a concern"
             };
-            qa.Add(new QuestionAnswer(Safety, "Can it pay its yearly interest from profit?", answer, icInd.CssClass));
+            qa.Add(new QuestionAnswer(Safety, "Can it pay its yearly interest from profit?", answer, icInd.CssClass,
+                $"Interest coverage: {InterestCoverageRatio:N2}x"));
         }
 
         {
@@ -681,7 +766,8 @@ public class StockDetailsViewModel
                 "Not Applicable" => "Doesn't apply to this company",
                 _ => "Yes, meaningful distress risk"
             };
-            qa.Add(new QuestionAnswer(Safety, "Is there a risk of serious financial trouble ahead?", answer, altmanInd.CssClass));
+            qa.Add(new QuestionAnswer(Safety, "Is there a risk of serious financial trouble ahead?", answer, altmanInd.CssClass,
+                $"Altman Z-Score: {AltmanZScore:N2}"));
         }
 
         {
@@ -693,7 +779,8 @@ public class StockDetailsViewModel
                 "Not Applicable" => "Doesn't apply to this company",
                 _ => $"No, scores only {PiotroskiFScore}/9"
             };
-            qa.Add(new QuestionAnswer(Safety, "Does it pass a standard checklist of financial strength?", answer, piotroskiInd.CssClass));
+            qa.Add(new QuestionAnswer(Safety, "Does it pass a standard checklist of financial strength?", answer, piotroskiInd.CssClass,
+                $"Piotroski F-Score: {PiotroskiFScore}/9"));
         }
 
         // --- Rewarding Shareholders ---------------------------------------------------
@@ -704,7 +791,8 @@ public class StockDetailsViewModel
             else if (IsDividendConsistent && ConsecutiveDividendYears >= 5) { answer = $"Yes, for {ConsecutiveDividendYears}+ years running"; css = "bg-success"; }
             else if (IsDividendConsistent) { answer = "Yes, consistently"; css = "bg-success"; }
             else { answer = "It pays dividends, but not consistently"; css = "bg-warning text-dark"; }
-            qa.Add(new QuestionAnswer(Shareholders, "Are dividends paid consistently?", answer, css, $"₹{DividendPerShareRupees:N2}/share"));
+            qa.Add(new QuestionAnswer(Shareholders, "Are dividends paid consistently?", answer, css,
+                $"Dividend yield: {DividendYieldPercent:N2}%; payout ratio: {DividendPayoutPercent:N1}%; ₹{DividendPerShareRupees:N2}/share"));
         }
 
         {
@@ -723,7 +811,8 @@ public class StockDetailsViewModel
                 "High Payout" => "bg-warning text-dark",
                 _ => "bg-danger"
             };
-            qa.Add(new QuestionAnswer(Shareholders, "Are they reinvesting profit into the business?", answer, css));
+            qa.Add(new QuestionAnswer(Shareholders, "Are they reinvesting profit into the business?", answer, css,
+                $"Dividend payout: {DividendPayoutPercent:N1}%; retained earnings: {Math.Max(0m, 100m - DividendPayoutPercent):N1}%"));
         }
 
         // --- Ownership & Confidence ---------------------------------------------------
@@ -735,7 +824,8 @@ public class StockDetailsViewModel
             else if (pledgeInd.Label is "High Risk" or "Moderate") { answer = "Holding looks steady, but some is pledged against loans"; css = "bg-warning text-dark"; }
             else if (PromoterHoldingTrend == "Improving") { answer = "No - promoters have actually been buying more"; css = "bg-success"; }
             else { answer = "No signs of that - holding has stayed steady"; css = "bg-info text-dark"; }
-            qa.Add(new QuestionAnswer(Ownership, "Any insider selling happening?", answer, css, $"Promoter holding: {PromoterHoldingPercent:N1}%"));
+            qa.Add(new QuestionAnswer(Ownership, "Any insider selling happening?", answer, css,
+                $"Promoter holding: {PromoterHoldingPercent:N1}%; pledged: {PromoterPledgePercent:N1}%"));
         }
 
         {
@@ -746,7 +836,8 @@ public class StockDetailsViewModel
             else if (fiiUp || diiUp) { answer = "Yes, institutional investors have been increasing their stake"; css = "bg-success"; }
             else if (fiiDown || diiDown) { answer = "Some institutions have been reducing their stake"; css = "bg-warning text-dark"; }
             else { answer = "No major change in institutional holding"; css = "bg-info text-dark"; }
-            qa.Add(new QuestionAnswer(Ownership, "Are big investors (institutions) buying or selling?", answer, css));
+            qa.Add(new QuestionAnswer(Ownership, "Are big investors (institutions) buying or selling?", answer, css,
+                $"FII holding: {FiiHoldingPercent:N1}%; DII holding: {DiiHoldingPercent:N1}%"));
         }
 
         // --- Size & Risk Profile ---------------------------------------------------
